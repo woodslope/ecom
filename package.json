@@ -1,0 +1,32 @@
+{
+  "name": "ecom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5192 --strictPort",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
+    "check:ui": "node scripts/check-ui-governance.mjs",
+    "test": "node scripts/check-ui-governance.mjs && vitest run",
+    "test:browser": "node tests/browser-smoke.mjs",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "lucide-react": "^0.511.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "fake-indexeddb": "6.2.4",
+    "playwright": "1.61.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.2",
+    "vitest": "^4.1.5"
+  }
+}
