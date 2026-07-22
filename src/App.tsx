@@ -26,7 +26,6 @@ import type { NavigationItemId } from "./domain/platforms/types";
 import type { ExecutionJob } from "./domain/jobs/types";
 import type { HistoryQueryService } from "./domain/history/query";
 import { getPlatformRulePack } from "./domain/platforms/registry";
-import { hasUsableProductFacts } from "./domain/projects/product-source-text";
 import type { ProductProject, UpdateProductProjectInput } from "./domain/projects/types";
 import { runtimeSupportsImageEditing, type RuntimeMode } from "./domain/settings";
 import type { PlatformWorkflowId } from "./domain/workspace/project-workspace";
@@ -36,19 +35,12 @@ import {
   resolveOverviewNextAction,
 } from "./domain/workspace/overview-guidance";
 import {
-  hasPlatformTaskWork,
-  shouldPromptPlatformProductPicker,
-} from "./domain/workspace/platform-product-picker";
-import {
-  readAmazonDraftProjectConfirmSkip,
   readDemoModeBannerDismissed,
   readLastPlatformOrDefault,
-  writeAmazonDraftProjectConfirmSkip,
   writeDemoModeBannerDismissed,
   writeLastPlatform,
 } from "./domain/workspace/preferences";
 import { useWorkbenchStore, type WorkbenchAsset } from "./store/workbench-store";
-import type { StartAmazonSessionInput } from "./store/workbench-store";
 
 function initialNavigationItem(): NavigationItemId {
   if (typeof window === "undefined") return "amazon";
@@ -171,7 +163,7 @@ function Overview({
               <li><Check size={15} />建立商品档案</li>
               <li><Check size={15} />上传参考素材</li>
               {preferredPlatform === "taobao" ? (
-                <li><Check size={15} />分析并策划淘宝图组</li>
+                <li><Check size={15} />生成淘宝图片策划</li>
               ) : (
                 <li><Check size={15} />进入 Amazon 策划出图</li>
               )}
@@ -263,30 +255,15 @@ export function App() {
     projectId: string;
     platform: "taobao" | "amazon";
   } | null>(null);
-  /** Skip the next platform-entry picker once (e.g. 资料库「开始制作」 already chose a product). */
-  const skipProductPickerOnceRef = useRef(false);
-  /**
-   * Seed with the initial nav item so cold-start restore of Amazon/淘宝 does not
-   * immediately trap the first paint under a product picker overlay.
-   * The picker still opens on explicit platform navigation.
-   */
-  const previousNavItemRef = useRef<NavigationItemId | null>(initialNavigationItem());
   const [workspaceDirtyReason, setWorkspaceDirtyReason] = useState<string | null>(null);
   const [navigationWarning, setNavigationWarning] = useState<string | null>(null);
   const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
   const [exportFeedback, setExportFeedback] = useState<string | null>(null);
   const [pendingLeave, setPendingLeave] = useState<
     | { kind: "nav"; item: NavigationItemId }
-    | { kind: "project"; projectId: string }
+    | { kind: "project"; projectId: string; seedPlatform?: "taobao" | "amazon" }
     | null
   >(null);
-  const [pendingAmazonDraft, setPendingAmazonDraft] = useState<StartAmazonSessionInput | null>(
-    null,
-  );
-  const [skipAmazonDraftConfirm, setSkipAmazonDraftConfirm] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return readAmazonDraftProjectConfirmSkip(window.localStorage);
-  });
   const [demoBannerDismissed, setDemoBannerDismissed] = useState(() => {
     if (typeof window === "undefined") return true;
     return readDemoModeBannerDismissed(window.localStorage);
@@ -335,7 +312,6 @@ export function App() {
     copilotMessage,
     initialize,
     startAmazonSession,
-    startTaobaoSession,
     analyzeTaobaoProduct,
     reopenTaobaoAnalysis,
     seedPlatformIntakeFromProject,
@@ -437,7 +413,20 @@ export function App() {
       }
       return;
     }
-    void selectProject(pending.projectId);
+    void (async () => {
+      await selectProject(pending.projectId);
+      if (!pending.seedPlatform) return;
+      const seedResult = await seedPlatformIntakeFromProject(
+        pending.projectId,
+        pending.seedPlatform,
+      );
+      if (seedResult === "needs-confirm") {
+        setPendingIntakeSeed({
+          projectId: pending.projectId,
+          platform: pending.seedPlatform,
+        });
+      }
+    })();
   };
   const savePendingLeave = async () => {
     // ProductSourcePanel owns the draft, so return to the panel without implying
@@ -521,7 +510,6 @@ export function App() {
     workflowId: PlatformWorkflowId,
   ) => {
     if (blockUnsavedNavigation()) return;
-    skipProductPickerOnceRef.current = true;
     if (activeProject?.id !== projectId) {
       await selectProject(projectId);
     }
@@ -559,13 +547,19 @@ export function App() {
       return;
     }
     setProductPickerPlatform(null);
-    if (choice.projectId === activeProject?.id) return;
     if (workspaceDirtyReason) {
-      setPendingLeave({ kind: "project", projectId: choice.projectId });
+      setPendingLeave({
+        kind: "project",
+        projectId: choice.projectId,
+        seedPlatform: platform,
+      });
       setNavigationWarning(`${workspaceDirtyReason} 可保存、丢弃后再切换商品，或取消。`);
       return;
     }
-    await selectProject(choice.projectId);
+    const seedResult = await applyPlatformIntakeSeed(choice.projectId, platform);
+    if (seedResult === "needs-confirm") {
+      setPendingIntakeSeed({ projectId: choice.projectId, platform });
+    }
   };
   const confirmPendingIntakeSeed = async () => {
     if (!pendingIntakeSeed) return;
@@ -597,23 +591,6 @@ export function App() {
     anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
     setExportFeedback(`已开始下载 ${exported.fileName}`);
-  };
-  const startAmazonSessionWithDraftGuard = async (input: StartAmazonSessionInput) => {
-    if (!input.projectId && !activeProject && !skipAmazonDraftConfirm) {
-      setPendingAmazonDraft(input);
-      return null;
-    }
-    return startAmazonSession(input);
-  };
-  const confirmAmazonDraftSession = async (remember: boolean) => {
-    if (!pendingAmazonDraft) return;
-    if (remember && typeof window !== "undefined") {
-      writeAmazonDraftProjectConfirmSkip(window.localStorage, true);
-      setSkipAmazonDraftConfirm(true);
-    }
-    const input = pendingAmazonDraft;
-    setPendingAmazonDraft(null);
-    await startAmazonSession(input);
   };
   const downloadGeneratedImage = (asset: WorkbenchAsset) => {
     const anchor = document.createElement("a");
@@ -659,74 +636,6 @@ export function App() {
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
   const activeAmazonBatchJob = activeBatchJobFor("amazon");
   const activeTaobaoBatchJob = activeBatchJobFor("taobao");
-  useEffect(() => {
-    if (!initialized || activeItem !== "taobao" || !activeProject || activeTaobaoSession) return;
-    void startTaobaoSession({
-      projectId: activeProject.id,
-      selectedReferenceAssetIds: assets
-        .filter((asset) => asset.metadata.kind === "reference")
-        .map((asset) => asset.metadata.id),
-    });
-  }, [activeItem, activeProject, activeTaobaoSession, assets, initialized, startTaobaoSession]);
-
-  useEffect(() => {
-    if (!initialized) return;
-    const previous = previousNavItemRef.current;
-    const enteredPlatform =
-      (activeItem === "taobao" || activeItem === "amazon") && previous !== activeItem;
-    previousNavItemRef.current = activeItem;
-
-    if (activeItem !== "taobao" && activeItem !== "amazon") {
-      setProductPickerPlatform(null);
-      return;
-    }
-    // Only auto-open when navigating into a platform, not when project/session updates.
-    if (!enteredPlatform) return;
-
-    if (skipProductPickerOnceRef.current) {
-      skipProductPickerOnceRef.current = false;
-      setProductPickerPlatform(null);
-      return;
-    }
-    const hasWork =
-      activeItem === "taobao"
-        ? hasPlatformTaskWork({
-            platform: "taobao",
-            hasTaobaoAnalysis: Boolean(activeTaobaoSession?.taobaoAnalysis),
-            hasPlan: Boolean(activeTaobaoSession?.plan || plans.taobao),
-            hasTaobaoDraft: Boolean(
-              activeTaobaoSession?.sourceInput.taobaoProduct?.productText?.trim() ||
-                (activeProject && hasUsableProductFacts(activeProject.facts)),
-            ),
-          })
-        : hasPlatformTaskWork({
-            platform: "amazon",
-            hasPlan: Boolean(activeAmazonSession?.plan || plans.amazon),
-            hasListingDraft: Boolean(activeAmazonSession?.sourceInput.listingText?.trim()),
-          });
-    if (
-      shouldPromptPlatformProductPicker({
-        platform: activeItem,
-        projectCount: projects.length,
-        hasPlatformWork: hasWork,
-      })
-    ) {
-      setProductPickerPlatform(activeItem);
-    } else {
-      setProductPickerPlatform(null);
-    }
-  }, [
-    activeAmazonSession?.plan,
-    activeAmazonSession?.sourceInput.listingText,
-    activeItem,
-    activeTaobaoSession?.plan,
-    activeTaobaoSession?.taobaoAnalysis,
-    activeProject,
-    initialized,
-    plans.amazon,
-    plans.taobao,
-    projects.length,
-  ]);
   const imageEditingSupported = runtimeSupportsImageEditing(runtimeSettings);
   const imageEditingDisabledReason = imageEditingSupported
     ? undefined
@@ -788,7 +697,7 @@ export function App() {
             loading={loading}
             planning={planningPlatformId === "amazon"}
             error={planningError}
-            onStartSession={startAmazonSessionWithDraftGuard}
+            onStartSession={startAmazonSession}
             onSyncListingFacts={syncAmazonListingFacts}
             onOpenLibrary={() => changeActiveItem("library")}
             onOpenProductPicker={() => setProductPickerPlatform("amazon")}
@@ -1139,7 +1048,7 @@ export function App() {
         }
         projects={projects}
         activeProjectId={activeProject?.id}
-        allowManualWithoutProject={productPickerPlatform === "amazon"}
+        allowManualWithoutProject={productPickerPlatform !== null}
         loading={loading}
         onClose={() => setProductPickerPlatform(null)}
         onChoose={(choice) => void handleProductPickerChoice(choice)}
@@ -1189,32 +1098,6 @@ export function App() {
         {projectPendingDelete && error ? (
           <StatusMessage tone="danger">{error}</StatusMessage>
         ) : null}
-      </Dialog>
-      <Dialog
-        open={pendingAmazonDraft !== null}
-        title="创建 Amazon 草稿商品？"
-        eyebrow="无商品档案"
-        onClose={() => setPendingAmazonDraft(null)}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setPendingAmazonDraft(null)}>
-              取消
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => void confirmAmazonDraftSession(true)}
-            >
-              创建并不再询问
-            </Button>
-            <Button onClick={() => void confirmAmazonDraftSession(false)}>
-              创建草稿商品
-            </Button>
-          </>
-        }
-      >
-        <p>
-          当前没有选中商品档案。继续将根据 Listing 自动创建「Amazon 草稿商品」本地档案，并只保存在本浏览器。
-        </p>
       </Dialog>
       <Dialog
         open={pendingIntakeSeed !== null}

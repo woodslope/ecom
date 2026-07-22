@@ -40,6 +40,13 @@ The active persistence model was amended on 2026-07-21:
 - A ProductionRun remains queryable when its original PlatformSession no longer exists.
 - New writes use ProductionEvent only; legacy TaskRecord values remain readable but are not converted into runs.
 
+The planning-input model was amended on 2026-07-22:
+
+- `PlatformSession.planningInput` optionally snapshots source mode, input quality, missing facts, task text, selected product-reference IDs, and the source-project revision.
+- `ProductionRun.contextSnapshot.planningInput` preserves the same task boundary for restore, fork, and historical inspection.
+- Old sessions and runs without this field remain valid and are normalized without a destructive migration.
+- Planning signatures and planner requests include only product-reference images selected for that task. Project assets that were not selected and style references cannot make a plan stale or satisfy product-image completeness.
+
 The implementation amendment also fixes the application ownership boundary:
 
 - Store actions own request state, cancellation, error, recovery, and UI facades.
@@ -58,6 +65,9 @@ Project deletion removes only that project's runs, assets, V3/v2 workspace, and 
 - Generation and mask editing append immutable versions; failure preserves the active version.
 - Historical re-export uses the original Run snapshot and does not switch the current session.
 - A Run created before version snapshots were stored may reject historical re-export with an explicit message.
+- Amazon and Taobao / Tmall can create a draft ProductProject and PlatformSession atomically from manual facts or product images when no saved project exists.
+- Input assessment is shared across platforms, while each platform Rule Pack continues to own slots, dimensions, locale/copy, and compliance constraints.
+- Pure-image planning is rejected when the configured planner cannot read images; it never silently drops the selected images.
 
 ## Alternatives Considered
 
@@ -76,6 +86,10 @@ Rejected. The v1 data was test-oriented and could be mistaken for real product h
 ### Clear all browser storage during migration
 
 Rejected. It would destroy user API settings and unrelated local data. Business data and runtime settings have different lifecycles.
+
+### Add a separate image-analysis Agent
+
+Rejected for the current scope. It would add a second model call, extra waiting and cost, and another orchestration state without improving the platform Rule Pack boundary. The existing multimodal planner receives the selected product images and must separate user facts, visible image evidence, and missing facts in one request.
 
 ## Tradeoffs
 

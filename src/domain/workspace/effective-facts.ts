@@ -1,10 +1,14 @@
 import { applyTaobaoAnalysisToFacts } from "../platforms/taobao-analysis";
+import {
+  createEmptyProductFacts,
+  resolveAmazonPlanningFacts,
+} from "../planning/input-assessment";
 import type { ProductProject } from "../projects/types";
 import type { PlatformSession } from "./project-workspace";
 
 type EffectiveSessionContext = Pick<
   PlatformSession,
-  "projectId" | "workflowId" | "taobaoAnalysis"
+  "projectId" | "workflowId" | "sourceInput" | "planningInput" | "taobaoAnalysis"
 >;
 
 /**
@@ -16,9 +20,17 @@ export function resolveSessionEffectiveFacts(
   session?: EffectiveSessionContext,
 ): ProductProject["facts"] {
   if (!session || session.projectId !== project.id) return project.facts;
-  return session.workflowId === "taobao-product"
-    ? applyTaobaoAnalysisToFacts(project.facts, session.taobaoAnalysis)
-    : project.facts;
+  if (session.workflowId === "taobao-product") {
+    const baseFacts = session.planningInput?.sourceMode === "manual"
+      ? createEmptyProductFacts()
+      : project.facts;
+    return applyTaobaoAnalysisToFacts(baseFacts, session.taobaoAnalysis);
+  }
+  return resolveAmazonPlanningFacts(
+    project.facts,
+    session.sourceInput.listingText,
+    session.planningInput?.sourceMode ?? "library",
+  );
 }
 
 export function resolveSessionEffectiveProject(

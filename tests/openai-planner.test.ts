@@ -216,6 +216,83 @@ describe("OpenAIPlanner", () => {
     expect(body.messages[1].content).not.toContain("data:image");
   });
 
+  it("blocks image-only planning when the configured provider cannot read images", async () => {
+    const fetchMock = vi.fn();
+    const planner = new OpenAIPlanner({
+      endpoint: "https://api.deepseek.com/v1/chat/completions",
+      apiKey: "test-secret-key",
+      model: "deepseek-chat",
+      plannerReferenceImages: false,
+      fetch: fetchMock,
+    });
+
+    await expect(
+      planner.plan(
+        { productName: "" },
+        taobaoRulePack,
+        new AbortController().signal,
+        [{
+          name: "product.png",
+          mimeType: "image/png",
+          blob: new Blob(["image"], { type: "image/png" }),
+        }],
+        undefined,
+        {
+          quality: "image-only",
+          missingFacts: ["商品名称", "可验证卖点或商品描述"],
+          hasAnyFacts: false,
+          hasProductName: false,
+          hasVerifiableDetails: false,
+          hasProductImages: true,
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: "OpenAIPlannerError",
+      code: "capability",
+      userMessage: expect.stringContaining("不支持读取商品图"),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows a facts-assisted draft when a text-only provider skips its images", async () => {
+    const candidate = completeTaobaoCandidate();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(
+      JSON.stringify({ choices: [{ message: { content: JSON.stringify(candidate) } }] }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+    const planner = new OpenAIPlanner({
+      endpoint: "https://api.deepseek.com/v1/chat/completions",
+      apiKey: "test-secret-key",
+      model: "deepseek-chat",
+      plannerReferenceImages: false,
+      fetch: fetchMock,
+    });
+
+    await planner.plan(
+      { productName: "Named product" },
+      taobaoRulePack,
+      new AbortController().signal,
+      [{
+        name: "product.png",
+        mimeType: "image/png",
+        blob: new Blob(["image"], { type: "image/png" }),
+      }],
+      undefined,
+      {
+        quality: "image-only",
+        missingFacts: ["可验证卖点或商品描述"],
+        hasAnyFacts: true,
+        hasProductName: true,
+        hasVerifiableDetails: false,
+        hasProductImages: true,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body));
+    expect(body.messages[1].content).toContain("referenceImagesSkipped");
+  });
+
   it("accepts Chat Completions content returned as text blocks", async () => {
     const candidate = completeTaobaoCandidate();
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>

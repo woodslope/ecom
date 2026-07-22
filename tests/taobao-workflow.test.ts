@@ -4,6 +4,7 @@ import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
 import { analyzeTaobaoProduct } from "../src/domain/platforms/taobao-analysis";
+import { demoPlanner } from "../src/services/demo-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 const facts = {
@@ -161,6 +162,44 @@ describe("Taobao product workflow", () => {
     ]);
     expect(store.getState().plans.taobao?.slots).toHaveLength(12);
     expect(store.getState().planningError).toBeNull();
+  });
+
+  it("starts from only a product image without inventing hidden product facts", async () => {
+    const deps = dependencies();
+    const store = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
+    await store.getState().initialize();
+
+    const session = await store.getState().analyzeTaobaoProduct({
+      sourceMode: "manual",
+      productText: "",
+      files: [new File(["image-only"], "商品图.png", { type: "image/png" })],
+      selectedReferenceAssetIds: [],
+    });
+
+    expect(store.getState().activeProject).toMatchObject({
+      id: "project_taobao",
+      name: "淘宝草稿商品",
+      facts: { productName: "", description: "", sellingPoints: [], specifications: {} },
+    });
+    expect(session).toMatchObject({
+      projectId: "project_taobao",
+      planningInput: {
+        sourceMode: "manual",
+        quality: "image-only",
+        missingFacts: ["商品名称", "可验证卖点或商品描述"],
+        productText: "",
+        selectedReferenceAssetIds: [expect.any(String)],
+      },
+      taobaoAnalysis: {
+        suggestedProductName: "",
+        sellingPoints: [],
+        specifications: {},
+      },
+      plan: { platformId: "taobao" },
+    });
+    expect(store.getState().runs[0]?.contextSnapshot.planningInput).toEqual(
+      session?.planningInput,
+    );
   });
 
   it("reopens Taobao intake without dropping selected references", async () => {

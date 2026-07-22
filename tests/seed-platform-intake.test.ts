@@ -111,7 +111,7 @@ describe("seedPlatformIntakeFromProject", () => {
     expect(session?.plan).toBeUndefined();
   });
 
-  it("asks before overwriting an existing draft, then force-seeds", async () => {
+  it("restores an existing draft without overwriting it, then supports an explicit force reset", async () => {
     const deps = createDependencies(() => "project_confirm");
     const store = createWorkbenchStore(deps);
     await store.getState().initialize();
@@ -142,10 +142,10 @@ describe("seedPlatformIntakeFromProject", () => {
       sessions: [edited],
     });
 
-    const blocked = await store
+    const restored = await store
       .getState()
       .seedPlatformIntakeFromProject(project!.id, "amazon");
-    expect(blocked).toBe("needs-confirm");
+    expect(restored).toBe("skipped");
     expect(
       store.getState().sessions.find((session) => session.id === edited.id)?.sourceInput
         .listingText,

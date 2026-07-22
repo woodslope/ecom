@@ -46,10 +46,13 @@ Amazon Listing / A+ 的行为对齐真相源锁定为 AIS commit `bca89d728e415c
 
 - `projectId`、`platformId`、`workflowId`
 - Listing 原文和所选参考素材
+- 可选 `planningInput` 快照：来源、输入质量、缺项、本次文字、勾选商品图和资料库来源版本
 - Amazon 站点、Listing/A+ 模式、数量/模块、尺寸档和风格
 - 当前 plan、输入签名、选中槽位、不可变版本集合和当前 run
 
 Amazon Listing、Amazon A+ 和淘宝商品生产包使用独立 session。切换模式或刷新会恢复各自上下文，不把另一模式的 plan 混入当前工作区。
+
+两平台共用 `standard / image-only / facts-only / empty` 输入评估。只有空输入禁止策划；纯图片和纯资料均可生成策划草稿。策划、输入签名和恢复快照只消费本次勾选的商品参考图，风格参考图不计入商品图完整度。纯图片任务必须经过模型读图能力门禁，不能静默降级为忽略图片的文本策划。
 
 ### 3.3 ProductionRun：不可变生产记录
 
@@ -57,6 +60,7 @@ Amazon Listing、Amazon A+ 和淘宝商品生产包使用独立 session。切换
 
 - session、platform、workflow 和 Demo/API 来源
 - 输入、选项、参考素材和风格上下文快照
+- 输入来源、质量、缺项、本次勾选商品图和来源项目版本快照
 - plan、输入签名和槽位版本快照
 - plan/generate/regenerate/edit/export 事件
 - planned/producing/ready/partial/failed/canceled 状态
@@ -106,6 +110,7 @@ flowchart LR
 ### 当前支持
 
 - 本地多商品资料与参考素材。
+- Amazon 与淘宝均可从资料库、手动资料或纯商品图开始；无档案提交时原子创建本地草稿。
 - Amazon Listing / A+ 主路径和已可独立运行的淘宝 / 天猫商品生产包（次级 rule pack）。
 - Demo 与 OpenAI-compatible API 运行模式。
 - 可解释策划、Prompt 编辑、Copilot、图片生成、局部编辑和 ZIP 交付。

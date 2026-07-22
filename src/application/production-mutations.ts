@@ -18,6 +18,7 @@ export interface PlanCommitInput {
   sourceInput: PlatformSession["sourceInput"];
   options: PlatformSessionOptions;
   selectedReferenceAssetIds: string[];
+  planningInput?: PlatformSession["planningInput"];
   selectedStyleReferenceId?: string;
   taobaoAnalysis?: PlatformSession["taobaoAnalysis"];
   plan: PlatformPlan;
@@ -80,6 +81,7 @@ export function commitPlan(input: PlanCommitInput): {
     sourceInput: structuredClone(input.sourceInput),
     options: structuredClone(input.options),
     selectedReferenceAssetIds: [...input.selectedReferenceAssetIds],
+    ...(input.planningInput ? { planningInput: structuredClone(input.planningInput) } : {}),
     ...(input.selectedStyleReferenceId
       ? { selectedStyleReferenceId: input.selectedStyleReferenceId }
       : {}),
@@ -104,6 +106,7 @@ export function commitPlan(input: PlanCommitInput): {
       sourceInput: structuredClone(input.sourceInput),
       options: structuredClone(input.options),
       selectedReferenceAssetIds: [...input.selectedReferenceAssetIds],
+      ...(input.planningInput ? { planningInput: structuredClone(input.planningInput) } : {}),
       ...(input.selectedStyleReferenceId
         ? { selectedStyleReferenceId: input.selectedStyleReferenceId }
         : {}),
@@ -269,6 +272,9 @@ export function forkRun(
     sourceInput: structuredClone(sourceRun.contextSnapshot.sourceInput),
     options: structuredClone(sourceRun.contextSnapshot.options),
     selectedReferenceAssetIds: [...sourceRun.contextSnapshot.selectedReferenceAssetIds],
+    ...(sourceRun.contextSnapshot.planningInput
+      ? { planningInput: structuredClone(sourceRun.contextSnapshot.planningInput) }
+      : {}),
     ...(sourceRun.contextSnapshot.selectedStyleReferenceId
       ? { selectedStyleReferenceId: sourceRun.contextSnapshot.selectedStyleReferenceId }
       : {}),

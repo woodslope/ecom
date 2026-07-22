@@ -83,14 +83,14 @@ describe("shared platform stage", () => {
     ).toBe("produce");
   });
 
-  it("uses 分析并策划 as Taobao prepare primary action", () => {
+  it("uses the shared planning action for Taobao preparation", () => {
     expect(
       getPlatformPrimaryAction({
         platform: "taobao",
         hasTaobaoAnalysis: false,
         plan: null,
       }),
-    ).toEqual({ kind: "plan", label: "分析并策划" });
+    ).toEqual({ kind: "plan", label: "生成图片策划" });
   });
 
   it("delegates Amazon stages to existing session helpers", () => {

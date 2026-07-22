@@ -70,12 +70,15 @@ Reference and generated assets are project-scoped. Generated output can be copie
 PlatformSession = {
   projectId, platformId, workflowId,
   sourceInput, options, selectedReferenceAssetIds,
+  planningInput?,
   selectedStyleReferenceId?, plan?, planInputSignature?, selectedSlotKey?,
   slotVersions, activeRunId?, createdAt, updatedAt
 }
 ```
 
 Amazon options include `marketplaceId`, `plannerMode`, Listing count or A+ type/module specs, `sizeTier`, and optional style preset. Taobao options use the `taobao-product` workflow and keep analysis input, selected product references, fixed Rule Pack plan, and slot versions in the session.
+
+`planningInput` is an optional backward-compatible snapshot of the task source, input quality, missing facts, task text, selected product-reference asset IDs, and source-project revision. ProductionRun context snapshots preserve the same value so restore and historical inspection do not depend on the current project state.
 
 ### ProductionRun and events
 
@@ -107,6 +110,23 @@ Amazon accepts Listing title, bullets, description, product facts, forbidden cla
 
 ## 7. Cross-platform Workflow
 
+### Shared planning intake
+
+Amazon and Taobao / Tmall use the same planning-intake contract. The user chooses either `从资料库选择` or `手动填写`; only the library path opens the product picker. Manual intake may start with text, product images, or both. Submitting without a saved ProductProject creates a local draft project atomically with the session.
+
+Input quality is evaluated before planning:
+
+| Quality | Input | Planning behavior |
+| --- | --- | --- |
+| `standard` | Product name, verifiable details, and at least one selected product image | Labeled `达标策划` |
+| `image-only` | At least one selected product image, but facts remain incomplete | Labeled `策划草稿`; may continue when the planner can read images |
+| `facts-only` | Any usable product facts without a selected product image | Labeled `策划草稿`; preserves the existing Amazon text-only path |
+| `empty` | No usable facts and no selected product image | Planning is blocked |
+
+Only product-reference images selected for the current task are sent to the planner and included in the planning signature. Style references do not satisfy the product-image requirement. Missing specifications, materials, certifications, and similar facts remain item-level planning warnings rather than a global blocker. A planner without image-input capability must reject pure-image intake explicitly instead of silently ignoring images.
+
+Both platforms expose one stable primary action, `生成图片策划`, and the same four stages: `准备 -> 策划检查 -> 逐图生产 -> 交付检查`. Platform Rule Packs still own slot count, dimensions, locale/copy, and compliance differences.
+
 ### Taobao / Tmall
 
 - New writes use `taobao-product`; legacy `taobao-detail` is normalized only while reading old data.
@@ -117,10 +137,10 @@ Amazon accepts Listing title, bullets, description, product facts, forbidden cla
 
 ### Shared production workflow
 
-1. Create or select a ProductProject, or begin Amazon direct intake.
-2. Select Listing or A+, marketplace, count/type/module options, size tier, and optional style.
-3. Paste Listing source or maintain shared facts and upload reference images.
-4. Run Demo or API planning.
+1. Choose a library product or start manual intake for either platform.
+2. Provide product facts, selected product-reference images, or both; an empty input cannot continue.
+3. Adjust optional platform parameters or style only when needed.
+4. Run Demo or API planning through `生成图片策划`.
 5. Review the plan, choose a slot, and inspect Chinese strategy/evidence beside the English model prompt.
 6. Edit and save visible copy or prompt, then generate one slot at a time.
 7. Optionally batch-generate the remaining slots for the current platform workflow, then monitor or cancel the local task from 生产记录.
@@ -150,6 +170,8 @@ Projects and assets remain in v2 business storage. Editable sessions and immutab
 
 Workspace V3 contains current sessions and migration metadata only. It does not contain runs, TaskRecord history, top-level plan/version mirrors, or Amazon workspace mirrors. The v2 source remains intact; migration is idempotent and is marked complete only after every valid run is stored and verified. New operations write ProductionRun events and no longer append TaskRecord entries.
 
+New sessions and runs persist the optional `planningInput` snapshot. Readers normalize old records that do not contain it, so this addition requires no destructive migration. Failed planning preserves the draft project, entered text, uploaded images, and selected references for retry.
+
 Runtime settings retain `ecom-workbench.runtime-settings.v1` for compatibility and normalize legacy credentials. Removing a project removes that project's runs, assets, V3/v2 workspace, and project metadata in a retryable order; it does not clear unrelated browser storage or runtime settings.
 
 Current export is a platform ZIP with manifest, Prompt snapshot, active version files, and missing-slot information. Partial export is allowed when explicitly labeled; historical re-export reads the independent RunRepository snapshot and does not change the current session.
@@ -158,6 +180,8 @@ Current export is a platform ZIP with manifest, Prompt snapshot, active version 
 
 - First run with no project: one create-project action owned by 资料库.
 - Existing project with no plan: explain missing facts/references and expose one planning action.
+- No saved project: allow manual facts or product-image intake and create a local draft only on submit.
+- Image-only input: label the result as a planning draft and require planner image capability.
 - Planning/generation: preserve geometry, identify the current operation, and block duplicate actions.
 - Success: show the result, active version, source/runtime, and next action.
 - Failure: state what failed, preserve safe previous data, and expose retry or correction.

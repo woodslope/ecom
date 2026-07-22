@@ -83,6 +83,47 @@ describe("Amazon direct intake", () => {
       .toHaveLength(1);
   });
 
+  it("starts from only a product image and creates a restorable local draft", async () => {
+    const deps = dependencies();
+    const store = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
+    await store.getState().initialize();
+
+    const session = await store.getState().startAmazonSession({
+      sourceMode: "manual",
+      workflowId: "amazon-listing",
+      listingText: "",
+      files: [new File(["image-only"], "product.png", { type: "image/png" })],
+      selectedReferenceAssetIds: [],
+      options: { plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
+    });
+
+    expect(store.getState().activeProject).toMatchObject({
+      id: "project_01",
+      name: "Amazon 草稿商品",
+      facts: { productName: "", description: "", sellingPoints: [] },
+    });
+    expect(session).toMatchObject({
+      projectId: "project_01",
+      sourceInput: { listingText: "" },
+      planningInput: {
+        sourceMode: "manual",
+        quality: "image-only",
+        missingFacts: ["商品名称", "可验证卖点或商品描述"],
+        productText: "",
+        selectedReferenceAssetIds: ["asset_01"],
+      },
+      plan: { platformId: "amazon" },
+    });
+    expect(store.getState().runs[0]?.contextSnapshot.planningInput).toEqual(
+      session?.planningInput,
+    );
+
+    const restored = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
+    await restored.getState().initialize();
+    expect(restored.getState().sessions[0]?.planningInput?.quality).toBe("image-only");
+    expect(restored.getState().sessions[0]?.selectedReferenceAssetIds).toEqual(["asset_01"]);
+  });
+
   it("persists Listing input and options in a session without overwriting shared facts", async () => {
     const deps = dependencies();
     const project = await deps.projectRepository.create({ name: "共享商品", facts: sharedFacts });
@@ -162,7 +203,7 @@ describe("Amazon direct intake", () => {
     });
   });
 
-  it("rolls back a newly created draft project and assets when planning fails", async () => {
+  it("keeps a newly created draft, text, and assets when planning fails", async () => {
     const deps = dependencies();
     const store = createWorkbenchStore({
       ...deps,
@@ -182,11 +223,17 @@ describe("Amazon direct intake", () => {
       options: { plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
     });
 
-    expect(session).toBeNull();
-    expect(await deps.projectRepository.list()).toEqual([]);
-    expect(await deps.assetRepository.list("project_01")).toEqual([]);
-    expect((await deps.workspaceRepository.load("project_01")).sessions).toEqual([]);
-    expect(store.getState().activeProject).toBeNull();
+    expect(session).toMatchObject({
+      projectId: "project_01",
+      sourceInput: { listingText: expect.stringContaining("Direct Start Pillow") },
+      selectedReferenceAssetIds: ["asset_01"],
+      planningInput: { sourceMode: "manual", quality: "standard" },
+    });
+    expect(session?.plan).toBeUndefined();
+    expect(await deps.projectRepository.list()).toHaveLength(1);
+    expect(await deps.assetRepository.list("project_01")).toHaveLength(1);
+    expect((await deps.workspaceRepository.load("project_01")).sessions).toHaveLength(1);
+    expect(store.getState().activeProject?.id).toBe("project_01");
     expect(store.getState().planningError).toContain("planner unavailable");
   });
 
@@ -285,11 +332,17 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).toContain('aria-label="Amazon Listing 原文"');
     expect(directMarkup).toContain('type="file"');
     expect(directMarkup).toContain("生成图片策划");
-    expect(directMarkup).toContain('title="先填写 Listing 原文"');
-    expect(directMarkup).toContain('class="amazon-session-controls__additional"');
-    expect(directMarkup).toContain("style-reference-picker--embedded");
-    expect(directMarkup).toContain("载入资料库");
+    expect(directMarkup).toContain("图片策划");
+    expect(directMarkup).toContain('title="请填写商品资料或添加至少一张商品图。"');
+    expect(directMarkup).toContain('class="workbench-toolbar"');
+    expect(directMarkup).not.toContain('class="amazon-session-controls__additional"');
+    expect(directMarkup).not.toContain("style-reference-picker--embedded");
+    expect(directMarkup).toContain("从资料库选择");
     expect(directMarkup).toContain("手动填写");
+    expect(directMarkup.indexOf("生成图片策划")).toBeLessThan(
+      directMarkup.indexOf('aria-label="Amazon 策划模式"'),
+    );
+    expect(directMarkup).not.toContain('class="amazon-session-controls__plan"');
     expect(directMarkup).not.toContain('class="action-bar');
     expect(directMarkup).not.toContain("打开资料库");
     expect(existingMarkup).toContain("不会自动覆盖共享商品资料");
@@ -297,7 +350,7 @@ describe("Amazon direct intake", () => {
     expect(existingMarkup).toContain("Session-only Travel Pillow");
   });
 
-  it("preloads shared facts into Listing draft when no session draft exists", () => {
+  it("waits for an explicit library choice instead of preloading the active project", () => {
     const markup = renderToStaticMarkup(
       createElement(AmazonIntake, {
         activeProject: {
@@ -317,9 +370,9 @@ describe("Amazon direct intake", () => {
       }),
     );
 
-    expect(markup).toContain("Title: 共享商品名称");
-    expect(markup).toContain("共享卖点");
-    expect(markup).toContain("资料库");
+    expect(markup).not.toContain("Title: 共享商品名称");
+    expect(markup).toContain("从资料库选择");
+    expect(markup).toContain("手动填写");
   });
 
   it("keeps the selected A+ mode when the target workflow has no session yet", () => {
@@ -338,7 +391,8 @@ describe("Amazon direct intake", () => {
     );
 
     expect(markup).toMatch(/aria-selected="true"[^>]*>A\+ 图<\/button>/);
-    expect(markup).toContain('aria-label="A+ 类型"');
+    expect(markup).toContain("普通A+");
+    expect(markup).not.toContain('aria-label="A+ 类型"');
   });
 
   it("restores A+ type and a 12-module session after reload", async () => {
@@ -452,5 +506,7 @@ describe("Amazon direct intake", () => {
     expect(summary).toContain("日本站");
     expect(summary).toContain("4K");
     expect(summary).toContain("front-reference.png");
+    expect(summary).toContain("资料库来源");
+    expect(summary).toContain("达标策划");
   });
 });

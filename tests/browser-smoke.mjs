@@ -248,7 +248,7 @@ try {
   const firstUploadGeometry = await page.evaluate(() => {
     const references = document.querySelector(".amazon-intake__references")?.getBoundingClientRect();
     const upload = document.querySelector(".amazon-intake__upload")?.getBoundingClientRect();
-    const controls = document.querySelector(".amazon-intake .amazon-session-controls")?.getBoundingClientRect();
+    const toolbar = document.querySelector(".amazon-intake .workbench-toolbar")?.getBoundingClientRect();
     const styleReference = document.querySelector(".amazon-intake .style-reference-picker")?.getBoundingClientRect();
     const planButton = Array.from(document.querySelectorAll(".amazon-intake button")).find(
       (button) => button.textContent?.trim() === "生成图片策划",
@@ -258,13 +258,17 @@ try {
       referencesBottom: references?.bottom ?? 0,
       uploadTop: upload?.top ?? 0,
       uploadBottom: upload?.bottom ?? 0,
-      controlsTop: controls?.top ?? 0,
-      controlsBottom: controls?.bottom ?? 0,
+      toolbarTop: toolbar?.top ?? 0,
+      toolbarBottom: toolbar?.bottom ?? 0,
       styleTop: styleReference?.top ?? 0,
       styleBottom: styleReference?.bottom ?? 0,
       planTop: planButton?.top ?? 0,
       planBottom: planButton?.bottom ?? 0,
       hasActionBar: Boolean(document.querySelector(".amazon-intake .action-bar")),
+      hasPlanActionInControls: Boolean(document.querySelector(".amazon-intake .amazon-session-controls__plan")),
+      hasExpandParams: Array.from(document.querySelectorAll(".amazon-intake button")).some(
+        (button) => button.textContent?.trim() === "调整参数",
+      ),
     };
   });
   assert(
@@ -273,15 +277,17 @@ try {
     "Amazon 准备态上传入口不在参考图面板内",
   );
   assert(
-    firstUploadGeometry.styleTop >= firstUploadGeometry.controlsTop &&
-      firstUploadGeometry.styleBottom <= firstUploadGeometry.controlsBottom,
-    "Amazon 附加风格板没有收进参数区域",
+    firstUploadGeometry.styleTop === 0 &&
+      firstUploadGeometry.styleBottom === 0 &&
+      firstUploadGeometry.hasExpandParams,
+    "Amazon 非必要参数没有默认折叠",
   );
   assert(
-    firstUploadGeometry.planTop >= firstUploadGeometry.controlsTop &&
-      firstUploadGeometry.planBottom <= firstUploadGeometry.controlsBottom,
-    "Amazon 策划动作没有归入参数工具条",
+    firstUploadGeometry.planTop >= firstUploadGeometry.toolbarTop &&
+      firstUploadGeometry.planBottom <= firstUploadGeometry.toolbarBottom,
+    "Amazon 策划动作没有固定在准备页顶部工具栏",
   );
+  assert(!firstUploadGeometry.hasPlanActionInControls, "Amazon 策划动作仍藏在参数区");
   assert(!firstUploadGeometry.hasActionBar, "Amazon 准备态仍保留空的固定操作栏");
 
   const tinyPng = Buffer.from(
@@ -299,6 +305,9 @@ try {
   await page.getByText("front.png", { exact: true }).waitFor({ state: "visible" });
   await page.getByLabel("Amazon 策划模式", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
   await page.getByRole("tab", { name: "Listing 图", exact: true }).waitFor({ state: "visible" });
+  const expandParams = page.getByRole("button", { name: "调整参数", exact: true });
+  await expandParams.click();
+  await page.getByRole("region", { name: "Amazon 风格参考设置", exact: true }).waitFor({ state: "visible" });
   const collapseParams = page.getByRole("button", { name: "收起参数", exact: true });
   await collapseParams.click();
   await page.getByRole("region", { name: "Amazon 风格参考设置", exact: true }).waitFor({ state: "hidden" });
@@ -306,7 +315,6 @@ try {
     await page.getByRole("button", { name: "生成图片策划", exact: true }).isVisible(),
     "收起参数后策划动作不可达",
   );
-  const expandParams = page.getByRole("button", { name: "调整参数", exact: true });
   await expandParams.click();
   await page.getByRole("region", { name: "Amazon 风格参考设置", exact: true }).waitFor({ state: "visible" });
 
@@ -495,8 +503,8 @@ try {
   await page.getByTestId("asset-upload").waitFor({ state: "attached" });
   const restoredImage = page.getByRole("img", { name: "front.png", exact: true });
   await restoredImage.waitFor({ state: "visible" });
-  const productNameField = page.getByLabel("商品名称", { exact: true });
-  await productNameField.fill("云感旅行颈枕（未保存）");
+  const productCategoryField = page.getByLabel("品类", { exact: true });
+  await productCategoryField.fill("旅行用品（未保存）");
   const planButton = page.getByRole("button", { name: "重新策划", exact: true });
   assert(await planButton.isDisabled(), "商品资料未保存时仍可重新策划");
   await page
@@ -595,6 +603,11 @@ try {
     (await aPlusTab.getAttribute("aria-selected")) === "true",
     "A+ 分段控件未显示选中状态",
   );
+  await page.getByRole("tab", { name: "从资料库选择", exact: true }).click();
+  const aPlusProductPicker = page.getByRole("dialog", { name: "切换 Amazon 商品", exact: true });
+  await aPlusProductPicker.waitFor({ state: "visible" });
+  await aPlusProductPicker.getByRole("button", { name: "继续当前商品", exact: true }).click();
+  await aPlusProductPicker.waitFor({ state: "hidden" });
   const aPlusListingText = page.getByLabel("Amazon Listing 原文", { exact: true });
   await aPlusListingText.waitFor({ state: "visible" });
   if (!(await aPlusListingText.inputValue()).trim()) {
@@ -846,8 +859,8 @@ try {
   if ((await sourceToggleAfterHistory.getAttribute("aria-expanded")) === "false") {
     await sourceToggleAfterHistory.click();
   }
-  const productDescription = page.getByLabel("商品描述", { exact: true });
-  await productDescription.fill("可折叠记忆棉颈枕，新增可调节支撑说明");
+  const productCategory = page.getByLabel("品类", { exact: true });
+  await productCategory.fill("旅行与通勤用品");
   await page.getByRole("button", { name: "保存商品资料", exact: true }).click();
   await page.getByText("商品资料已保存。", { exact: true }).waitFor({ state: "visible" });
   const stalePlanWarning = page.locator("#plan-freshness-status");
@@ -897,9 +910,26 @@ try {
     "商品名：云感旅行颈枕 Pro\n卖点：慢回弹承托、可折叠收纳\n规格：材质：记忆棉",
   );
   const crossPlatformAnalysisButton = page.getByRole("button", {
-    name: "分析并策划",
+    name: "生成图片策划",
     exact: true,
   });
+  const taobaoPrimaryActionGeometry = await page.evaluate(() => {
+    const toolbar = document.querySelector(".taobao-intake .workbench-toolbar")?.getBoundingClientRect();
+    const action = Array.from(document.querySelectorAll(".taobao-intake .workbench-toolbar button")).find(
+      (button) => button.textContent?.trim() === "生成图片策划",
+    )?.getBoundingClientRect();
+    return {
+      toolbarTop: toolbar?.top ?? 0,
+      toolbarBottom: toolbar?.bottom ?? 0,
+      actionTop: action?.top ?? 0,
+      actionBottom: action?.bottom ?? 0,
+    };
+  });
+  assert(
+    taobaoPrimaryActionGeometry.actionTop >= taobaoPrimaryActionGeometry.toolbarTop &&
+      taobaoPrimaryActionGeometry.actionBottom <= taobaoPrimaryActionGeometry.toolbarBottom,
+    "淘宝生成图片策划动作没有固定在准备页顶部工具栏",
+  );
   assert(await crossPlatformAnalysisButton.isDisabled(), "跨平台仍可启动第二个分析策划任务");
   assert(
     (await crossPlatformAnalysisButton.getAttribute("title"))?.includes("Amazon 正在生成平台策划"),
@@ -1206,7 +1236,7 @@ try {
     await taobaoAnalysisInput.fill(
       "商品名：云感旅行颈枕 Pro\n卖点：慢回弹承托、可折叠收纳\n规格：材质：记忆棉\n禁用声明：治疗颈椎病",
     );
-    await page.getByRole("button", { name: "分析并策划", exact: true }).click();
+    await page.getByRole("button", { name: "生成图片策划", exact: true }).click();
     await page.locator(".slot-card").first().waitFor({ state: "visible" });
   }
   for (const viewport of [
@@ -1233,8 +1263,8 @@ try {
   );
   const taobaoCurrentStep = page.locator('.workbench-stepper__item[aria-current="step"]');
   assert(
-    (await taobaoCurrentStep.innerText()).includes("检查策划"),
-    "淘宝完成策划后没有进入共享的检查策划阶段",
+    (await taobaoCurrentStep.innerText()).includes("策划检查"),
+    "淘宝完成策划后没有进入共享的策划检查阶段",
   );
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByRole("button", { name: "分析详情", exact: true }).click();

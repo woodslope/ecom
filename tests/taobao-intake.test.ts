@@ -7,6 +7,7 @@ import {
   TaobaoIntake,
   taobaoAnalysisHasReference,
 } from "../src/components/TaobaoIntake";
+import { TaobaoWorkspace } from "../src/components/TaobaoWorkspace";
 import { PlatformWorkspace } from "../src/components/PlatformWorkspace";
 import { createPlanningInputSignature } from "../src/domain/planning/input-signature";
 import { applyTaobaoAnalysisToFacts } from "../src/domain/platforms/taobao-analysis";
@@ -44,7 +45,7 @@ describe("Taobao intake", () => {
     ).toBe(true);
   });
 
-  it("offers a library exit when no product is loaded", () => {
+  it("allows manual facts or images when no product is loaded", () => {
     const markup = renderToStaticMarkup(createElement(TaobaoIntake, {
       activeProject: null,
       assets: [],
@@ -54,8 +55,9 @@ describe("Taobao intake", () => {
       onOpenLibrary: () => undefined,
     }));
 
-    expect(markup).toContain("先选择商品资料");
-    expect(markup).toContain("打开资料库");
+    expect(markup).toContain("可直接填写本次商品资料或只上传商品图");
+    expect(markup).toContain("从资料库选择");
+    expect(markup).toContain("手动填写");
   });
 
   it("renders product text, image input, existing references, and a Taobao analysis action", () => {
@@ -84,28 +86,108 @@ describe("Taobao intake", () => {
     expect(markup).toContain("淘宝商品资料");
     expect(markup).toContain('aria-label="淘宝分析图片"');
     expect(markup).toContain("正面图.png");
-    expect(markup).toContain("分析并策划");
+    expect(markup).toContain("生成图片策划");
+    expect(markup).toContain('class="workbench-toolbar"');
     expect(markup).toContain("不会自动修改资料库");
-    expect(markup).toContain("载入资料库");
+    expect(markup).toContain("从资料库选择");
     expect(markup).toContain("手动填写");
-    expect(markup).toContain("云感旅行颈枕");
     expect(markup).not.toContain("Amazon Listing");
+    expect(markup.indexOf("生成图片策划")).toBeLessThan(
+      markup.indexOf('aria-label="淘宝商品资料"'),
+    );
   });
 
-  it("blocks analysis without a reference image and explains the shared planning gate", () => {
+  it("allows a facts-only draft without a reference image", () => {
     const markup = renderToStaticMarkup(createElement(TaobaoIntake, {
       activeProject: project,
       assets: [],
+      session: {
+        id: "session_facts_only",
+        projectId: project.id,
+        platformId: "taobao",
+        workflowId: "taobao-product",
+        sourceInput: {
+          listingText: "",
+          taobaoProduct: { productText: "商品名：云感旅行颈枕\n卖点：慢回弹", selectedReferenceAssetIds: [] },
+        },
+        options: { platformId: "taobao" },
+        selectedReferenceAssetIds: [],
+        planningInput: {
+          sourceMode: "manual",
+          quality: "facts-only",
+          missingFacts: ["商品参考图"],
+          productText: "商品名：云感旅行颈枕\n卖点：慢回弹",
+          selectedReferenceAssetIds: [],
+        },
+        slotVersions: {},
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      },
       loading: false,
       error: null,
       onAnalyze: async () => undefined,
       onOpenLibrary: () => undefined,
     }));
 
-    expect(markup).toContain("淘宝策划需要至少一张参考图");
-    expect(markup).toContain("打开资料库");
-    expect(markup).toContain("disabled");
-    expect(markup).toContain("与后续策划一致");
+    expect(markup).toContain("缺少商品参考图，将生成策划草稿");
+    expect(markup).toContain("策划草稿");
+    expect(markup).not.toMatch(/planning-primary-action[^>]*disabled/);
+  });
+
+  it("keeps a failed plan on the shared intake with its saved analysis input", () => {
+    const session = {
+      id: "session_failed_plan",
+      projectId: project.id,
+      platformId: "taobao" as const,
+      workflowId: "taobao-product" as const,
+      sourceInput: {
+        listingText: "",
+        taobaoProduct: {
+          productText: "商品名：云感旅行颈枕\n卖点：慢回弹",
+          selectedReferenceAssetIds: [],
+        },
+      },
+      options: { platformId: "taobao" as const },
+      selectedReferenceAssetIds: [],
+      planningInput: {
+        sourceMode: "manual" as const,
+        quality: "facts-only" as const,
+        missingFacts: ["商品参考图"],
+        productText: "商品名：云感旅行颈枕\n卖点：慢回弹",
+        selectedReferenceAssetIds: [],
+      },
+      taobaoAnalysis: {
+        suggestedProductName: "云感旅行颈枕",
+        description: "商品名：云感旅行颈枕\n卖点：慢回弹",
+        sellingPoints: ["慢回弹"],
+        specifications: {},
+        forbiddenClaims: [],
+        referenceAssets: [],
+        citations: [],
+        missingFacts: ["规格参数"],
+        warnings: [],
+      },
+      slotVersions: {},
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+    };
+    const markup = renderToStaticMarkup(createElement(
+      TaobaoWorkspace,
+      {
+        activeProject: project,
+        assets: [],
+        session,
+        loading: false,
+        error: "策划模型暂不可用",
+        onAnalyze: async () => undefined,
+        children: createElement("span", null, "production-workspace-marker"),
+      },
+    ));
+
+    expect(markup).toContain("生成图片策划");
+    expect(markup).toContain("商品名：云感旅行颈枕");
+    expect(markup).toContain("策划模型暂不可用");
+    expect(markup).not.toContain("production-workspace-marker");
   });
 
   it("shows explainable analysis fields, missing facts, and forbidden-claim warnings", () => {
@@ -190,7 +272,7 @@ describe("Taobao intake", () => {
     }));
 
     expect(markup).toContain("固定图组");
-    expect(markup).toContain("AI 策划");
+    expect(markup).toContain("生成图片策划");
     expect(markup).toContain("淘宝 / 天猫");
     expect(markup).not.toContain("Listing / A+");
   });

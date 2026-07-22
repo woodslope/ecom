@@ -1,6 +1,7 @@
 import type { SlotVersion, SlotVersionState } from "../generation/types";
 import { normalizePlatformPlan } from "../planning/normalizer";
 import type { PlatformPlan } from "../planning/types";
+import type { PlanningInputSnapshot } from "../planning/input-assessment";
 import {
   normalizeAPlusContentType,
   resolveAmazonPlanningSession,
@@ -60,6 +61,7 @@ export interface PlatformSession {
   sourceInput: PlatformSourceInput;
   options: PlatformSessionOptions;
   selectedReferenceAssetIds: string[];
+  planningInput?: PlanningInputSnapshot;
   selectedStyleReferenceId?: string;
   styleReferenceNotice?: string;
   taobaoAnalysis?: TaobaoProductAnalysis;
@@ -89,6 +91,7 @@ export interface PlatformRunContext {
   sourceInput: PlatformSourceInput;
   options: PlatformSessionOptions;
   selectedReferenceAssetIds: string[];
+  planningInput?: PlanningInputSnapshot;
   selectedStyleReferenceId?: string;
   taobaoAnalysis?: TaobaoProductAnalysis;
 }
@@ -295,6 +298,7 @@ function normalizeTaobaoAnalysis(value: unknown): TaobaoProductAnalysis | null {
   });
   return {
     suggestedProductName: value.suggestedProductName,
+    ...(typeof value.description === "string" ? { description: value.description } : {}),
     sellingPoints: normalizeStringArray(value.sellingPoints),
     specifications: Object.fromEntries(
       Object.entries(value.specifications).filter(
@@ -418,6 +422,9 @@ function normalizeSession(value: unknown, projectId: string): PlatformSession | 
     sourceInput: normalizeSourceInput(value.sourceInput),
     options,
     selectedReferenceAssetIds: normalizeStringArray(value.selectedReferenceAssetIds),
+    ...(normalizePlanningInput(value.planningInput)
+      ? { planningInput: normalizePlanningInput(value.planningInput)! }
+      : {}),
     ...(typeof value.selectedStyleReferenceId === "string"
       ? { selectedStyleReferenceId: value.selectedStyleReferenceId }
       : {}),
@@ -445,6 +452,30 @@ function normalizeStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+}
+
+function normalizePlanningInput(value: unknown): PlanningInputSnapshot | null {
+  if (
+    !isRecord(value) ||
+    (value.sourceMode !== "library" && value.sourceMode !== "manual") ||
+    !["standard", "image-only", "facts-only", "empty"].includes(String(value.quality)) ||
+    typeof value.productText !== "string"
+  ) {
+    return null;
+  }
+  return {
+    sourceMode: value.sourceMode,
+    quality: value.quality as PlanningInputSnapshot["quality"],
+    missingFacts: normalizeStringArray(value.missingFacts),
+    productText: value.productText,
+    selectedReferenceAssetIds: normalizeStringArray(value.selectedReferenceAssetIds),
+    ...(typeof value.sourceProjectId === "string"
+      ? { sourceProjectId: value.sourceProjectId }
+      : {}),
+    ...(typeof value.sourceProjectUpdatedAt === "string"
+      ? { sourceProjectUpdatedAt: value.sourceProjectUpdatedAt }
+      : {}),
+  };
 }
 
 function normalizeProductionEvent(value: unknown, runId: string): ProductionEvent | null {
@@ -527,6 +558,9 @@ function normalizeRun(value: unknown, projectId: string): ProductionRun | null {
       selectedReferenceAssetIds: normalizeStringArray(
         value.contextSnapshot.selectedReferenceAssetIds,
       ),
+      ...(normalizePlanningInput(value.contextSnapshot.planningInput)
+        ? { planningInput: normalizePlanningInput(value.contextSnapshot.planningInput)! }
+        : {}),
       ...(typeof value.contextSnapshot.selectedStyleReferenceId === "string"
         ? { selectedStyleReferenceId: value.contextSnapshot.selectedStyleReferenceId }
         : {}),

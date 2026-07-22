@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { FileText, Images } from "lucide-react";
 
+import { planningInputQualityLabel } from "../domain/planning/input-assessment";
 import type { ProductProject } from "../domain/projects/types";
 import { getAPlusContentTypeLabel } from "../domain/platforms/amazon-catalog";
 import { getAmazonMarketplaceLabel } from "../domain/platforms/amazon-marketplaces";
@@ -45,6 +46,7 @@ export function AmazonSessionSummary({
     AMAZON_STYLE_PRESETS.find((preset) => preset.id === options.stylePresetId)?.label ??
     options.stylePresetId ??
     "默认风格";
+  const planningInput = session.planningInput;
 
   return (
     <Dialog
@@ -58,6 +60,14 @@ export function AmazonSessionSummary({
       <StatusMessage>
         {sessionModeLabel(session)} · {getAmazonMarketplaceLabel(options.marketplaceId)} · {options.sizeTier}
       </StatusMessage>
+      {planningInput ? (
+        <StatusMessage tone={planningInput.quality === "standard" ? "success" : "warning"}>
+          {planningInput.sourceMode === "library" ? "资料库来源" : "手动来源"} · {planningInputQualityLabel(planningInput.quality)}
+          {planningInput.missingFacts.length > 0
+            ? ` · 待补：${planningInput.missingFacts.join("、")}`
+            : " · 输入完整"}
+        </StatusMessage>
+      ) : null}
       <div className="amazon-session-summary__body">
         <section>
           <strong>Listing 原文</strong>
@@ -118,7 +128,12 @@ export function AmazonWorkspace({
   children: ReactNode;
 }) {
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const statusLabel = session?.plan ? sessionModeLabel(session) : "准备资料";
+  const qualityLabel = session?.planningInput
+    ? planningInputQualityLabel(session.planningInput.quality)
+    : null;
+  const statusLabel = session?.plan
+    ? `${qualityLabel ?? "图片策划"} · ${sessionModeLabel(session)}`
+    : qualityLabel ?? "准备";
 
   return (
     <div className="amazon-workspace">
@@ -146,6 +161,7 @@ export function AmazonWorkspace({
           error={error}
           onSubmit={onStartSession}
           onSyncListingFacts={onSyncListingFacts}
+          onChooseLibrary={onOpenProductPicker}
           onDirtyChange={onWorkspaceDirtyChange}
           onCreateStyleReference={onCreateStyleReference}
           onRemoveAsset={onRemoveAsset}

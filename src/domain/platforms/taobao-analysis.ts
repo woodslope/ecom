@@ -18,6 +18,7 @@ export interface TaobaoAnalysisCitation {
 
 export interface TaobaoProductAnalysis {
   suggestedProductName: string;
+  description?: string;
   sellingPoints: string[];
   specifications: Record<string, string>;
   forbiddenClaims: string[];
@@ -41,6 +42,7 @@ export function applyTaobaoAnalysisToFacts(
   return {
     ...facts,
     productName: analysis.suggestedProductName || facts.productName,
+    description: analysis.description || facts.description,
     sellingPoints: [...analysis.sellingPoints],
     forbiddenClaims: [...analysis.forbiddenClaims],
     specifications: { ...analysis.specifications },
@@ -115,6 +117,7 @@ export function analyzeTaobaoProduct(
 ): TaobaoProductAnalysis {
   const parsed = parseInput(input.productText);
   const suggestedProductName = parsed.productName ?? input.facts.productName;
+  const description = input.productText.trim() || input.facts.description;
   const sellingPoints = unique([...input.facts.sellingPoints, ...parsed.sellingPoints]);
   const specifications = {
     ...input.facts.specifications,
@@ -132,6 +135,13 @@ export function analyzeTaobaoProduct(
   }
   if (parsed.productName) {
     citations.push({ field: "productName", value: parsed.productName, source: "analysis-input" });
+  }
+  if (input.productText.trim()) {
+    citations.push({
+      field: "description",
+      value: input.productText.trim(),
+      source: "analysis-input",
+    });
   }
   input.facts.sellingPoints.forEach((value) => {
     citations.push({ field: "sellingPoints", value, source: "shared-product" });
@@ -168,6 +178,7 @@ export function analyzeTaobaoProduct(
 
   return {
     suggestedProductName,
+    ...(description ? { description } : {}),
     sellingPoints,
     specifications,
     forbiddenClaims,

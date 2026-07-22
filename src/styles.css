@@ -4198,26 +4198,6 @@ select.select-control__input:disabled + .select-control__icon {
   border-radius: var(--radius-control);
 }
 
-.amazon-intake__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 40px;
-}
-
-.amazon-intake__toolbar h1 {
-  margin: 0;
-  font-size: var(--font-page-title);
-  line-height: var(--line-page-title);
-}
-
-.amazon-intake__toolbar p {
-  margin: 2px 0 0;
-  color: var(--text-muted);
-  font-size: var(--font-helper);
-  line-height: var(--line-helper);
-}
-
 .amazon-intake__grid {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
@@ -4542,6 +4522,39 @@ select.select-control__input:disabled + .select-control__icon {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.planning-intake-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.planning-primary-action {
+  min-width: 168px;
+}
+
+.planning-input-quality {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .amazon-intake > .workbench-toolbar,
+  .taobao-intake > .workbench-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .planning-intake-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .planning-primary-action {
+    flex: 1 1 168px;
+    min-width: 0;
+  }
 }
 
 .workbench-toolbar__title-block,

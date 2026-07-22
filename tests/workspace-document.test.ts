@@ -177,4 +177,68 @@ describe("project workspace document repository", () => {
     expect(restored.amazonWorkspaces?.listing.selectedSlotKey).toBe("PT02");
     expect(restored.amazonWorkspaces?.aplus).toBeUndefined();
   });
+
+  it("restores legacy sessions and runs that do not have planning input snapshots", async () => {
+    const listing = await amazonModePlan("listing");
+    const timestamp = "2026-07-20T01:00:00.000Z";
+    const session = {
+      id: "session_legacy",
+      projectId: "project_legacy",
+      platformId: "amazon",
+      workflowId: "amazon-listing",
+      sourceInput: { listingText: "Title: Legacy product" },
+      options: {
+        platformId: "amazon",
+        marketplaceId: "us",
+        plannerMode: "listing",
+        listingImageCount: 7,
+        sizeTier: "2K",
+      },
+      selectedReferenceAssetIds: [],
+      plan: listing,
+      slotVersions: {},
+      activeRunId: "run_legacy",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    const run = {
+      id: "run_legacy",
+      projectId: "project_legacy",
+      sessionId: session.id,
+      platformId: "amazon",
+      workflowId: "amazon-listing",
+      source: "demo",
+      status: "planned",
+      contextSnapshot: {
+        sourceInput: session.sourceInput,
+        options: session.options,
+        selectedReferenceAssetIds: [],
+      },
+      planSnapshot: listing,
+      slotVersionsSnapshot: {},
+      events: [],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    const storage = storageDouble({
+      "ecom-workbench.workspace.v2.project_legacy": JSON.stringify({
+        projectId: "project_legacy",
+        sessions: [session],
+        runs: [run],
+        plans: { amazon: listing },
+        selectedSlotKeys: { amazon: "MAIN" },
+        slotVersions: {},
+        taskHistory: [],
+        updatedAt: timestamp,
+      }),
+    });
+    const repository = createLocalStorageWorkspaceRepository({ storage });
+
+    const restored = await repository.load("project_legacy");
+
+    expect(restored.sessions).toHaveLength(1);
+    expect(restored.sessions[0]?.planningInput).toBeUndefined();
+    expect(restored.runs).toHaveLength(1);
+    expect(restored.runs[0]?.contextSnapshot.planningInput).toBeUndefined();
+  });
 });

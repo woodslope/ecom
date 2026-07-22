@@ -6,6 +6,7 @@ import type {
   SizeTier,
 } from "../platforms/amazon-catalog";
 import type { PlatformId, PlatformRulePack } from "../platforms/types";
+import type { PlanningInputAssessment } from "./input-assessment";
 
 export type PlanningSource = "demo" | "api";
 
@@ -88,5 +89,6 @@ export interface PlannerEngine {
     signal: AbortSignal,
     referenceImages?: readonly PlanningReferenceImage[],
     amazonOptions?: AmazonPlanningRequestOptions,
+    inputAssessment?: PlanningInputAssessment,
   ): Promise<PlatformPlan>;
 }

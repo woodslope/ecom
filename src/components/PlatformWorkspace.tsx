@@ -228,6 +228,7 @@ export function PlatformWorkspace({
           planInputSignature,
           planningFacts,
           referenceAssets.map((asset) => asset.metadata),
+          productionSession?.selectedReferenceAssetIds,
         )
       : null;
   const amazonControlsStale = isAmazon && Boolean(plan) && !amazonControlsMatchPlan(amazonSession, plan);
@@ -559,7 +560,7 @@ export function PlatformWorkspace({
               embedded
               onChange={(next) => void changeAmazonSession(next)}
               planAction={{
-                label: planning ? "策划中…" : plan ? "重新策划" : "AI 策划",
+                label: planning ? "策划中…" : plan ? "重新策划" : "生成图片策划",
                 disabled: planActionDisabled,
                 title: planDisabledReason,
                 describedBy: planDescriptionId,
@@ -713,13 +714,13 @@ export function PlatformWorkspace({
                   ) : (
                     <Sparkles size={15} />
                   )}
-                  {planning ? "正在策划..." : plan ? "重新策划" : "AI 策划"}
+                  {planning ? "正在策划..." : plan ? "重新策划" : "生成图片策划"}
                 </Button>
               </div>
             </div>
             {!plan ? (
               <div className="workbench-chrome__onboarding">
-                <span>固定图组 5 主图 + 7 详情。有分析后可直接策划；入口「分析并策划」会一并完成分析与策划。</span>
+                <span>固定图组 5 主图 + 7 详情。「生成图片策划」会统一分析资料与本次勾选的商品图。</span>
               </div>
             ) : null}
             <WorkflowStepper

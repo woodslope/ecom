@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { FileText, ImagePlus, Upload } from "lucide-react";
+import { FileText, ImagePlus, Sparkles, Upload } from "lucide-react";
 
 import { parseAmazonListingText } from "../domain/planning/listing-parse";
+import {
+  assessPlanningInput,
+  planningInputQualityLabel,
+  planningInputQualityMessage,
+  resolveAmazonPlanningFacts,
+} from "../domain/planning/input-assessment";
 import type { ProductProject } from "../domain/projects/types";
 import {
   hasUsableProductFacts,
   productFactsToAmazonListingText,
-  resolveInitialIntakeSourceMode,
   type ProductIntakeSourceMode,
 } from "../domain/projects/product-source-text";
 import type {
@@ -21,7 +26,7 @@ import {
   controlsFromPlan,
   type AmazonSessionControlsState,
 } from "./AmazonSessionControls";
-import { Button, Field, Panel, SegmentedControl, StatusMessage } from "./ui";
+import { Button, Field, Panel, SegmentedControl, StatusChip, StatusMessage } from "./ui";
 import { StyleReferencePicker } from "./StyleReferencePicker";
 import { WorkflowStepper } from "./WorkflowStepper";
 
@@ -71,6 +76,7 @@ export function AmazonIntake({
   error,
   onSubmit,
   onSyncListingFacts,
+  onChooseLibrary,
   onDirtyChange,
   onCreateStyleReference = async () => null,
   onRemoveAsset = async () => undefined,
@@ -84,6 +90,7 @@ export function AmazonIntake({
   error: string | null;
   onSubmit: (input: StartAmazonSessionInput) => Promise<PlatformSession | null>;
   onSyncListingFacts: (listingText: string) => Promise<boolean>;
+  onChooseLibrary?: () => void;
   onDirtyChange?: (reason: string | null) => void;
   onCreateStyleReference?: (presetId: string, draft: Partial<StyleReferenceDraft>) => Promise<WorkbenchAsset | null>;
   onRemoveAsset?: (id: string) => Promise<void>;
@@ -93,23 +100,17 @@ export function AmazonIntake({
   const referenceAssetIds = referenceAssets.map((asset) => asset.metadata.id);
   const referenceAssetIdsKey = referenceAssetIds.join(",");
   const hasLibraryFacts = Boolean(activeProject && hasUsableProductFacts(activeProject.facts));
-  const [sourceMode, setSourceMode] = useState<ProductIntakeSourceMode>(() =>
-    resolveInitialIntakeSourceMode({
-      hasSessionDraft: Boolean(session?.sourceInput.listingText?.trim()),
-      hasLibraryFacts,
-    }),
+  const [sourceMode, setSourceMode] = useState<ProductIntakeSourceMode>(
+    () => session?.planningInput?.sourceMode ?? (session ? "library" : "manual"),
   );
   const [listingText, setListingText] = useState(() => {
     if (session?.sourceInput.listingText?.trim()) return session.sourceInput.listingText;
-    if (activeProject && hasUsableProductFacts(activeProject.facts)) {
-      return productFactsToAmazonListingText(activeProject.facts);
-    }
     return "";
   });
   const [files, setFiles] = useState<File[]>([]);
   const [selectedReferenceAssetIds, setSelectedReferenceAssetIds] = useState<string[]>(
     session?.selectedReferenceAssetIds ??
-      (hasLibraryFacts ? referenceAssets.map((asset) => asset.metadata.id) : []),
+      [],
   );
   const [selectedStyleReferenceId, setSelectedStyleReferenceId] = useState<string | null>(
     session?.selectedStyleReferenceId ?? `preset:${controlsFromSession(session, plannerMode).stylePresetId}`,
@@ -122,24 +123,16 @@ export function AmazonIntake({
   useEffect(() => {
     if (submittingDraft.current) return;
     setControls(controlsFromSession(session, plannerMode));
-    const libraryReady = Boolean(activeProject && hasUsableProductFacts(activeProject.facts));
-    const nextMode = resolveInitialIntakeSourceMode({
-      hasSessionDraft: Boolean(session?.sourceInput.listingText?.trim()),
-      hasLibraryFacts: libraryReady,
-    });
+    const nextMode = session?.planningInput?.sourceMode ?? (session ? "library" : "manual");
     setSourceMode(nextMode);
     if (session?.sourceInput.listingText?.trim()) {
       setListingText(session.sourceInput.listingText);
-    } else if (nextMode === "library" && activeProject) {
-      setListingText(productFactsToAmazonListingText(activeProject.facts));
     } else {
       setListingText("");
     }
     setSelectedReferenceAssetIds(
       session?.selectedReferenceAssetIds ??
-        (nextMode === "library"
-          ? referenceAssetIds
-          : []),
+        [],
     );
     setSelectedStyleReferenceId(
       session?.selectedStyleReferenceId ??
@@ -154,6 +147,7 @@ export function AmazonIntake({
     referenceAssetIdsKey,
     plannerMode,
     session?.id,
+    session?.planningInput?.sourceMode,
     session?.sourceInput.listingText,
     session?.selectedReferenceAssetIds,
     session?.selectedStyleReferenceId,
@@ -170,6 +164,20 @@ export function AmazonIntake({
       : null,
     [activeProject, listingText],
   );
+  const assessment = useMemo(
+    () => assessPlanningInput({
+      facts: resolveAmazonPlanningFacts(activeProject?.facts, listingText, sourceMode),
+      productImageCount: selectedReferenceAssetIds.length + files.length,
+    }),
+    [activeProject?.facts, files.length, listingText, selectedReferenceAssetIds.length, sourceMode],
+  );
+  const assessmentLabel = planningInputQualityLabel(assessment.quality);
+  const assessmentMessage = planningInputQualityMessage(assessment);
+  const assessmentTone = assessment.quality === "standard"
+    ? "success"
+    : assessment.quality === "empty"
+      ? "neutral"
+      : "warning";
 
   const applyLibrarySource = () => {
     if (!activeProject) return;
@@ -180,6 +188,14 @@ export function AmazonIntake({
     );
     setSyncStatus("idle");
     setDirty(true);
+  };
+
+  const chooseLibrarySource = () => {
+    if (onChooseLibrary) {
+      onChooseLibrary();
+      return;
+    }
+    applyLibrarySource();
   };
 
   const changeFiles = (event: ChangeEvent<HTMLInputElement>) => {
@@ -195,7 +211,10 @@ export function AmazonIntake({
     submittingDraft.current = true;
     try {
       const result = await onSubmit({
-        ...(activeProject ? { projectId: activeProject.id } : {}),
+        ...(activeProject && (sourceMode === "library" || session?.planningInput?.sourceMode === "manual")
+          ? { projectId: activeProject.id }
+          : {}),
+        sourceMode,
         workflowId: controls.plannerMode === "aplus" ? "amazon-aplus" : "amazon-listing",
         listingText,
         files,
@@ -203,7 +222,10 @@ export function AmazonIntake({
         selectedStyleReferenceId,
         options: amazonOptionsFromControls(controls),
       });
-      if (result) setDirty(false);
+      if (result) {
+        setFiles([]);
+        setDirty(false);
+      }
     } finally {
       submittingDraft.current = false;
     }
@@ -211,11 +233,33 @@ export function AmazonIntake({
 
   return (
     <div className="amazon-intake">
-      <div className="amazon-intake__toolbar">
-        <div>
+      <div className="workbench-toolbar">
+        <div className="workbench-toolbar__title">
           <h1>Amazon</h1>
+          <StatusChip tone="neutral">图片策划</StatusChip>
+        </div>
+        <div className="workbench-toolbar__actions planning-intake-actions">
+          <StatusChip tone={assessmentTone}>{assessmentLabel}</StatusChip>
+          <Button
+            type="button"
+            className="planning-primary-action"
+            disabled={disabled || assessment.quality === "empty"}
+            loading={planning}
+            loadingLabel="生成图片策划中..."
+            title={assessment.quality === "empty" ? assessmentMessage : undefined}
+            onClick={() => void submit()}
+          >
+            <Sparkles size={16} />
+            生成图片策划
+          </Button>
         </div>
       </div>
+      <StatusMessage tone={assessmentTone} className="planning-input-quality">
+        {assessmentMessage}
+        {assessment.missingFacts.length > 0 && assessment.quality !== "empty"
+          ? ` 待补：${assessment.missingFacts.join("、")}。`
+          : null}
+      </StatusMessage>
 
       <WorkflowStepper
         platform="amazon"
@@ -240,14 +284,19 @@ export function AmazonIntake({
           value={sourceMode}
           disabled={disabled}
           onChange={(mode) => {
-            if (mode === "library") applyLibrarySource();
-            else setSourceMode("manual");
+            if (mode === "library") chooseLibrarySource();
+            else {
+              setSourceMode("manual");
+              setListingText("");
+              setSelectedReferenceAssetIds([]);
+              setFiles([]);
+              setDirty(true);
+            }
           }}
           options={[
             {
               value: "library",
-              label: "载入资料库",
-              disabled: !activeProject || (!hasLibraryFacts && referenceAssets.length === 0),
+              label: "从资料库选择",
             },
             { value: "manual", label: "手动填写" },
           ]}
@@ -268,6 +317,7 @@ export function AmazonIntake({
       <AmazonSessionControls
         value={controls}
         disabled={disabled}
+        preferCollapsed
         onChange={(next) => {
           if (
             next.stylePresetId !== controls.stylePresetId &&
@@ -299,13 +349,6 @@ export function AmazonIntake({
             onRemove={onRemoveAsset}
           />
         }
-        planAction={{
-          label: "生成图片策划",
-          disabled: !listingText.trim(),
-          title: !listingText.trim() ? "先填写 Listing 原文" : undefined,
-          busy: planning,
-          onClick: () => void submit(),
-        }}
       />
 
       <div className="amazon-intake__grid">
@@ -325,7 +368,6 @@ export function AmazonIntake({
               value={listingText}
               placeholder={"Title: Product title\n\nAbout this item\n- First benefit\n- Second benefit\n\nProduct description..."}
               onChange={(event) => {
-                setSourceMode("manual");
                 setListingText(event.target.value);
                 setSyncStatus("idle");
                 setDirty(true);

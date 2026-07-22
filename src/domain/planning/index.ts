@@ -17,3 +17,16 @@ export {
   parseAmazonListingText,
 } from "./listing-parse";
 export type { ParsedListingText, ProductFactsListingPatch } from "./listing-parse";
+export {
+  assessPlanningInput,
+  createEmptyProductFacts,
+  planningInputQualityLabel,
+  planningInputQualityMessage,
+  resolveAmazonPlanningFacts,
+} from "./input-assessment";
+export type {
+  PlanningInputAssessment,
+  PlanningInputQuality,
+  PlanningInputSnapshot,
+  PlanningInputSourceMode,
+} from "./input-assessment";

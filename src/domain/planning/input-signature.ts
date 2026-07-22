@@ -10,12 +10,20 @@ function compareText(left: string, right: string): number {
 export function createPlanningInputSignature(
   facts: ProductFacts,
   assets: readonly AssetMetadata[],
+  selectedReferenceAssetIds?: readonly string[],
 ): string {
   const specifications = Object.fromEntries(
     Object.entries(facts.specifications).sort(([left], [right]) => compareText(left, right)),
   );
+  const selectedIds = selectedReferenceAssetIds
+    ? new Set(selectedReferenceAssetIds)
+    : null;
   const referenceAssets = assets
-    .filter((asset) => asset.kind === "reference")
+    .filter(
+      (asset) =>
+        asset.kind === "reference" &&
+        (!selectedIds || selectedIds.has(asset.id)),
+    )
     .map((asset) => ({
       id: asset.id,
       name: asset.name,
@@ -48,15 +56,24 @@ export function getPlanningInputFreshness(
   savedSignature: string | undefined,
   facts: ProductFacts,
   assets: readonly AssetMetadata[],
+  selectedReferenceAssetIds?: readonly string[],
 ): PlanningInputFreshness {
   if (!savedSignature) return "unknown";
-  return savedSignature === createPlanningInputSignature(facts, assets) ? "fresh" : "stale";
+  return savedSignature === createPlanningInputSignature(facts, assets, selectedReferenceAssetIds)
+    ? "fresh"
+    : "stale";
 }
 
 export function isPlanningInputCurrent(
   savedSignature: string | undefined,
   facts: ProductFacts,
   assets: readonly AssetMetadata[],
+  selectedReferenceAssetIds?: readonly string[],
 ): boolean {
-  return getPlanningInputFreshness(savedSignature, facts, assets) === "fresh";
+  return getPlanningInputFreshness(
+    savedSignature,
+    facts,
+    assets,
+    selectedReferenceAssetIds,
+  ) === "fresh";
 }

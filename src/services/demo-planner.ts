@@ -9,6 +9,7 @@ import type {
   PlatformPlanCandidate,
 } from "../domain/planning/types";
 import type { PlatformRulePack, PlatformSlotRule } from "../domain/platforms/types";
+import type { PlanningInputAssessment } from "../domain/planning/input-assessment";
 import { getAmazonMarketplaceByLocale } from "../domain/platforms/amazon-marketplaces";
 import { isAPlusExternalTextSlotRule } from "../domain/platforms/amazon-catalog";
 
@@ -69,7 +70,7 @@ function sceneEvidence(project: PlanningProjectFacts): string[] {
 function withFallback(project: PlanningProjectFacts, evidence: readonly string[]): string[] {
   return evidence.length > 0
     ? [...evidence]
-    : [fact("商品", project.productName) ?? project.productName];
+    : [fact("商品", project.productName) ?? "待补资料：商品名称"];
 }
 
 function withPending(evidence: readonly string[], missingLabel: string): string[] {
@@ -228,7 +229,7 @@ function visibleCopyFor(
     return samples[Math.max(0, sampleIndex) % samples.length] ?? rule.label;
   }
   if (rule.order === 1 || rule.key === "A+S01") {
-    return project.productName;
+    return project.productName.trim() || "待确认商品";
   }
   return evidence;
 }
@@ -548,6 +549,7 @@ export class DemoPlanner implements PlannerEngine {
     signal: AbortSignal,
     _referenceImages?: readonly PlanningReferenceImage[],
     amazonOptions?: AmazonPlanningRequestOptions,
+    _inputAssessment?: PlanningInputAssessment,
   ): Promise<PlatformPlan> {
     throwIfAborted(signal);
     await waitForDelay(this.delayMs, signal);

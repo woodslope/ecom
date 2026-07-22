@@ -10,6 +10,7 @@ import type {
   PlanningReferenceImage,
   PlatformPlan,
 } from "../domain/planning/types";
+import type { PlanningInputAssessment } from "../domain/planning/input-assessment";
 import type { PlatformRulePack } from "../domain/platforms/types";
 import { hasAmazonChinesePromptTemplate } from "../domain/platforms/prompt-language";
 import { getAmazonMarketplaceByLocale } from "../domain/platforms/amazon-marketplaces";
@@ -32,6 +33,7 @@ export type OpenAIPlannerErrorCode =
   | "auth"
   | "path"
   | "quota"
+  | "capability"
   | "format";
 
 export class OpenAIPlannerError extends Error {
@@ -133,8 +135,10 @@ function planningSystemPrompt(rulePack: PlatformRulePack): string {
     "evidence must be a non-empty string array; all other slot fields must be strings.",
     platformCopyRule,
     promptLanguageRule,
-    "Use only supplied product facts and reference images. Treat images as visual context only; do not infer hidden specifications, certifications, or claims.",
-    "When evidence is missing, explicitly mark it as missing instead of inventing a claim.",
+    "Evidence policy: distinguish three categories explicitly: user-supplied facts, information directly visible in a selected product image, and missing facts.",
+    "User-supplied facts may be used as factual copy and evidence. Image-visible information may describe only directly observable appearance, color, shape, count, layout, and visible construction.",
+    "Never infer hidden dimensions, material composition, performance, efficacy, certification, warranty, compatibility, package contents, or safety claims from an image.",
+    "When a fact is missing, mark it as missing in evidence and keep copy/prompt neutral instead of inventing it.",
   ].join("\n");
 }
 
@@ -154,6 +158,7 @@ async function planningUserContent(
   signal: AbortSignal,
   apiKey: string,
   allowReferenceImages = true,
+  inputAssessment?: PlanningInputAssessment,
 ): Promise<unknown> {
   const images = (allowReferenceImages ? referenceImages : []).filter(
     (image) => image.blob.size > 0 && image.mimeType.startsWith("image/"),
@@ -161,6 +166,7 @@ async function planningUserContent(
   const text = JSON.stringify({
     project,
     rulePack,
+    ...(inputAssessment ? { inputAssessment } : {}),
     referenceImages: images.map(({ name, mimeType }) => ({ name, mimeType })),
     ...(!allowReferenceImages && referenceImages.length > 0
       ? { referenceImagesSkipped: "The configured planner provider accepts text only; reference images were intentionally omitted." }
@@ -316,9 +322,20 @@ export class OpenAIPlanner implements PlannerEngine {
     signal: AbortSignal,
     referenceImages: readonly PlanningReferenceImage[] = [],
     amazonOptions?: AmazonPlanningRequestOptions,
+    inputAssessment?: PlanningInputAssessment,
   ): Promise<PlatformPlan> {
     if (signal.aborted) {
       throwAbortReason(signal, this.options.apiKey);
+    }
+    if (
+      inputAssessment?.quality === "image-only" &&
+      !inputAssessment.hasAnyFacts &&
+      this.options.plannerReferenceImages === false
+    ) {
+      throw new OpenAIPlannerError(
+        "capability",
+        "当前策划模型不支持读取商品图。请补充商品名称与可验证卖点/描述，或更换支持图片输入的策划模型。",
+      );
     }
 
     let effectivePack = rulePack;
@@ -365,6 +382,7 @@ export class OpenAIPlanner implements PlannerEngine {
           requestController.signal,
           this.options.apiKey,
           this.options.plannerReferenceImages !== false,
+          inputAssessment,
         );
         if (requestController.signal.aborted) {
           throwAbortReason(requestController.signal, this.options.apiKey);

@@ -1,19 +1,29 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { FileText, FolderOpen, ImagePlus, LoaderCircle, Sparkles, Square, Upload } from "lucide-react";
+import { FileText, ImagePlus, LoaderCircle, Sparkles, Square, Upload } from "lucide-react";
 
 import type { ProductProject } from "../domain/projects/types";
 import {
+  assessPlanningInput,
+  createEmptyProductFacts,
+  planningInputQualityLabel,
+  planningInputQualityMessage,
+  type PlanningInputSnapshot,
+} from "../domain/planning/input-assessment";
+import {
   hasUsableProductFacts,
   productFactsToTaobaoText,
-  resolveInitialIntakeSourceMode,
   type ProductIntakeSourceMode,
 } from "../domain/projects/product-source-text";
-import type { TaobaoProductAnalysis } from "../domain/platforms/taobao-analysis";
+import {
+  analyzeTaobaoProduct,
+  applyTaobaoAnalysisToFacts,
+  type TaobaoProductAnalysis,
+} from "../domain/platforms/taobao-analysis";
+import type { PlatformSession } from "../domain/workspace/project-workspace";
 import type { AnalyzeTaobaoProductInput, WorkbenchAsset } from "../store/workbench-store";
 import { Button, Dialog, EmptyState, Field, Panel, SegmentedControl, StatusChip, StatusMessage } from "./ui";
 import { WorkflowStepper } from "./WorkflowStepper";
 
-/** Matches PlatformWorkspace canPlan: Taobao planning needs at least one reference image. */
 export function taobaoAnalysisHasReference(input: {
   selectedReferenceCount: number;
   pendingFileCount: number;
@@ -30,6 +40,7 @@ const citationSourceLabel = {
 export function TaobaoAnalysisSummary({
   open = true,
   analysis,
+  planningInput,
   onClose = () => undefined,
   onReanalyze,
   reanalyzeDisabled = false,
@@ -37,6 +48,7 @@ export function TaobaoAnalysisSummary({
 }: {
   open?: boolean;
   analysis: TaobaoProductAnalysis;
+  planningInput?: PlanningInputSnapshot;
   onClose?: () => void;
   onReanalyze?: () => void;
   reanalyzeDisabled?: boolean;
@@ -74,6 +86,14 @@ export function TaobaoAnalysisSummary({
           {findingCount > 0 ? <StatusChip tone="warning">{findingCount} 条提醒</StatusChip> : null}
         </span>
       </div>
+      {planningInput ? (
+        <StatusMessage tone={planningInput.quality === "standard" ? "success" : "warning"}>
+          {planningInput.sourceMode === "library" ? "资料库来源" : "手动来源"} · {planningInputQualityLabel(planningInput.quality)}
+          {planningInput.missingFacts.length > 0
+            ? ` · 待补：${planningInput.missingFacts.join("、")}`
+            : " · 输入完整"}
+        </StatusMessage>
+      ) : null}
       <div className="taobao-analysis-summary__body">
         <dl className="taobao-analysis-summary__facts">
           <div>
@@ -135,7 +155,7 @@ export function TaobaoIntake({
 }: {
   activeProject: ProductProject | null;
   assets: WorkbenchAsset[];
-  session?: { sourceInput: { taobaoProduct?: { productText: string; selectedReferenceAssetIds: string[] } } };
+  session?: PlatformSession;
   loading: boolean;
   lockedReason?: string;
   onCancelLockedTask?: () => void;
@@ -151,49 +171,37 @@ export function TaobaoIntake({
   );
   const sessionDraft = session?.sourceInput.taobaoProduct;
   const hasLibraryFacts = Boolean(activeProject && hasUsableProductFacts(activeProject.facts));
-  const [sourceMode, setSourceMode] = useState<ProductIntakeSourceMode>(() =>
-    resolveInitialIntakeSourceMode({
-      hasSessionDraft: Boolean(sessionDraft?.productText?.trim()),
-      hasLibraryFacts,
-    }),
+  const [sourceMode, setSourceMode] = useState<ProductIntakeSourceMode>(
+    () => session?.planningInput?.sourceMode ?? (session ? "library" : "manual"),
   );
   const [productText, setProductText] = useState(() => {
     if (sessionDraft?.productText?.trim()) return sessionDraft.productText;
-    if (activeProject && hasUsableProductFacts(activeProject.facts)) {
-      return productFactsToTaobaoText(activeProject.facts);
-    }
     return "";
   });
   const [selectedIds, setSelectedIds] = useState<string[]>(
-    sessionDraft?.selectedReferenceAssetIds ?? referenceAssets.map((asset) => asset.metadata.id),
+    sessionDraft?.selectedReferenceAssetIds ?? [],
   );
   const [files, setFiles] = useState<File[]>([]);
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     const draft = session?.sourceInput.taobaoProduct;
-    const libraryReady = Boolean(activeProject && hasUsableProductFacts(activeProject.facts));
-    const nextMode = resolveInitialIntakeSourceMode({
-      hasSessionDraft: Boolean(draft?.productText?.trim()),
-      hasLibraryFacts: libraryReady,
-    });
+    const nextMode = session?.planningInput?.sourceMode ?? (session ? "library" : "manual");
     setSourceMode(nextMode);
     if (draft?.productText?.trim()) {
       setProductText(draft.productText);
-    } else if (nextMode === "library" && activeProject) {
-      setProductText(productFactsToTaobaoText(activeProject.facts));
     } else {
       setProductText("");
     }
     setSelectedIds(
-      draft?.selectedReferenceAssetIds ??
-        referenceAssets.map((asset) => asset.metadata.id),
+      draft?.selectedReferenceAssetIds ?? [],
     );
     setFiles([]);
     setDirty(false);
   }, [
     activeProject,
     referenceAssets,
+    session?.planningInput?.sourceMode,
     session?.sourceInput.taobaoProduct?.productText,
     session?.sourceInput.taobaoProduct?.selectedReferenceAssetIds,
   ]);
@@ -203,34 +211,8 @@ export function TaobaoIntake({
     return () => onDirtyChange?.(null);
   }, [dirty, onDirtyChange]);
 
-  if (!activeProject) {
-    return (
-      <EmptyState
-        variant="setup"
-        icon={<FileText size={24} />}
-        title="先选择商品资料"
-        description="淘宝生产可从资料库载入商品档案，也可新建档案后回来手动填写。"
-        action={
-          <div className="platform-empty-actions">
-            {onOpenProductPicker ? (
-              <Button onClick={onOpenProductPicker}>
-                <FolderOpen size={15} />
-                选择商品
-              </Button>
-            ) : null}
-            {onOpenLibrary ? (
-              <Button variant="secondary" onClick={onOpenLibrary}>
-                <FolderOpen size={15} />
-                打开资料库
-              </Button>
-            ) : null}
-          </div>
-        }
-      />
-    );
-  }
-
   const applyLibrarySource = () => {
+    if (!activeProject) return;
     setSourceMode("library");
     setProductText(productFactsToTaobaoText(activeProject.facts));
     setSelectedIds(referenceAssets.map((asset) => asset.metadata.id));
@@ -239,16 +221,39 @@ export function TaobaoIntake({
 
   const applyManualSource = () => {
     setSourceMode("manual");
-    // Keep current text so users can continue editing after switching.
+    setProductText("");
+    setSelectedIds([]);
+    setFiles([]);
+    setDirty(true);
   };
 
-  const hasReference = taobaoAnalysisHasReference({
-    selectedReferenceCount: selectedIds.length,
-    pendingFileCount: files.length,
-  });
-  const analyzeDisabledReason = lockedReason ?? (!hasReference
-    ? "请先添加或选择至少一张商品参考图（与后续平台策划门槛一致）"
-    : undefined);
+  const planningFacts = useMemo(() => {
+    const baseFacts = sourceMode === "library" && activeProject
+      ? activeProject.facts
+      : createEmptyProductFacts();
+    const analysis = analyzeTaobaoProduct({
+      facts: baseFacts,
+      productText,
+      referenceAssets: [],
+    });
+    return applyTaobaoAnalysisToFacts(baseFacts, analysis);
+  }, [activeProject, productText, sourceMode]);
+  const assessment = useMemo(
+    () => assessPlanningInput({
+      facts: planningFacts,
+      productImageCount: selectedIds.length + files.length,
+    }),
+    [files.length, planningFacts, selectedIds.length],
+  );
+  const assessmentLabel = planningInputQualityLabel(assessment.quality);
+  const assessmentMessage = planningInputQualityMessage(assessment);
+  const assessmentTone = assessment.quality === "standard"
+    ? "success"
+    : assessment.quality === "empty"
+      ? "neutral"
+      : "warning";
+  const analyzeDisabledReason = lockedReason ??
+    (assessment.quality === "empty" ? assessmentMessage : undefined);
 
   const toggleAsset = (id: string) => {
     setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
@@ -256,9 +261,12 @@ export function TaobaoIntake({
   };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!hasReference) return;
+    if (assessment.quality === "empty") return;
     const result = await onAnalyze({
-      projectId: activeProject.id,
+      ...(activeProject && (sourceMode === "library" || session?.planningInput?.sourceMode === "manual")
+        ? { projectId: activeProject.id }
+        : {}),
+      sourceMode,
       productText,
       files,
       selectedReferenceAssetIds: selectedIds,
@@ -274,17 +282,29 @@ export function TaobaoIntake({
       <div className="workbench-toolbar">
         <div className="workbench-toolbar__title">
           <h1>淘宝 / 天猫</h1>
-          <StatusChip tone="neutral">商品分析</StatusChip>
+          <StatusChip tone="neutral">图片策划</StatusChip>
         </div>
-        <Button
-          type="submit"
-          disabled={loading || Boolean(lockedReason) || !hasReference}
-          title={analyzeDisabledReason}
-        >
-          <Sparkles size={16} />
-          {loading ? "分析并策划中..." : "分析并策划"}
-        </Button>
+        <div className="workbench-toolbar__actions planning-intake-actions">
+          <StatusChip tone={assessmentTone}>{assessmentLabel}</StatusChip>
+          <Button
+            type="submit"
+            className="planning-primary-action"
+            disabled={loading || Boolean(lockedReason) || assessment.quality === "empty"}
+            loading={loading}
+            loadingLabel="生成图片策划中..."
+            title={analyzeDisabledReason}
+          >
+            <Sparkles size={16} />
+            生成图片策划
+          </Button>
+        </div>
       </div>
+      <StatusMessage tone={assessmentTone} className="planning-input-quality">
+        {assessmentMessage}
+        {assessment.missingFacts.length > 0 && assessment.quality !== "empty"
+          ? ` 待补：${assessment.missingFacts.join("、")}。`
+          : null}
+      </StatusMessage>
       <WorkflowStepper
         platform="taobao"
         stage="prepare"
@@ -320,14 +340,16 @@ export function TaobaoIntake({
           ariaLabel="商品资料来源"
           value={sourceMode}
           onChange={(mode) => {
-            if (mode === "library") applyLibrarySource();
+            if (mode === "library") {
+              if (onOpenProductPicker) onOpenProductPicker();
+              else applyLibrarySource();
+            }
             else applyManualSource();
           }}
           options={[
             {
               value: "library",
-              label: "载入资料库",
-              disabled: !hasLibraryFacts && referenceAssets.length === 0,
+              label: "从资料库选择",
             },
             { value: "manual", label: "手动填写" },
           ]}
@@ -345,14 +367,9 @@ export function TaobaoIntake({
         ) : null}
       </div>
 
-      {!hasLibraryFacts && sourceMode === "manual" ? (
+      {!activeProject && sourceMode === "manual" ? (
         <StatusMessage>
-          当前资料库商品事实较空。可直接粘贴文案，或先到资料库补全后再点「载入资料库」。
-        </StatusMessage>
-      ) : null}
-      {!hasReference ? (
-        <StatusMessage tone="warning">
-          淘宝策划需要至少一张参考图。请在下方添加图片，或勾选资料库中的现有素材后再分析。
+          可直接填写本次商品资料或只上传商品图，提交时会自动创建本地草稿。
         </StatusMessage>
       ) : null}
       <div className="taobao-intake__grid">
@@ -370,7 +387,6 @@ export function TaobaoIntake({
               rows={14}
               value={productText}
               onChange={(event) => {
-                setSourceMode("manual");
                 setProductText(event.target.value);
                 setDirty(true);
               }}
@@ -382,7 +398,7 @@ export function TaobaoIntake({
         <Panel title="商品参考图" className="taobao-intake__asset-panel">
           <label className="taobao-intake__upload">
             <Upload size={18} />
-            <span>添加本次分析图片（至少 1 张，与后续策划一致）</span>
+            <span>添加本次任务商品图</span>
             <input
               aria-label="淘宝分析图片"
               type="file"
@@ -420,15 +436,7 @@ export function TaobaoIntake({
                 variant="selection"
                 icon={<ImagePlus size={20} />}
                 title="还没有参考图"
-                description="请在这里添加至少一张图片，或先到资料库补充素材。没有参考图无法完成分析与策划。"
-                action={
-                  onOpenLibrary ? (
-                    <Button variant="secondary" size="compact" onClick={onOpenLibrary}>
-                      <FolderOpen size={14} />
-                      打开资料库
-                    </Button>
-                  ) : undefined
-                }
+                description="可只填写商品资料生成策划草稿，也可上传商品图提升输入完整度。"
               />
             </div>
           ) : null}

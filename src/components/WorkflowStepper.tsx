@@ -3,8 +3,8 @@ import type { PlatformId } from "../domain/platforms/types";
 export type WorkflowStage = "prepare" | "review" | "produce" | "deliver";
 
 const WORKFLOW_STEPS: Array<{ id: WorkflowStage; label: string; hint: string }> = [
-  { id: "prepare", label: "准备资料", hint: "商品事实与参考图" },
-  { id: "review", label: "检查策划", hint: "确认槽位与 Prompt" },
+  { id: "prepare", label: "准备", hint: "商品事实与参考图" },
+  { id: "review", label: "策划检查", hint: "确认槽位与 Prompt" },
   { id: "produce", label: "逐图生产", hint: "生成并选择版本" },
   { id: "deliver", label: "交付检查", hint: "预览、合规与导出" },
 ];

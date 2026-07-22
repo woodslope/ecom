@@ -52,4 +52,27 @@ describe("planning input signature", () => {
       ]),
     ).toBe(false);
   });
+
+  it("tracks only selected reference assets when a selection is supplied", () => {
+    const selected = referenceAsset("asset_selected");
+    const unused = referenceAsset("asset_unused");
+    const signature = createPlanningInputSignature(facts, [selected, unused], [selected.id]);
+
+    expect(
+      isPlanningInputCurrent(
+        signature,
+        facts,
+        [selected, referenceAsset("asset_unused", "2026-07-18T10:00:00.000Z")],
+        [selected.id],
+      ),
+    ).toBe(true);
+    expect(
+      isPlanningInputCurrent(
+        signature,
+        facts,
+        [referenceAsset("asset_selected", "2026-07-18T10:00:00.000Z"), unused],
+        [selected.id],
+      ),
+    ).toBe(false);
+  });
 });

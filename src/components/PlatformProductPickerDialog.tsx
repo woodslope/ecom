@@ -42,7 +42,7 @@ export function PlatformProductPickerDialog({
   platformLabel: string;
   projects: readonly ProductProject[];
   activeProjectId?: string | null;
-  /** Amazon can continue without a project by pasting Listing. */
+  /** Both platforms can continue without a saved project using manual facts or images. */
   allowManualWithoutProject?: boolean;
   loading?: boolean;
   onClose: () => void;
@@ -127,8 +127,8 @@ export function PlatformProductPickerDialog({
           title="还没有商品档案"
           description={
             allowManualWithoutProject
-              ? "可以先手动粘贴 Listing 开始，也可以新建资料库档案后再载入。"
-              : "淘宝生产需要商品档案。请先新建档案，或打开资料库维护。"
+              ? "可以先手动填写商品资料或上传商品图，也可以新建资料库档案后再载入。"
+              : "请先新建商品档案，或打开资料库维护。"
           }
           action={
             <div className="platform-product-picker__empty-actions">

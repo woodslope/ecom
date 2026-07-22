@@ -49,9 +49,7 @@ describe("platform workspace contract", () => {
   });
 
   it("restores an existing Taobao session without overwriting its selected analysis inputs", () => {
-    expect(appSource).toContain(
-      'if (!initialized || activeItem !== "taobao" || !activeProject || activeTaobaoSession) return;',
-    );
+    expect(appSource).not.toContain("startTaobaoSession({");
     expect(appSource).toContain("productionSession={activeTaobaoSession}");
     expect(appSource).toContain("onOpenLibrary={() => changeActiveItem(\"library\")}");
     expect(appSource).toContain("resolveOverviewNextAction");
@@ -194,7 +192,7 @@ describe("platform workspace contract", () => {
       projectId: project.id,
       platformId: "amazon",
       workflowId: "amazon-listing",
-      sourceInput: { listingText: "Title: Cloud Neck Pillow" },
+      sourceInput: { listingText: "" },
       options: {
         platformId: "amazon",
         marketplaceId: "us",
@@ -414,7 +412,7 @@ describe("platform workspace contract", () => {
     expect(markup).toContain("Amazon 正在生成平台策划，请先等待或取消。");
     expect(markup).toContain("Amazon 正在生成平台策划");
     expect(markup.match(/取消策划/g)).toHaveLength(1);
-    for (const label of ["AI 策划", "重试策划", "生成平台策划"]) {
+    for (const label of ["生成图片策划", "重试策划", "生成平台策划"]) {
       expect(buttonAttributes(markup, label)).toContain('disabled=""');
       expect(buttonAttributes(markup, label)).toContain(
         'aria-describedby="planning-task-status"',
@@ -544,7 +542,7 @@ describe("platform workspace contract", () => {
       projectId: project.id,
       platformId: "amazon",
       workflowId: "amazon-listing",
-      sourceInput: { listingText: "Title: Cloud Neck Pillow" },
+      sourceInput: { listingText: "" },
       options: {
         platformId: "amazon",
         marketplaceId: "us",

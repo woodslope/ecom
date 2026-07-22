@@ -16,8 +16,8 @@ describe("shared platform workflow stepper", () => {
         }),
       );
 
-      expect(markup).toContain("准备资料");
-      expect(markup).toContain("检查策划");
+      expect(markup).toContain("准备");
+      expect(markup).toContain("策划检查");
       expect(markup).toContain("逐图生产");
       expect(markup).toContain("交付检查");
       expect(markup).toContain('aria-current="step"');

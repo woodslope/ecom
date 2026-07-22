@@ -150,6 +150,35 @@ describe("workbench planning state", () => {
     await expect(receivedReferenceImages?.[0]?.blob.text()).resolves.toBe("reference-bytes");
   });
 
+  it("passes only the session-selected product images to the planner", async () => {
+    let receivedReferenceImages: readonly PlanningReferenceImage[] | undefined;
+    const planner: PlannerEngine = {
+      async plan(...args) {
+        receivedReferenceImages = args[3];
+        return demoPlanner.plan(...args);
+      },
+    };
+    const store = createWorkbenchStore(createDependencies(planner));
+    const project = await store.getState().createProject({ name: "勾选参考图", facts: productFacts });
+    const uploaded = await store.getState().uploadReferenceFiles([
+      new File(["selected"], "selected.png", { type: "image/png" }),
+      new File(["unused"], "unused.png", { type: "image/png" }),
+    ]);
+
+    const session = await store.getState().startAmazonSession({
+      projectId: project!.id,
+      sourceMode: "library",
+      workflowId: "amazon-listing",
+      listingText: "Title: Selected Image Product\n- Verified benefit",
+      files: [],
+      selectedReferenceAssetIds: [uploaded[0]!.metadata.id],
+      options: { plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
+    });
+
+    expect(session?.selectedReferenceAssetIds).toEqual([uploaded[0]!.metadata.id]);
+    expect(receivedReferenceImages?.map((image) => image.name)).toEqual(["selected.png"]);
+  });
+
   it("blocks editing, generation, Copilot, and export when the saved plan uses old inputs", async () => {
     const store = createWorkbenchStore(createDependencies());
     await store.getState().createProject({ name: "输入版本保护", facts: productFacts });
