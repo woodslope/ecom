@@ -293,30 +293,36 @@ export function SettingsDialog({
                   onChange={(event) => update("imageModel", event.target.value)}
                 />
               </Field>
-              <Field label="生成方式" hint="当前工作台先使用同步生成；异步状态机后续接入。">
+              <Field
+                label="生成方式"
+                hint="当前工作台使用同步生成。异步生成尚未实现，入口已禁用。"
+              >
                 <div className="settings-mode-switch" role="group" aria-label="图片生成方式">
                   <Button
                     type="button"
-                    variant={draft.imageGenerationMode !== "async" ? "primary" : "secondary"}
+                    variant="primary"
                     size="compact"
                     disabled={controlsDisabled}
-                    aria-pressed={draft.imageGenerationMode !== "async"}
+                    aria-pressed
                     onClick={() => update("imageGenerationMode", "sync")}
                   >
                     同步生成
                   </Button>
                   <Button
                     type="button"
-                    variant={draft.imageGenerationMode === "async" ? "primary" : "secondary"}
+                    variant="secondary"
                     size="compact"
-                    disabled={controlsDisabled}
-                    aria-pressed={draft.imageGenerationMode === "async"}
-                    onClick={() => update("imageGenerationMode", "async")}
+                    disabled
+                    aria-pressed={false}
+                    title="异步生成尚未实现"
                   >
                     异步生成（预留）
                   </Button>
                 </div>
               </Field>
+              <StatusMessage>
+                局部重绘（mask-edit）能力取决于当前图片服务商：OpenAI 兼容端点通常支持；OpenRouter / DeepSeek 等可能仅支持文生图。可在槽位检查器查看是否可用。
+              </StatusMessage>
               <div className="settings-service-actions">
                 <Button
                   variant="secondary"

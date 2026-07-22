@@ -89,7 +89,10 @@ try {
   assert(!desktopOverflow, "桌面端出现横向溢出");
 
   // Prefer library destination so "新建商品" is in the primary path (Amazon rail may hide it).
-  const libraryNav = page.getByRole("button", { name: "资料库", exact: true });
+  const libraryNav = page.locator(".platform-rail").getByRole("button", {
+    name: "资料库",
+    exact: true,
+  });
   if (await libraryNav.count()) {
     await libraryNav.click();
   }
@@ -109,6 +112,21 @@ try {
   await page.locator(".library-project-card", { hasText: "浏览器恢复测试" }).waitFor({
     state: "visible",
   });
+  await page.getByRole("button", { name: "新建商品", exact: true }).first().click();
+  await projectDialog.waitFor({ state: "visible" });
+  await projectDialog.getByLabel("资料名称", { exact: true }).fill("备用商品档案");
+  await projectDialog.getByLabel("商品名称", { exact: true }).fill("旅行水杯");
+  await projectDialog.getByLabel("品类", { exact: true }).fill("户外用品");
+  await projectDialog.getByLabel("核心卖点", { exact: true }).fill("轻量防漏\n便于携带");
+  await projectDialog.getByRole("button", { name: "创建资料", exact: true }).click();
+  await projectDialog.waitFor({ state: "hidden" });
+  await page
+    .locator(".library-project-card", { hasText: "浏览器恢复测试" })
+    .locator(".library-project-card__select")
+    .click();
+  await page.getByRole("region", { name: "档案详情：浏览器恢复测试" }).waitFor({
+    state: "visible",
+  });
   const projectMenuButton = page.getByRole("button", { name: "更多：浏览器恢复测试", exact: true });
   await projectMenuButton.click();
   const deleteProjectAction = page.getByRole("menuitem", { name: "删除商品", exact: true });
@@ -117,7 +135,18 @@ try {
     await deleteProjectAction.evaluate((element) => Boolean(element.closest(".library-project-card"))),
     "删除商品操作没有归属到具体商品卡片",
   );
-  await projectMenuButton.click();
+  await deleteProjectAction.click();
+  const deleteProjectDialog = page.getByRole("dialog", {
+    name: "删除“浏览器恢复测试”？",
+    exact: true,
+  });
+  await deleteProjectDialog.waitFor({ state: "visible" });
+  assert(
+    (await deleteProjectDialog.locator(".button--danger").count()) === 1,
+    "删除商品没有使用共享危险操作弹窗",
+  );
+  await deleteProjectDialog.getByRole("button", { name: "取消", exact: true }).click();
+  await deleteProjectDialog.waitFor({ state: "hidden" });
   await deleteProjectAction.waitFor({ state: "hidden" });
   await page.setViewportSize({ width: 1280, height: 800 });
   const libraryFactsReachability = await page.evaluate(() => {
@@ -246,7 +275,7 @@ try {
   assert(
     firstUploadGeometry.styleTop >= firstUploadGeometry.controlsTop &&
       firstUploadGeometry.styleBottom <= firstUploadGeometry.controlsBottom,
-    "Amazon 隐藏风格参考没有收进参数区域",
+    "Amazon 附加风格板没有收进参数区域",
   );
   assert(
     firstUploadGeometry.planTop >= firstUploadGeometry.controlsTop &&
@@ -272,16 +301,88 @@ try {
   await page.getByRole("tab", { name: "Listing 图", exact: true }).waitFor({ state: "visible" });
   const collapseParams = page.getByRole("button", { name: "收起参数", exact: true });
   await collapseParams.click();
-  await page.getByLabel("隐藏风格参考图", { exact: true }).waitFor({ state: "hidden" });
+  await page.getByRole("region", { name: "Amazon 风格参考设置", exact: true }).waitFor({ state: "hidden" });
   assert(
     await page.getByRole("button", { name: "生成图片策划", exact: true }).isVisible(),
     "收起参数后策划动作不可达",
   );
   const expandParams = page.getByRole("button", { name: "调整参数", exact: true });
   await expandParams.click();
-  await page.getByLabel("隐藏风格参考图", { exact: true }).waitFor({ state: "visible" });
+  await page.getByRole("region", { name: "Amazon 风格参考设置", exact: true }).waitFor({ state: "visible" });
 
   await page.setViewportSize({ width: 1280, height: 800 });
+
+  const baseStyleSelect = page.getByLabel("基础风格", { exact: true });
+  const styleBoardSelect = page.locator('select[aria-label="附加风格板"]');
+  await baseStyleSelect.selectOption("studio-proof");
+  assert(
+    (await styleBoardSelect.inputValue()) === "preset:studio-proof",
+    "切换基础风格后，内置附加风格板没有同步",
+  );
+  await styleBoardSelect.selectOption("preset:soft-lifestyle");
+  assert(
+    (await baseStyleSelect.inputValue()) === "soft-lifestyle",
+    "选择内置附加风格板后，基础风格没有同步",
+  );
+
+  await page.getByRole("button", { name: "新建自定义风格", exact: true }).click();
+  const styleEditorDialog = page.getByRole("dialog", { name: "新建自定义风格", exact: true });
+  await styleEditorDialog.waitFor({ state: "visible" });
+  await styleEditorDialog.getByLabel("风格名称", { exact: true }).fill("浏览器静谧棚拍");
+  await styleEditorDialog.getByLabel("光影", { exact: true }).selectOption("soft");
+  await captureEvidence(page, "amazon-style-editor-1280.png");
+  await page.setViewportSize({ width: 900, height: 800 });
+  assert(
+    !(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)),
+    "900px 风格编辑器出现横向溢出",
+  );
+  await captureEvidence(page, "amazon-style-editor-900.png");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await styleEditorDialog.getByRole("button", { name: "保存到当前商品", exact: true }).click();
+  await styleEditorDialog.waitFor({ state: "hidden" });
+  await page
+    .locator(".style-reference-picker__selected strong", { hasText: "浏览器静谧棚拍" })
+    .waitFor({ state: "visible" });
+  await captureEvidence(page, "amazon-custom-style-selected-1280.png");
+
+  await page.getByRole("button", { name: "删除当前自定义风格", exact: true }).click();
+  const removeStyleDialog = page.getByRole("dialog", { name: "删除自定义风格板？", exact: true });
+  await removeStyleDialog.waitFor({ state: "visible" });
+  const removeStyleCopy = await removeStyleDialog.innerText();
+  assert(removeStyleCopy.includes("当前商品资料"), "删除风格板没有说明商品作用域");
+  assert(removeStyleCopy.includes("已有策划和图片不会删除"), "删除风格板没有说明保留边界");
+  await captureEvidence(page, "amazon-style-delete-confirm-1280.png");
+  await removeStyleDialog.getByRole("button", { name: "取消", exact: true }).click();
+
+  await page.getByRole("tab", { name: "A+ 图", exact: true }).click();
+  await page.getByRole("button", { name: "编排模块", exact: true }).click();
+  const aPlusModuleDialog = page.getByRole("dialog", { name: "编排 A+ 模块", exact: true });
+  await aPlusModuleDialog.waitFor({ state: "visible" });
+  assert(
+    (await aPlusModuleDialog.locator(".aplus-module-arrange__row").count()) === 5,
+    "普通 A+ 编排弹窗默认模块数不是 5",
+  );
+  await captureEvidence(page, "amazon-aplus-module-dialog-1280.png");
+  await aPlusModuleDialog
+    .getByRole("button", { name: "在第 1 行后添加同尺寸模块", exact: true })
+    .click();
+  assert(
+    (await aPlusModuleDialog.locator(".aplus-module-arrange__row").count()) === 6,
+    "A+ 编排草稿没有新增模块",
+  );
+  await aPlusModuleDialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "编排模块", exact: true }).click();
+  assert(
+    (await aPlusModuleDialog.locator(".aplus-module-arrange__row").count()) === 5,
+    "取消 A+ 编排后仍提交了弹窗草稿",
+  );
+  await aPlusModuleDialog
+    .getByRole("button", { name: "在第 1 行后添加同尺寸模块", exact: true })
+    .click();
+  await aPlusModuleDialog.getByRole("button", { name: "应用编排", exact: true }).click();
+  await page.getByText(/6 个模块 · 自定义清单/).waitFor({ state: "visible" });
+  await page.getByRole("tab", { name: "Listing 图", exact: true }).click();
+
   await captureEvidence(page, "amazon-empty-1280.png");
 
   for (const viewport of [
@@ -311,10 +412,81 @@ try {
   // Default AIS listing session: MAIN + PT01-PT06 (7).
   await page.getByRole("tab", { name: "Listing 图", exact: true }).click();
   await page.getByRole("button", { name: "生成图片策划", exact: true }).click();
-  await page.locator(".slot-card").first().waitFor({ state: "visible" });
+  await Promise.race([
+    page.locator(".slot-card").first().waitFor({ state: "visible" }),
+    page.locator(".amazon-intake .status-message--danger").waitFor({ state: "visible" }),
+  ]);
+  const intakePlanningError = await page
+    .locator(".amazon-intake .status-message--danger")
+    .allInnerTexts();
+  assert(intakePlanningError.length === 0, `Amazon 准备态策划失败：${intakePlanningError.join("；")}`);
   const slotCount = await page.locator(".slot-card").count();
   assert(slotCount === 7, `Amazon Listing 默认应为 7 个槽位，实际 ${slotCount}`);
   assert(await page.getByText("Demo", { exact: true }).isVisible(), "Demo 策划来源没有诚实标记");
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByRole("button", { name: "切换商品", exact: true }).click();
+  const productSwitchDialog = page.getByRole("dialog", {
+    name: "切换 Amazon 商品",
+    exact: true,
+  });
+  await productSwitchDialog.waitFor({ state: "visible" });
+  const productSwitchText = await productSwitchDialog.innerText();
+  assert(productSwitchText.includes("恢复该商品"), "商品切换没有说明恢复已有进度");
+  assert(productSwitchText.includes("当前商品的进度仍会保留"), "商品切换没有说明当前进度保留");
+  assert(!productSwitchText.includes("覆盖当前草稿"), "商品选择器仍把切换描述为覆盖当前输入");
+  const productSwitchGeometry = await productSwitchDialog.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      rightGap: Math.abs(window.innerWidth - rect.right),
+      heightGap: Math.abs(window.innerHeight - rect.height),
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  });
+  assert(productSwitchGeometry.rightGap <= 1, "商品切换侧栏没有贴合右侧边界");
+  assert(productSwitchGeometry.heightGap <= 1, "商品切换侧栏没有占满可用高度");
+  assert(!productSwitchGeometry.overflow, "打开商品切换侧栏后页面横向溢出");
+  await captureEvidence(page, "product-switch-sidebar-1280.png");
+  await page.setViewportSize({ width: 900, height: 800 });
+  const compactProductSwitchGeometry = await productSwitchDialog.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const footer = element.querySelector(".dialog__footer")?.getBoundingClientRect();
+    return {
+      left: rect.left,
+      right: rect.right,
+      footerLeft: footer?.left ?? 0,
+      footerRight: footer?.right ?? 0,
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  });
+  assert(compactProductSwitchGeometry.left >= 0, "900px 商品切换侧栏越出左边界");
+  assert(compactProductSwitchGeometry.right <= 901, "900px 商品切换侧栏越出右边界");
+  assert(
+    compactProductSwitchGeometry.footerLeft >= 0 && compactProductSwitchGeometry.footerRight <= 901,
+    "900px 商品切换动作区不可达",
+  );
+  assert(!compactProductSwitchGeometry.overflow, "900px 商品切换侧栏出现横向溢出");
+  await captureEvidence(page, "product-switch-sidebar-900.png");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await productSwitchDialog.getByRole("option", { name: /备用商品档案/ }).click();
+  await productSwitchDialog.getByRole("button", { name: "切换并恢复", exact: true }).click();
+  await page.getByText("旅行水杯", { exact: true }).first().waitFor({ state: "visible" });
+  assert((await page.locator(".slot-card").count()) === 0, "切到空商品后仍显示上一商品的 Amazon 槽位");
+
+  await page.getByRole("button", { name: "切换商品", exact: true }).click();
+  await productSwitchDialog.waitFor({ state: "visible" });
+  await productSwitchDialog.getByRole("option", { name: /浏览器恢复测试/ }).click();
+  await productSwitchDialog.getByRole("button", { name: "切换并恢复", exact: true }).click();
+  await page.locator(".slot-card").first().waitFor({ state: "visible" });
+  assert((await page.locator(".slot-card").count()) === 7, "切回商品后没有恢复 Amazon 的 7 槽位策划");
+
+  await page.getByRole("button", { name: "任务输入", exact: true }).click();
+  const amazonInputDialog = page.getByRole("dialog", { name: "本次任务输入", exact: true });
+  await amazonInputDialog.waitFor({ state: "visible" });
+  assert((await amazonInputDialog.innerText()).includes("Title:"), "Amazon 任务输入侧栏缺少 Listing 原文");
+  await captureEvidence(page, "amazon-task-input-sidebar-1280.png");
+  await amazonInputDialog.getByRole("button", { name: "关闭侧栏", exact: true }).click();
+  await amazonInputDialog.waitFor({ state: "hidden" });
 
   const sourceToggle = page.getByRole("button", { name: /^(资料|收起资料)$/ });
   if ((await sourceToggle.getAttribute("aria-expanded")) === "false") {
@@ -335,6 +507,7 @@ try {
     await page.getByRole("heading", { name: "Amazon", exact: true }).isVisible(),
     "商品资料未保存时仍可离开工作区并丢失草稿",
   );
+  await page.getByRole("button", { name: "返回保存", exact: true }).click();
   await page.getByRole("button", { name: "保存商品资料", exact: true }).click();
   await page.getByText("商品资料已保存。", { exact: true }).waitFor({ state: "visible" });
   assert(!(await planButton.isDisabled()), "商品资料保存后重新策划入口没有恢复");
@@ -441,6 +614,12 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   const visibleCopyField = page.getByLabel("可见文案", { exact: true });
   const promptField = page.getByLabel("模型提示词（英文，可复制）", { exact: true });
+  const restoredListingDisabled = await visibleCopyField.isDisabled();
+  const restoredListingWarnings = await page.locator("#plan-freshness-status").allInnerTexts();
+  assert(
+    !restoredListingDisabled,
+    `切回 Listing 后槽位编辑仍被锁定：${restoredListingWarnings.join("；")}`,
+  );
   await visibleCopyField.fill("Travel comfort, clearly supported");
   await promptField.fill("Use the verified neck pillow facts in a clear Amazon PT01 composition.");
   await page.locator(".slot-card").filter({ hasText: "PT02" }).click();
@@ -457,6 +636,7 @@ try {
     await page.getByRole("heading", { name: "Amazon", exact: true }).isVisible(),
     "槽位草稿未保存时仍可离开工作区并丢失草稿",
   );
+  await page.getByRole("button", { name: "返回保存", exact: true }).click();
   await page.getByRole("button", { name: "保存文案与提示词", exact: true }).click();
   await page.getByText("用户编辑：槽位草稿已保存。", { exact: true }).waitFor({ state: "visible" });
 
@@ -497,6 +677,7 @@ try {
   await page.getByRole("img", { name: "PT01 当前生成版本", exact: true }).waitFor({
     state: "visible",
   });
+  await page.getByRole("tab", { name: "版本", exact: true }).click();
   assert((await page.locator(".version-tile").count()) === 1, "首次生成没有创建 V1");
   await page.getByRole("button", { name: "重新生成", exact: true }).click();
   await page.locator(".version-tile").nth(1).waitFor({ state: "visible" });
@@ -509,6 +690,26 @@ try {
     (await page.locator(".version-tile").first().getAttribute("aria-pressed")) === "true",
     "切换后 V1 没有成为当前版本",
   );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const inspectorViewModel = await page.evaluate(() => {
+    const tablist = document.querySelector('[role="tablist"][aria-label="槽位检查视图"]');
+    const resultImage = document.querySelector('.generated-result img[alt="PT01 当前生成版本"]');
+    const resultRect = resultImage?.getBoundingClientRect();
+    return {
+      tabCount: tablist?.querySelectorAll('[role="tab"]').length ?? 0,
+      selectedTabCount: tablist?.querySelectorAll('[role="tab"][aria-selected="true"]').length ?? 0,
+      visiblePaneCount: document.querySelectorAll(".slot-inspector__pane:not([hidden])").length,
+      tablistFits: tablist ? tablist.scrollWidth <= tablist.clientWidth + 1 : false,
+      resultVisible: Boolean(resultRect && resultRect.width > 0 && resultRect.height > 0),
+    };
+  });
+  assert(inspectorViewModel.tabCount === 4, "槽位检查器没有统一为四个详情视图");
+  assert(inspectorViewModel.selectedTabCount === 1, "槽位检查器同时选中了多个详情视图");
+  assert(inspectorViewModel.visiblePaneCount === 1, "槽位检查器同时展开了多个详情区域");
+  assert(inspectorViewModel.tablistFits, "1280px 槽位检查视图标签发生横向裁切");
+  assert(inspectorViewModel.resultVisible, "切换版本视图后当前结果不可见");
+  await captureEvidence(page, "slot-inspector-versions-1280.png");
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.reload({ waitUntil: "networkidle" });
   await page.getByTestId("app-frame").waitFor({ state: "visible" });
@@ -533,6 +734,7 @@ try {
       "Use the verified neck pillow facts in a clear Amazon PT01 composition.",
     "刷新后没有恢复已编辑的槽位提示词",
   );
+  await page.getByRole("tab", { name: "版本", exact: true }).click();
   assert((await page.locator(".version-tile").count()) === 2, "刷新后没有恢复两个生成版本");
   assert(
     (await page.locator(".version-tile").first().getAttribute("aria-pressed")) === "true",
@@ -551,6 +753,7 @@ try {
   await page.getByRole("heading", { name: "Amazon", exact: true }).waitFor({
     state: "visible",
   });
+  await page.getByRole("tab", { name: "版本", exact: true }).click();
   assert((await page.locator(".version-tile").count()) === 2, "失败夹具启动前没有恢复两个历史版本");
   await page.getByRole("button", { name: "重新生成", exact: true }).click();
   await page.getByRole("button", { name: "正在生成...", exact: true }).waitFor({
@@ -563,6 +766,10 @@ try {
     "本地失败夹具没有显示可归属的生成错误",
   );
   await page.setViewportSize({ width: 1280, height: 800 });
+  assert(
+    await page.getByRole("tablist", { name: "槽位检查视图", exact: true }).isVisible(),
+    "1280px 已有版本时检查器视图切换器不可见",
+  );
   await captureEvidence(page, "generation-error-1280.png");
   await page.setViewportSize({ width: 1440, height: 900 });
   assert((await page.locator(".version-tile").count()) === 2, "生成失败覆盖或追加了历史版本");
@@ -576,19 +783,21 @@ try {
   });
   await page.locator(".version-tile").nth(2).waitFor({ state: "visible" });
   assert((await page.locator(".version-tile").count()) === 3, "失败后的重试没有成功追加新版本");
-  const complianceToggle = page.getByRole("button", { name: /策划依据与合规/ });
-  await complianceToggle.click();
+  const checksTab = page.getByRole("tab", { name: "检查", exact: true });
+  await checksTab.click();
   await page.getByText("仍需人工复核", { exact: true }).waitFor({ state: "visible" });
   assert(
     await page.getByText("自动检查未发现文字风险", { exact: true }).isVisible(),
     "合规面板没有显示当前槽位的自动检查结果",
   );
-  const copilotToggle = page.getByRole("button", { name: "AI Copilot", exact: true });
-  await copilotToggle.click();
+  await captureEvidence(page, "slot-inspector-checks-1280.png");
+  const copilotTab = page.getByRole("tab", { name: "Copilot", exact: true });
+  await copilotTab.click();
   assert(
     await page.getByRole("button", { name: "缩短文案", exact: true }).isVisible(),
-    "生成后无法展开 AI Copilot",
+    "生成后无法切换到 AI Copilot",
   );
+  await captureEvidence(page, "slot-inspector-copilot-1280.png");
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "导出当前结果", exact: true }).click();
   const download = await downloadPromise;
@@ -674,27 +883,27 @@ try {
     "全局策划状态没有标明任务平台",
   );
   await page.getByRole("button", { name: "淘宝 / 天猫", exact: true }).click();
+  const crossPlatformPicker = page.getByRole("dialog", { name: /切换 淘宝/ });
+  if (await crossPlatformPicker.count()) {
+    await crossPlatformPicker
+      .getByRole("button", { name: /^(继续当前商品|切换并恢复)$/ })
+      .click();
+    await crossPlatformPicker.waitFor({ state: "hidden" });
+  }
   await page
     .getByRole("heading", { name: "淘宝 / 天猫", exact: true })
     .waitFor({ state: "visible" });
   await page.getByLabel("淘宝商品资料", { exact: true }).fill(
     "商品名：云感旅行颈枕 Pro\n卖点：慢回弹承托、可折叠收纳\n规格：材质：记忆棉",
   );
-  await page.getByRole("button", { name: "分析淘宝商品", exact: true }).click();
-  const crossPlatformPlanButton = page.getByRole("button", {
-    name: "AI 策划淘宝商品生产包",
+  const crossPlatformAnalysisButton = page.getByRole("button", {
+    name: "分析并策划",
     exact: true,
   });
-  const crossPlatformEmptyPlanButton = page.getByRole("button", {
-    name: "生成平台策划",
-    exact: true,
-  });
-  assert(await crossPlatformPlanButton.isDisabled(), "跨平台页头仍可启动第二个策划");
-  assert(await crossPlatformEmptyPlanButton.isDisabled(), "跨平台空态仍可启动第二个策划");
+  assert(await crossPlatformAnalysisButton.isDisabled(), "跨平台仍可启动第二个分析策划任务");
   assert(
-    (await crossPlatformPlanButton.getAttribute("aria-describedby")) ===
-      "planning-task-status",
-    "跨平台策划按钮没有关联可见锁定原因",
+    (await crossPlatformAnalysisButton.getAttribute("title"))?.includes("Amazon 正在生成平台策划"),
+    "跨平台分析按钮没有说明锁定原因",
   );
 
   const desktopPlanningStatus = await globalPlanningStatus.evaluate((element) => {
@@ -706,22 +915,30 @@ try {
   assert(desktopPlanningStatus.cancelHeight >= 32, "桌面取消策划按钮过小");
   await globalPlanningStatus.getByRole("button", { name: "取消策划", exact: true }).click();
   await globalPlanningStatus.waitFor({ state: "hidden" });
-  assert(!(await crossPlatformPlanButton.isDisabled()), "取消原策划后跨平台策划入口没有恢复");
+  assert(!(await crossPlatformAnalysisButton.isDisabled()), "取消原策划后跨平台分析入口没有恢复");
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole("button", { name: "Amazon", exact: true }).click();
+  const crossPlatformLeaveDialog = page.getByRole("dialog", {
+    name: "有未保存的修改",
+    exact: true,
+  });
+  if (await crossPlatformLeaveDialog.count()) {
+    await crossPlatformLeaveDialog
+      .getByRole("button", { name: "丢弃修改", exact: true })
+      .click();
+  }
+  await page.getByRole("heading", { name: "Amazon", exact: true }).waitFor({ state: "visible" });
   assert((await page.locator(".slot-card").count()) === 7, "跨平台取消后原 Amazon Listing 策划被删除");
   await page.goto(`${baseUrl}?fixture=copilot-slow`, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "Amazon", exact: true }).waitFor({ state: "visible" });
 
   const copilotCopy = page.getByLabel("可见文案", { exact: true });
-  const shortenCopilotButton = page.getByRole("button", { name: "缩短文案", exact: true });
-  if (!(await shortenCopilotButton.isVisible().catch(() => false))) {
-    await page.getByRole("button", { name: "AI Copilot", exact: true }).click();
-  }
   await copilotCopy.fill(
     "Long-haul travel comfort with balanced support, easy packing, and a removable cover",
   );
+  await page.getByRole("tab", { name: "Copilot", exact: true }).click();
+  const shortenCopilotButton = page.getByRole("button", { name: "缩短文案", exact: true });
   assert(await shortenCopilotButton.isDisabled(), "未保存文案与提示词时仍可运行 Copilot");
   await page
     .getByText(
@@ -729,8 +946,10 @@ try {
       { exact: true },
     )
     .waitFor({ state: "visible" });
+  await page.getByRole("tab", { name: "文案", exact: true }).click();
   await page.getByRole("button", { name: "保存文案与提示词", exact: true }).click();
   await page.getByText("用户编辑：槽位草稿已保存。", { exact: true }).waitFor({ state: "visible" });
+  await page.getByRole("tab", { name: "Copilot", exact: true }).click();
   assert(!(await shortenCopilotButton.isDisabled()), "保存文案与提示词后 Copilot 仍不可用");
   const copilotButtonHeight = await shortenCopilotButton.evaluate(
     (element) => element.getBoundingClientRect().height,
@@ -750,6 +969,7 @@ try {
     "Copilot pending 状态缺少取消入口",
   );
   await page.locator(".slot-card").filter({ hasText: "PT02" }).click();
+  await page.getByRole("tab", { name: "Copilot", exact: true }).click();
   assert(await shortenCopilotButton.isDisabled(), "切换槽位后仍可启动第二个 Copilot");
   await page
     .getByLabel("AI Copilot", { exact: true })
@@ -784,10 +1004,7 @@ try {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Amazon", exact: true }).click();
   await page.locator(".slot-card").filter({ hasText: "PT01" }).click();
-  const copilotToggleAfterReload = page.getByRole("button", { name: "AI Copilot", exact: true });
-  if ((await copilotToggleAfterReload.getAttribute("aria-expanded")) === "false") {
-    await copilotToggleAfterReload.click();
-  }
+  await page.getByRole("tab", { name: "Copilot", exact: true }).click();
   const retryShortenButton = page.getByRole("button", { name: "缩短文案", exact: true });
   await retryShortenButton.evaluate((element) => {
     element.scrollIntoView({ block: "center", inline: "nearest" });
@@ -945,6 +1162,10 @@ try {
   });
   assert(compactPrimaryGeometry.fullyInsideFooter, "900px 生成主动作超出固定操作栏");
   assert(compactPrimaryGeometry.labelFits, "900px 生成主动作文字被挤压或裁切");
+  assert(
+    await page.getByRole("tablist", { name: "槽位检查视图", exact: true }).isVisible(),
+    "900px 检查器视图切换器不可见",
+  );
   await captureEvidence(page, "amazon-compact-900.png");
 
   const compactSourceToggle = page.getByRole("button", { name: "资料", exact: true });
@@ -969,6 +1190,13 @@ try {
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole("button", { name: "淘宝 / 天猫", exact: true }).click();
+  const taobaoReviewPicker = page.getByRole("dialog", { name: /切换 淘宝/ });
+  if (await taobaoReviewPicker.count()) {
+    await taobaoReviewPicker
+      .getByRole("button", { name: /^(继续当前商品|切换并恢复)$/ })
+      .click();
+    await taobaoReviewPicker.waitFor({ state: "hidden" });
+  }
   assert(
     await page.getByRole("heading", { name: "淘宝 / 天猫", exact: true }).isVisible(),
     "恢复桌面宽度后平台导航未切换到淘宝工作区",
@@ -978,7 +1206,8 @@ try {
     await taobaoAnalysisInput.fill(
       "商品名：云感旅行颈枕 Pro\n卖点：慢回弹承托、可折叠收纳\n规格：材质：记忆棉\n禁用声明：治疗颈椎病",
     );
-    await page.getByRole("button", { name: "分析淘宝商品", exact: true }).click();
+    await page.getByRole("button", { name: "分析并策划", exact: true }).click();
+    await page.locator(".slot-card").first().waitFor({ state: "visible" });
   }
   for (const viewport of [
     { width: 1600, height: 900 },
@@ -993,13 +1222,46 @@ try {
     );
   }
   await page.setViewportSize({ width: 1600, height: 900 });
-  await page.getByRole("button", { name: "AI 策划淘宝商品生产包", exact: true }).click();
   await page.locator(".slot-card").first().waitFor({ state: "visible" });
   assert((await page.locator(".slot-card").count()) === 12, "淘宝没有生成完整的 12 个槽位");
   assert(
-    await page.getByText("5 张主图 + 7 张详情图", { exact: true }).isVisible(),
+    (await page.getByText("头图", { exact: true }).count()) === 1 &&
+      (await page.getByText("5 个必需槽位", { exact: true }).count()) === 1 &&
+      (await page.getByText("移动详情", { exact: true }).count()) === 1 &&
+      (await page.getByText("7 个必需槽位", { exact: true }).count()) === 1,
     "淘宝工作区没有显示固定 5+7 Rule Pack",
   );
+  const taobaoCurrentStep = page.locator('.workbench-stepper__item[aria-current="step"]');
+  assert(
+    (await taobaoCurrentStep.innerText()).includes("检查策划"),
+    "淘宝完成策划后没有进入共享的检查策划阶段",
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByRole("button", { name: "分析详情", exact: true }).click();
+  const taobaoAnalysisDialog = page.getByRole("dialog", {
+    name: "商品分析结果",
+    exact: true,
+  });
+  await taobaoAnalysisDialog.waitFor({ state: "visible" });
+  const taobaoAnalysisGeometry = await taobaoAnalysisDialog.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const body = element.querySelector(".dialog__body");
+    return {
+      rightGap: Math.abs(window.innerWidth - rect.right),
+      heightGap: Math.abs(window.innerHeight - rect.height),
+      bodyScrollable:
+        body instanceof HTMLElement &&
+        (body.scrollHeight <= body.clientHeight + 1 || getComputedStyle(body).overflowY === "auto"),
+    };
+  });
+  assert(taobaoAnalysisGeometry.rightGap <= 1, "淘宝分析详情侧栏没有贴合右侧边界");
+  assert(taobaoAnalysisGeometry.heightGap <= 1, "淘宝分析详情侧栏没有占满可用高度");
+  assert(taobaoAnalysisGeometry.bodyScrollable, "淘宝分析详情长内容没有明确滚动责任");
+  await captureEvidence(page, "taobao-analysis-sidebar-1280.png");
+  await taobaoAnalysisDialog.getByRole("button", { name: "关闭侧栏", exact: true }).click();
+  await taobaoAnalysisDialog.waitFor({ state: "hidden" });
+  await captureEvidence(page, "taobao-review-1280.png");
+  await page.setViewportSize({ width: 1600, height: 900 });
 
   const scrollModel = await page.evaluate(() => {
     const workspace = document.querySelector(".workspace");
@@ -1035,12 +1297,21 @@ try {
 
   await page.getByRole("button", { name: "生成图片", exact: true }).click();
   await page.getByRole("img", { name: "TB-HERO-01 当前生成版本", exact: true }).waitFor({ state: "visible" });
+  assert(
+    (await taobaoCurrentStep.innerText()).includes("逐图生产"),
+    "淘宝生成首图后没有进入共享的逐图生产阶段",
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await captureEvidence(page, "taobao-production-1280.png");
   await page.getByRole("button", { name: "手机预览", exact: true }).click();
   const taobaoPreview = page.getByRole("dialog", { name: "淘宝手机商品页预览", exact: true });
   await taobaoPreview.waitFor({ state: "visible" });
   assert((await taobaoPreview.locator('[aria-label^="查看 TB-HERO-"]').count()) === 5, "手机预览主图位不是 5 个");
   assert((await taobaoPreview.locator('[data-slot-key^="TB-DETAIL-"]').count()) === 7, "手机预览详情位不是 7 个");
-  assert((await taobaoPreview.innerText()).includes("缺少 11 个槽位"), "手机预览缺失槽位提示不准确");
+  const taobaoPreviewText = await taobaoPreview.innerText();
+  assert(taobaoPreviewText.includes("还需完成 11 个槽位"), "手机预览缺失槽位提示不准确");
+  assert(taobaoPreviewText.includes("头图 4 个 · 详情 7 个"), "手机预览缺失槽位分组不准确");
+  assert(!taobaoPreviewText.includes("当前 session"), "手机预览仍暴露开发态 session 文案");
   for (const viewport of [
     { width: 1600, height: 900 },
     { width: 1280, height: 800 },

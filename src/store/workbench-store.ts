@@ -37,6 +37,7 @@ import { createV3WorkspacePersistence } from "../application/workspace-persisten
 import {
   activateVersion,
   appendRunEvent,
+  clearTaobaoAnalysis,
   commitAnalysis,
   commitPlan,
   commitVersion,
@@ -85,14 +86,29 @@ import {
 } from "../domain/platforms/taobao-analysis";
 import { resolveRulePackForPlan } from "../domain/platforms/resolve-rule-pack";
 import { generationDimensionsForUpload } from "../domain/platforms/generation-size";
-import { resolveAmazonPlanningSession } from "../domain/platforms/amazon-catalog";
+import {
+  DEFAULT_A_PLUS_CONTENT_TYPE,
+  DEFAULT_LISTING_IMAGE_COUNT,
+  DEFAULT_SIZE_TIER,
+  resolveAmazonPlanningSession,
+} from "../domain/platforms/amazon-catalog";
+import { DEFAULT_AMAZON_MARKETPLACE_ID } from "../domain/platforms/amazon-marketplaces";
 import {
   appendStyleGuidanceToPrompt,
   appendStyleReferenceGuidance,
+  DEFAULT_AMAZON_STYLE_PRESET_ID,
   getAmazonStylePreset,
   shouldApplyStyleToSlot,
 } from "../domain/platforms/amazon-style-presets";
 import type { PlatformId } from "../domain/platforms/types";
+import {
+  productFactsToAmazonListingText,
+  productFactsToTaobaoText,
+} from "../domain/projects/product-source-text";
+import {
+  hasUsablePlatformIntakeDraft,
+  resolvePlatformIntakeSeedAction,
+} from "../domain/workspace/platform-product-picker";
 import type {
   CreateProductProjectInput,
   ProductProject,
@@ -259,6 +275,17 @@ export interface WorkbenchState {
   startAmazonSession(input: StartAmazonSessionInput): Promise<PlatformSession | null>;
   startTaobaoSession(input: StartTaobaoSessionInput): Promise<PlatformSession | null>;
   analyzeTaobaoProduct(input: AnalyzeTaobaoProductInput): Promise<PlatformSession | null>;
+  reopenTaobaoAnalysis(sessionId?: string): Promise<boolean>;
+  /**
+   * Prefill platform intake from shared product facts + reference assets.
+   * Does not start planning. Returns needs-confirm when session already has draft/plan
+   * unless force is true.
+   */
+  seedPlatformIntakeFromProject(
+    projectId: string,
+    platform: PlatformId,
+    options?: { force?: boolean },
+  ): Promise<"seeded" | "needs-confirm" | "skipped" | "failed">;
   syncAmazonListingFacts(listingText: string): Promise<boolean>;
   syncAmazonSessionFacts(sessionId: string): Promise<boolean>;
   createProject(input: CreateProductProjectInput): Promise<ProductProject | null>;
@@ -338,6 +365,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "工作台操作失败";
 }
 
+function withoutTerminalPunctuation(message: string): string {
+  return message.trim().replace(/[。.!！?？]+$/u, "");
+}
+
 function planningErrorMessage(error: unknown): string {
   if (error instanceof DOMException && error.name === "TimeoutError") {
     return "AI 策划超时，请检查连接后重试。商品资料和已有结果未受影响。";
@@ -355,7 +386,7 @@ function generationErrorMessage(error: unknown): string {
   if (error instanceof DOMException && error.name === "AbortError") {
     return "本次图片生成已取消，已有版本未受影响。";
   }
-  return `图片生成失败：${errorMessage(error)}。已有版本未受影响。`;
+  return `图片生成失败：${withoutTerminalPunctuation(errorMessage(error))}。已有版本未受影响。`;
 }
 
 const CANCELED_GENERATION_MESSAGE = "已取消本次图片生成，已有版本未受影响。";
@@ -946,14 +977,16 @@ export function createWorkbenchStore(
           createdProjectId = project.id;
         }
 
+        const assetIdsBeforeUpload = new Set(get().assets.map((asset) => asset.metadata.id));
         const uploaded = input.files.length > 0
-          ? await get().uploadReferenceFiles(input.files)
+          ? (await get().uploadReferenceFiles(input.files)).filter(
+              (asset) =>
+                asset.metadata.kind === "reference" &&
+                !assetIdsBeforeUpload.has(asset.metadata.id),
+            )
           : [];
         if (uploaded.length !== input.files.length) {
           throw new Error(get().error || "商品参考图保存失败");
-        }
-        if (uploaded.length !== input.files.length) {
-          throw new Error(get().error || "参考图保存失败");
         }
         const selectedReferenceAssetIds = [
           ...new Set([
@@ -1281,8 +1314,18 @@ export function createWorkbenchStore(
     },
 
     async analyzeTaobaoProduct(input) {
+      if (get().planningPlatformId) {
+        set({
+          planningError: `${getPlatformRulePack(get().planningPlatformId!).label} 正在生成平台策划，请完成或取消后再分析淘宝商品。`,
+        });
+        return null;
+      }
       if (!input.productText.trim() && input.files.length === 0 && input.selectedReferenceAssetIds.length === 0) {
         set({ planningError: "请先补充商品资料或选择至少一张商品参考图。" });
+        return null;
+      }
+      if (input.files.length === 0 && input.selectedReferenceAssetIds.length === 0) {
+        set({ planningError: "淘宝策划需要至少一张商品参考图。" });
         return null;
       }
       const project = input.projectId
@@ -1297,6 +1340,7 @@ export function createWorkbenchStore(
       }
 
       try {
+        set({ planningError: null });
         const uploaded = input.files.length > 0
           ? await get().uploadReferenceFiles(input.files)
           : [];
@@ -1310,6 +1354,14 @@ export function createWorkbenchStore(
             (asset) => asset.metadata.id === id && asset.metadata.kind === "reference",
           ),
         );
+        if (selectedReferenceAssetIds.length === 0) {
+          set({ planningPlatformId: null, planningError: "淘宝策划需要至少一张商品参考图。" });
+          return null;
+        }
+        // The files belong to this analysis request. Persist them before taking
+        // the global planning lock; the regular upload action correctly rejects
+        // unrelated asset changes while a plan is running.
+        set({ planningPlatformId: "taobao", planningError: null });
         const session = await get().startTaobaoSession({
           projectId: project.id,
           selectedReferenceAssetIds,
@@ -1349,12 +1401,308 @@ export function createWorkbenchStore(
             ...get().sessions.filter((candidate) => candidate.id !== committedSession.id),
             committedSession,
           ],
+          // Release the analysis busy lock so planPlatform can own the planning lifecycle.
+          planningPlatformId: null,
           planningError: null,
         });
-        return committedSession;
+        // Match Amazon intake: analysis immediately continues into platform planning.
+        const plan = await get().planPlatform("taobao");
+        if (!plan) {
+          return get().sessions.find((candidate) => candidate.id === committedSession.id) ?? committedSession;
+        }
+        return get().sessions.find((candidate) => candidate.id === committedSession.id) ?? committedSession;
       } catch (error) {
-        set({ planningError: `淘宝商品分析失败：${errorMessage(error)}` });
+        set({
+          planningPlatformId: null,
+          planningError: `淘宝商品分析失败：${errorMessage(error)}`,
+        });
         return null;
+      }
+    },
+
+    async reopenTaobaoAnalysis(sessionId) {
+      const activeProject = get().activeProject;
+      if (!activeProject) {
+        set({ planningError: "请先创建或选择商品项目。" });
+        return false;
+      }
+      const session =
+        (sessionId
+          ? get().sessions.find((candidate) => candidate.id === sessionId)
+          : undefined) ??
+        [...get().sessions]
+          .filter(
+            (candidate) =>
+              candidate.projectId === activeProject.id && candidate.workflowId === "taobao-product",
+          )
+          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+      if (!session || session.platformId !== "taobao") {
+        set({ planningError: "没有可重新分析的淘宝商品会话。" });
+        return false;
+      }
+      if (get().planningPlatformId || get().generatingSlot || get().exportingPlatform) {
+        set({ planningError: "当前有进行中的任务，请完成后再重新分析。" });
+        return false;
+      }
+      try {
+        const timestamp = now();
+        const nextSession = await enqueueWorkspaceMutation(async () => {
+          const workspace = await workspaceRepository.load(activeProject.id);
+          const current =
+            workspace.sessions.find((candidate) => candidate.id === session.id) ?? session;
+          const cleared = clearTaobaoAnalysis(current, timestamp);
+          const sessions = [
+            ...workspace.sessions.filter((candidate) => candidate.id !== cleared.id),
+            cleared,
+          ];
+          await workspaceRepository.save({ ...workspace, sessions, updatedAt: timestamp });
+          return cleared;
+        });
+        if (get().activeProject?.id !== activeProject.id) return false;
+        set({
+          sessions: [
+            ...get().sessions.filter((candidate) => candidate.id !== nextSession.id),
+            nextSession,
+          ],
+          planningError: null,
+        });
+        return true;
+      } catch (error) {
+        set({ planningError: `重新打开淘宝分析失败：${errorMessage(error)}` });
+        return false;
+      }
+    },
+
+    async seedPlatformIntakeFromProject(projectId, platform, options) {
+      if (platform !== "amazon" && platform !== "taobao") {
+        set({ planningError: "仅支持 Amazon 与淘宝任务载入。" });
+        return "failed";
+      }
+      if (get().planningPlatformId || get().generatingSlot || get().exportingPlatform) {
+        set({ planningError: "当前有进行中的任务，请完成后再载入商品资料。" });
+        return "failed";
+      }
+
+      try {
+        if (get().activeProject?.id !== projectId) {
+          await get().selectProject(projectId);
+        }
+        const project =
+          get().activeProject?.id === projectId
+            ? get().activeProject
+            : await dependencies.projectRepository.get(projectId);
+        if (!project) {
+          set({ planningError: "找不到要载入的商品档案。" });
+          return "failed";
+        }
+
+        const amazonWorkflowId =
+          get().amazonPlannerMode === "aplus" ? "amazon-aplus" : "amazon-listing";
+        const workflowId =
+          platform === "taobao" ? "taobao-product" : amazonWorkflowId;
+
+        const existing = [...get().sessions]
+          .filter(
+            (candidate) =>
+              candidate.projectId === project.id && candidate.workflowId === workflowId,
+          )
+          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+
+        const hasPlan = Boolean(
+          existing?.plan ||
+            (platform === "amazon"
+              ? get().plans.amazon
+              : get().plans.taobao),
+        );
+        const hasUsableDraft = hasUsablePlatformIntakeDraft(platform, existing);
+        const action = resolvePlatformIntakeSeedAction({
+          hasPlan,
+          hasUsableDraft,
+          force: options?.force,
+        });
+        if (action === "needs-confirm") {
+          return "needs-confirm";
+        }
+
+        const referenceAssetIds = get()
+          .assets.filter(
+            (asset) =>
+              asset.metadata.kind === "reference" &&
+              asset.metadata.projectId === project.id,
+          )
+          .map((asset) => asset.metadata.id);
+
+        const timestamp = now();
+        const nextSession = await enqueueWorkspaceMutation(async () => {
+          const workspace = await workspaceRepository.load(project.id);
+          const workspaceExisting = [...workspace.sessions]
+            .filter((candidate) => candidate.workflowId === workflowId)
+            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+
+          if (platform === "amazon") {
+            const plannerMode = workflowId === "amazon-aplus" ? "aplus" : "listing";
+            const existingOptions =
+              workspaceExisting?.options.platformId === "amazon"
+                ? workspaceExisting.options
+                : null;
+            const resolved = resolveAmazonPlanningSession({
+              marketplaceId: existingOptions?.marketplaceId ?? DEFAULT_AMAZON_MARKETPLACE_ID,
+              plannerMode,
+              listingImageCount:
+                existingOptions?.listingImageCount ?? DEFAULT_LISTING_IMAGE_COUNT,
+              aPlusType: existingOptions?.aPlusType ?? DEFAULT_A_PLUS_CONTENT_TYPE,
+              aPlusModuleSpecs: existingOptions?.aPlusModuleSpecs,
+              sizeTier: existingOptions?.sizeTier ?? DEFAULT_SIZE_TIER,
+              stylePresetId:
+                existingOptions?.stylePresetId ?? DEFAULT_AMAZON_STYLE_PRESET_ID,
+            });
+            const options: AmazonSessionOptions = {
+              platformId: "amazon",
+              marketplaceId: resolved.marketplaceId,
+              plannerMode,
+              listingImageCount: resolved.listingImageCount,
+              aPlusType: resolved.aPlusType,
+              aPlusModuleSpecs: resolved.aPlusModuleSpecs.map((spec) => ({ ...spec })),
+              sizeTier: resolved.sizeTier,
+              stylePresetId: resolved.stylePresetId,
+            };
+            const draft = startSession({
+              id: workspaceExisting?.id ?? createStableId("session"),
+              projectId: project.id,
+              platformId: "amazon",
+              workflowId,
+              sourceInput: {
+                listingText: productFactsToAmazonListingText(project.facts),
+              },
+              options,
+              selectedReferenceAssetIds: referenceAssetIds,
+              ...(workspaceExisting?.selectedStyleReferenceId
+                ? { selectedStyleReferenceId: workspaceExisting.selectedStyleReferenceId }
+                : {}),
+              ...(workspaceExisting?.styleReferenceNotice
+                ? { styleReferenceNotice: workspaceExisting.styleReferenceNotice }
+                : {}),
+              // Clear plan so intake is the source of truth after a forced reseed.
+              slotVersions: {},
+              createdAt: workspaceExisting?.createdAt,
+              now: timestamp,
+            });
+            const sessions = [
+              ...workspace.sessions.filter((candidate) => candidate.id !== draft.id),
+              draft,
+            ];
+            // Drop stale plan pointers when reseeding over a planned session.
+            const nextWorkspace: ProjectWorkspaceDocument = {
+              ...workspace,
+              sessions,
+              plans: { ...workspace.plans, amazon: undefined },
+              planInputSignatures: {
+                ...workspace.planInputSignatures,
+                amazon: undefined,
+              },
+              selectedSlotKeys: {
+                ...workspace.selectedSlotKeys,
+                amazon: undefined,
+              },
+              slotVersions: { ...workspace.slotVersions, amazon: {} },
+              updatedAt: timestamp,
+            };
+            // Avoid leaving undefined plan keys that normalize may not expect — delete.
+            if (nextWorkspace.plans.amazon === undefined) {
+              delete nextWorkspace.plans.amazon;
+            }
+            if (nextWorkspace.planInputSignatures.amazon === undefined) {
+              delete nextWorkspace.planInputSignatures.amazon;
+            }
+            if (nextWorkspace.selectedSlotKeys.amazon === undefined) {
+              delete nextWorkspace.selectedSlotKeys.amazon;
+            }
+            await workspaceRepository.save(nextWorkspace);
+            return { session: draft, platform: "amazon" as const };
+          }
+
+          const draft = startSession({
+            id: workspaceExisting?.id ?? createStableId("session"),
+            projectId: project.id,
+            platformId: "taobao",
+            workflowId: "taobao-product",
+            sourceInput: {
+              listingText: workspaceExisting?.sourceInput.listingText ?? "",
+              taobaoProduct: {
+                productText: productFactsToTaobaoText(project.facts),
+                selectedReferenceAssetIds: referenceAssetIds,
+              },
+            },
+            options: { platformId: "taobao" },
+            selectedReferenceAssetIds: referenceAssetIds,
+            ...(workspaceExisting?.selectedStyleReferenceId
+              ? { selectedStyleReferenceId: workspaceExisting.selectedStyleReferenceId }
+              : {}),
+            ...(workspaceExisting?.styleReferenceNotice
+              ? { styleReferenceNotice: workspaceExisting.styleReferenceNotice }
+              : {}),
+            slotVersions: {},
+            createdAt: workspaceExisting?.createdAt,
+            now: timestamp,
+          });
+          const sessions = [
+            ...workspace.sessions.filter((candidate) => candidate.id !== draft.id),
+            draft,
+          ];
+          const nextWorkspace: ProjectWorkspaceDocument = {
+            ...workspace,
+            sessions,
+            plans: { ...workspace.plans },
+            planInputSignatures: { ...workspace.planInputSignatures },
+            selectedSlotKeys: { ...workspace.selectedSlotKeys },
+            slotVersions: { ...workspace.slotVersions, taobao: {} },
+            updatedAt: timestamp,
+          };
+          delete nextWorkspace.plans.taobao;
+          delete nextWorkspace.planInputSignatures.taobao;
+          delete nextWorkspace.selectedSlotKeys.taobao;
+          await workspaceRepository.save(nextWorkspace);
+          return { session: draft, platform: "taobao" as const };
+        });
+
+        if (get().activeProject?.id !== project.id) return "skipped";
+
+        set((state) => {
+          const sessions = [
+            ...state.sessions.filter((candidate) => candidate.id !== nextSession.session.id),
+            nextSession.session,
+          ];
+          if (nextSession.platform === "amazon") {
+            const { amazon: _dropPlan, ...restPlans } = state.plans;
+            const { amazon: _dropSig, ...restSigs } = state.planInputSignatures;
+            const { amazon: _dropSlot, ...restSlots } = state.selectedSlotKeys;
+            const { amazon: _dropVersions, ...restVersions } = state.slotVersions;
+            return {
+              sessions,
+              plans: restPlans,
+              planInputSignatures: restSigs,
+              selectedSlotKeys: restSlots,
+              slotVersions: { ...restVersions, amazon: {} },
+              planningError: null,
+            };
+          }
+          const { taobao: _dropPlan, ...restPlans } = state.plans;
+          const { taobao: _dropSig, ...restSigs } = state.planInputSignatures;
+          const { taobao: _dropSlot, ...restSlots } = state.selectedSlotKeys;
+          const { taobao: _dropVersions, ...restVersions } = state.slotVersions;
+          return {
+            sessions,
+            plans: restPlans,
+            planInputSignatures: restSigs,
+            selectedSlotKeys: restSlots,
+            slotVersions: { ...restVersions, taobao: {} },
+            planningError: null,
+          };
+        });
+        return "seeded";
+      } catch (error) {
+        set({ planningError: `载入商品资料失败：${errorMessage(error)}` });
+        return "failed";
       }
     },
 

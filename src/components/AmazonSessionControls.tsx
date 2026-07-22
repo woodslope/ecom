@@ -239,15 +239,40 @@ export function AmazonSessionControls({
 }) {
   const [paramsOpen, setParamsOpen] = useState(!preferCollapsed);
   const [moduleDialogOpen, setModuleDialogOpen] = useState(false);
+  const [moduleDraft, setModuleDraft] = useState<AmazonAPlusModuleSpec[] | null>(null);
   useEffect(() => {
     setParamsOpen(!preferCollapsed);
   }, [preferCollapsed]);
   useEffect(() => {
     setModuleDialogOpen(false);
-  }, [hasPlan, value.aPlusType]);
+    setModuleDraft(null);
+  }, [hasPlan, value.aPlusType, value.plannerMode]);
 
   const slotCount = expectedSlotCount(value);
   const aPlusSpecs = effectiveAPlusModuleSpecs(value);
+  const aPlusUsesDefault = areAPlusModuleSpecsEquivalent(
+    aPlusSpecs,
+    getAPlusModuleSpecs(value.aPlusType),
+  );
+  const openModuleDialog = () => {
+    setModuleDraft(cloneSpecs(aPlusSpecs));
+    setModuleDialogOpen(true);
+  };
+  const closeModuleDialog = () => {
+    setModuleDialogOpen(false);
+    setModuleDraft(null);
+  };
+  const applyModuleDraft = () => {
+    const normalized = normalizeAPlusModuleSpecs(value.aPlusType, moduleDraft ?? aPlusSpecs);
+    const nextSpecs = areAPlusModuleSpecsEquivalent(
+      normalized,
+      getAPlusModuleSpecs(value.aPlusType),
+    )
+      ? null
+      : cloneSpecs(normalized);
+    onChange({ ...value, aPlusModuleSpecs: nextSpecs });
+    closeModuleDialog();
+  };
   const modeDescription =
     value.plannerMode === "listing"
       ? `Listing ${formatAmazonListingSlotRange(value.listingImageCount)}（${slotCount} 张）`
@@ -393,9 +418,9 @@ export function AmazonSessionControls({
           </Select>
         </Field>
 
-        <Field label="视觉风格" className="amazon-session-controls__field">
+        <Field label="基础风格" className="amazon-session-controls__field">
           <Select
-            aria-label="视觉风格"
+            aria-label="基础风格"
             value={value.stylePresetId}
             disabled={disabled}
             onChange={(event) =>
@@ -420,70 +445,59 @@ export function AmazonSessionControls({
       ) : null}
 
       {value.plannerMode === "aplus" ? (
-        hasPlan ? (
-          <>
-            <div className="aplus-module-readonly" aria-label="A+ 模块编排只读摘要">
-              <div>
-                <strong>模块编排</strong>
-                <span>{aPlusSpecs.length} / {MAX_A_PLUS_MODULE_COUNT} · 当前策划模块只读</span>
-              </div>
-              <Button
-                variant="secondary"
-                size="compact"
-                disabled={disabled}
-                onClick={() => setModuleDialogOpen(true)}
-              >
-                <Pencil size={14} />
-                调整模块
-              </Button>
+        <>
+          <div className="aplus-module-summary" aria-label="A+ 模块编排摘要">
+            <div>
+              <strong>A+ 模块编排</strong>
+              <span>
+                {aPlusSpecs.length} 个模块 · {aPlusUsesDefault ? "默认清单" : "自定义清单"}
+                {hasPlan ? " · 应用修改后需重新策划" : " · 策划时按此顺序生成槽位"}
+              </span>
             </div>
-            <Dialog
-              open={moduleDialogOpen}
-              title="调整 A+ 模块"
-              eyebrow={`${getAPlusContentTypeLabel(value.aPlusType)} · ${aPlusSpecs.length} 个模块`}
-              className="aplus-module-dialog"
-              onClose={() => setModuleDialogOpen(false)}
-              footer={
-                <Button
-                  onClick={() => {
-                    setModuleDialogOpen(false);
-                    setParamsOpen(false);
-                  }}
-                >
-                  完成调整
-                </Button>
-              }
+            <Button
+              variant="secondary"
+              size="compact"
+              disabled={disabled}
+              onClick={openModuleDialog}
             >
-              <APlusModuleArrange
-                aPlusType={value.aPlusType}
-                specs={aPlusSpecs}
-                disabled={disabled}
-                onChange={(next) =>
-                  onChange({
-                    ...value,
-                    aPlusModuleSpecs: next
-                      ? cloneSpecs(normalizeAPlusModuleSpecs(value.aPlusType, next))
-                      : null,
-                  })
-                }
-              />
-            </Dialog>
-          </>
-        ) : (
-          <APlusModuleArrange
-            aPlusType={value.aPlusType}
-            specs={aPlusSpecs}
-            disabled={disabled}
-            onChange={(next) =>
-              onChange({
-                ...value,
-                aPlusModuleSpecs: next
-                  ? cloneSpecs(normalizeAPlusModuleSpecs(value.aPlusType, next))
-                  : null,
-              })
+              <Pencil size={14} />
+              编排模块
+            </Button>
+          </div>
+          <Dialog
+            open={moduleDialogOpen}
+            title="编排 A+ 模块"
+            eyebrow={`${getAPlusContentTypeLabel(value.aPlusType)} · ${aPlusSpecs.length} 个模块`}
+            className="aplus-module-dialog"
+            onClose={closeModuleDialog}
+            footer={
+              <>
+                <Button variant="secondary" onClick={closeModuleDialog}>
+                  取消
+                </Button>
+                <Button onClick={applyModuleDraft}>应用编排</Button>
+              </>
             }
-          />
-        )
+          >
+            <APlusModuleArrange
+              aPlusType={value.aPlusType}
+              specs={moduleDraft ?? aPlusSpecs}
+              disabled={disabled}
+              onChange={(next) =>
+                setModuleDraft(
+                  cloneSpecs(
+                    next
+                      ? normalizeAPlusModuleSpecs(value.aPlusType, next)
+                      : getAPlusModuleSpecs(value.aPlusType),
+                  ),
+                )
+              }
+            />
+            <p className="aplus-module-dialog__scope">
+              弹窗内调整是临时草稿；点击“应用编排”后才会更新当前任务参数。
+            </p>
+          </Dialog>
+        </>
       ) : null}
 
       <p className="amazon-session-controls__summary">

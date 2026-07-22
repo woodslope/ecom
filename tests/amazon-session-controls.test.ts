@@ -83,7 +83,7 @@ describe("AmazonSessionControls", () => {
     expect(markup).toContain("目标站点");
     expect(markup).toContain("Listing 张数");
     expect(markup).toContain("生成尺寸档");
-    expect(markup).toContain("视觉风格");
+    expect(markup).toContain("基础风格");
     expect(markup).toContain("MAIN + PT01-PT06");
     expect(markup.includes("调整参数") || markup.includes("收起参数")).toBe(true);
   });
@@ -108,7 +108,7 @@ describe("AmazonSessionControls", () => {
     expect(expanded.length).toBeLessThanOrEqual(MAX_A_PLUS_MODULE_COUNT);
   });
 
-  it("renders A+ module arrange when mode is aplus", () => {
+  it("renders one stable A+ module summary and opens editing through the dialog owner", () => {
     const markup = renderToStaticMarkup(
       createElement(AmazonSessionControls, {
         value: {
@@ -123,9 +123,10 @@ describe("AmazonSessionControls", () => {
         onChange: () => undefined,
       }),
     );
-    expect(markup).toContain("模块编排");
-    expect(markup).toContain("恢复默认");
-    expect(markup).toContain("A+L01");
+    expect(markup).toContain("A+ 模块编排");
+    expect(markup).toContain("默认清单");
+    expect(markup).toContain("编排模块");
+    expect(markup).not.toContain("删除第 1 个模块");
     expect(effectiveAPlusModuleSpecs({
       aPlusType: "standard-large",
       aPlusModuleSpecs: null,

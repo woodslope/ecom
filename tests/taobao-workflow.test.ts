@@ -36,6 +36,13 @@ function dependencies() {
   };
 }
 
+async function seedReference(store: ReturnType<typeof createWorkbenchStore>) {
+  const [asset] = await store.getState().uploadReferenceFiles([
+    new File([new Uint8Array([1, 2, 3])], "正面图.png", { type: "image/png" }),
+  ]);
+  return asset;
+}
+
 describe("Taobao product workflow", () => {
   it("analyzes shared facts and product input with citations without mutating the shared project facts", () => {
     const original = structuredClone(facts);
@@ -98,34 +105,35 @@ describe("Taobao product workflow", () => {
     const store = createWorkbenchStore(deps);
     const project = await deps.projectRepository.create({ name: "淘宝分析", facts });
     await store.getState().initialize();
+    const asset = await seedReference(store);
 
     const session = await store.getState().analyzeTaobaoProduct({
       projectId: project.id,
       productText: "商品名：旅行颈枕 Pro\n卖点：可折叠收纳",
       files: [],
-      selectedReferenceAssetIds: [],
+      selectedReferenceAssetIds: [asset.metadata.id],
     });
 
     expect(session?.sourceInput.taobaoProduct).toEqual({
       productText: "商品名：旅行颈枕 Pro\n卖点：可折叠收纳",
-      selectedReferenceAssetIds: [],
+      selectedReferenceAssetIds: [asset.metadata.id],
     });
     expect(session?.taobaoAnalysis).toMatchObject({
       suggestedProductName: "旅行颈枕 Pro",
       sellingPoints: ["慢回弹", "可折叠收纳"],
     });
     expect(store.getState().activeProject?.facts).toEqual(facts);
-    expect(store.getState().runs).toEqual([]);
+    // Analysis now continues into planning (Amazon-like one-shot entry).
+    expect(store.getState().plans.taobao?.slots).toHaveLength(12);
+    expect(store.getState().plans.taobao?.slots[0]?.visibleCopy).toBe("旅行颈枕 Pro");
+    expect(store.getState().runs).toHaveLength(1);
 
     const restored = createWorkbenchStore(deps);
     await restored.getState().initialize();
     expect(restored.getState().sessions[0]?.taobaoAnalysis?.suggestedProductName).toBe(
       "旅行颈枕 Pro",
     );
-
-    const plan = await store.getState().planPlatform("taobao");
-    expect(plan?.slots).toHaveLength(12);
-    expect(plan?.slots[0]?.visibleCopy).toBe("旅行颈枕 Pro");
+    expect(restored.getState().plans.taobao?.slots).toHaveLength(12);
     expect(store.getState().sessions[0]?.taobaoAnalysis?.suggestedProductName).toBe(
       "旅行颈枕 Pro",
     );
@@ -134,19 +142,66 @@ describe("Taobao product workflow", () => {
     );
   });
 
+  it("accepts a new reference file from the one-shot analysis and planning form", async () => {
+    const deps = dependencies();
+    const store = createWorkbenchStore(deps);
+    const project = await deps.projectRepository.create({ name: "淘宝表单上传", facts });
+    await store.getState().initialize();
+
+    const session = await store.getState().analyzeTaobaoProduct({
+      projectId: project.id,
+      productText: "商品名：旅行颈枕 Pro\n卖点：可折叠收纳",
+      files: [new File([new Uint8Array([1, 2, 3])], "本次分析图.png", { type: "image/png" })],
+      selectedReferenceAssetIds: [],
+    });
+
+    expect(session?.sourceInput.taobaoProduct?.selectedReferenceAssetIds).toHaveLength(1);
+    expect(session?.taobaoAnalysis?.referenceAssets).toEqual([
+      expect.objectContaining({ name: "本次分析图.png" }),
+    ]);
+    expect(store.getState().plans.taobao?.slots).toHaveLength(12);
+    expect(store.getState().planningError).toBeNull();
+  });
+
+  it("reopens Taobao intake without dropping selected references", async () => {
+    const deps = dependencies();
+    const store = createWorkbenchStore(deps);
+    const project = await deps.projectRepository.create({ name: "淘宝重分析", facts });
+    await store.getState().initialize();
+    const asset = await seedReference(store);
+    const session = await store.getState().analyzeTaobaoProduct({
+      projectId: project.id,
+      productText: "商品名：旅行颈枕 Pro",
+      files: [],
+      selectedReferenceAssetIds: [asset.metadata.id],
+    });
+    expect(session?.plan?.slots).toHaveLength(12);
+
+    expect(await store.getState().reopenTaobaoAnalysis(session!.id)).toBe(true);
+    const reopened = store.getState().sessions.find((candidate) => candidate.id === session!.id);
+    expect(reopened?.taobaoAnalysis).toBeUndefined();
+    expect(reopened?.sourceInput.taobaoProduct).toEqual({
+      productText: "商品名：旅行颈枕 Pro",
+      selectedReferenceAssetIds: [asset.metadata.id],
+    });
+    // Prior plan remains queryable until the next analysis+plan cycle overwrites it.
+    expect(reopened?.plan?.slots).toHaveLength(12);
+  });
+
   it("selects and generates a Taobao slot through the active taobao-product session", async () => {
     const deps = dependencies();
     const store = createWorkbenchStore(deps);
     const project = await deps.projectRepository.create({ name: "淘宝逐图生产", facts });
     await store.getState().initialize();
+    const asset = await seedReference(store);
     await store.getState().analyzeTaobaoProduct({
       projectId: project.id,
       productText: "卖点：可折叠收纳",
       files: [],
-      selectedReferenceAssetIds: [],
+      selectedReferenceAssetIds: [asset.metadata.id],
     });
-    await store.getState().planPlatform("taobao");
     const session = store.getState().sessions.find((candidate) => candidate.workflowId === "taobao-product")!;
+    expect(session.plan?.slots).toHaveLength(12);
 
     expect(await store.getState().selectSessionSlot(session.id, "TB-HERO-02")).toBe(true);
     const version = await store.getState().generateSessionSlot(session.id, "TB-HERO-02");
@@ -215,13 +270,14 @@ describe("Taobao product workflow", () => {
     const store = createWorkbenchStore(deps);
     const project = await deps.projectRepository.create({ name: "淘宝完整交付", facts });
     await store.getState().initialize();
+    const asset = await seedReference(store);
     await store.getState().analyzeTaobaoProduct({
       projectId: project.id,
       productText: "卖点：慢回弹、可折叠收纳",
       files: [],
-      selectedReferenceAssetIds: [],
+      selectedReferenceAssetIds: [asset.metadata.id],
     });
-    const plan = await store.getState().planPlatform("taobao");
+    const plan = store.getState().plans.taobao;
     const session = store.getState().sessions.find((candidate) => candidate.workflowId === "taobao-product")!;
     for (const slot of plan!.slots) {
       expect(await store.getState().generateSessionSlot(session.id, slot.slotKey)).not.toBeNull();

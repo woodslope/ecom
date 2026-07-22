@@ -8,6 +8,10 @@ import { PlatformRail } from "./PlatformRail";
 import { SettingsDialog } from "./SettingsDialog";
 import { StatusChip } from "./ui";
 
+export type AppShellHandle = {
+  openSettings: () => void;
+};
+
 export const DESKTOP_MIN_WIDTH = 900;
 
 export function AppShell({
@@ -32,6 +36,7 @@ export function AppShell({
   onTestRuntimeConnection = async () => ({ ok: true, message: "连接成功" }),
   onTestTextConnection,
   onTestImageConnection,
+  onSettingsOpenChange,
   children,
 }: {
   activeItem: NavigationItemId;
@@ -55,13 +60,23 @@ export function AppShell({
   onTestRuntimeConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onTestTextConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onTestImageConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
+  /** Notify parent when settings dialog opens/closes (e.g. demo banner → open settings). */
+  onSettingsOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === "undefined" ? DESKTOP_MIN_WIDTH : window.innerWidth,
   );
-  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const setSettingsOpenAndNotify = useCallback(
+    (open: boolean) => {
+      setSettingsOpen(open);
+      onSettingsOpenChange?.(open);
+    },
+    [onSettingsOpenChange],
+  );
+  const openSettings = useCallback(() => setSettingsOpenAndNotify(true), [setSettingsOpenAndNotify]);
+  const closeSettings = useCallback(() => setSettingsOpenAndNotify(false), [setSettingsOpenAndNotify]);
 
   useEffect(() => {
     const updateWidth = () => setViewportWidth(window.innerWidth);
@@ -70,9 +85,20 @@ export function AppShell({
     return () => window.removeEventListener("resize", updateWidth);
   }, []);
 
+  // Parent can open settings without mounting a settings nav item (demo banner, runtime badge).
+  useEffect(() => {
+    const handle = (event: Event) => {
+      const detail = (event as CustomEvent<{ open?: boolean }>).detail;
+      if (detail?.open === false) closeSettings();
+      else openSettings();
+    };
+    window.addEventListener("ecom:open-settings", handle);
+    return () => window.removeEventListener("ecom:open-settings", handle);
+  }, [closeSettings, openSettings]);
+
   const changeDestination = (item: NavigationItemId) => {
     if (item === "settings") {
-      setSettingsOpen(true);
+      openSettings();
       return;
     }
     onActiveItemChange(item);
@@ -95,14 +121,18 @@ export function AppShell({
         activeItem={activeItem}
         onChange={changeDestination}
         runtimeBadge={
-          <StatusChip
-            tone="mode"
-            className="runtime-badge"
-            aria-label={`当前运行模式：${runtimeLabel}`}
+          <button
+            type="button"
+            className="runtime-badge-button"
+            onClick={openSettings}
+            aria-label={`当前运行模式：${runtimeLabel}。打开设置切换 Demo / API`}
+            title="打开设置 · 切换 Demo / API"
           >
-            {usesApi ? <Cloud size={12} /> : <CloudOff size={12} />}
-            <span className="runtime-badge__text">{usesApi ? "API" : "演示"}</span>
-          </StatusChip>
+            <StatusChip tone="mode" className="runtime-badge">
+              {usesApi ? <Cloud size={12} /> : <CloudOff size={12} />}
+              <span className="runtime-badge__text">{usesApi ? "API" : "演示"}</span>
+            </StatusChip>
+          </button>
         }
       />
       <div className="app-surface">

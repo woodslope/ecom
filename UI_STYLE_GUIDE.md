@@ -117,9 +117,13 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - Product source, delivery slots, and inspector each own their internal scrolling in the shared Amazon/Taobao production shell. The platform workspace itself does not page-scroll.
 - Overview and simple pages may page-scroll; platform workspaces use a fixed shell with column-level scroll regions.
 - Overview places “当前下一步” beside the metric strip as the primary action cluster.
-- The Amazon workflow indicator is a compact navigation/status strip, not a second content panel. It must not repeat the export action or permanently reserve explanatory height.
+- Amazon and Taobao share one compact four-stage workflow strip: `准备资料 → 检查策划 → 逐图生产 → 交付检查`. Preparation and production surfaces use the same stage language and progress ownership; platform-specific inputs and tools remain local. The strip is not a second content panel and must not repeat the primary action.
+- Amazon and Taobao place one shared product-context bar directly above every preparation and production state. It owns current product identity, platform progress, product switching, and the route to library management. Switching products restores that product's saved platform workspace; only an explicit source reload may replace task-local input.
+- Dense task-input and analysis details open through the shared sidebar `Dialog` variant. Expanding details must not push the production grid or create a second page scroll owner.
 - Amazon with no active plan uses a focused intake surface: session parameters, Listing source, references, and one planning action. It may create a draft product/session atomically and must not render empty production columns.
 - Amazon Listing source belongs to the platform session. Differences from shared facts stay visible and require an explicit `同步到共享商品资料` action.
+- Amazon A+ keeps one compact module summary in both preparation and planned states. `编排模块` always opens the same dialog; changes remain dialog-local until `应用编排`, while cancel/close discards them. The applied list defines the current task's slot count and order, and changing an existing plan marks it for replanning.
+- Amazon style input has two explicit layers: `基础风格` owns text guidance, while `附加风格板` optionally supplies a hidden visual reference for secondary Listing images and A+ (never MAIN). Choosing an internal or custom board synchronizes its source preset back to the base style. Custom-style creation and deletion state that they affect the current product; deleting a board does not delete existing plans or images.
 - Delivery readiness stays hidden before the first usable output. Once output exists, the delivery strip remains single-line unless it is showing an error or recovery decision.
 - Partial slot completion remains part of `逐图生成`; `交付检查` means all required slots are complete or the operator explicitly enters a partial-delivery review.
 - `生产记录` is owned by a filter row plus production-run list. Events, recovery, fork, reuse, and re-export belong inside the selected run; it is not a flat per-product task log.
@@ -176,6 +180,7 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 ### Dialogs, feedback, tooltips
 
 - Dialogs have header, scrollable body when needed, and separate footer.
+- Dense workspace details and product switching use the shared sidebar dialog variant; centered dialogs remain for short confirmations and forms.
 - Blocking validation errors stay inside the dialog.
 - Current operation feedback uses shared inline status surfaces. Add a Toast primitive only when transient feedback has a real repeated need and can maintain safe distance from fixed actions.
 - Tooltips name unfamiliar rail and icon actions; required workflow information cannot live only in a tooltip.
@@ -226,6 +231,12 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - Workbench module columns (当前资料 / 平台交付槽位 / 槽位检查器) must render through `Panel` (or a thin wrapper around it). Do not hand-write `<section class="panel">` shells in business views.
 - When a module owns its own chrome bands (e.g. filled 槽位检查器), use `Panel` with `hideHeader` rather than a parallel DOM structure.
 - `PlatformRail` owns workflow grouping, visible scope descriptors, active-location treatment, and runtime/settings footer placement.
+- `WorkflowStepper` and `domain/workspace/platform-stage.ts` own the shared four-stage language, current-stage mapping, and completed-slot progress for Amazon and Taobao. Platform pages must not reimplement their own step labels.
+- `ProductContextBar` owns current product identity and product/library actions across Amazon and Taobao preparation and production states. Page headers and source selectors must not duplicate those actions.
+- `AmazonSessionControls` owns the stable Listing/A+ parameters and the single A+ module-summary/dialog path. A+ rows must not move between inline and dialog owners based on whether a plan exists; dialog edits commit only through `应用编排`.
+- `StyleReferencePicker` owns optional style-board selection, custom-board preview, and delete confirmation. `StyleReferenceEditorDialog` creates a new current-product board; it must not label that action as editing an existing board. `AmazonSessionControls` continues to own the base text preset.
+- `SlotInspector` owns one fixed four-view switcher for `文案 / 版本 / 检查 / Copilot` between the identity header and scrollable body; only one detail view is active, and the current result remains visible in every view. Strategy, evidence, negative constraints, and compliance belong to `检查`; version selection and image actions belong to `版本`. Do not reintroduce independent accordions for these concerns.
+- The slot footer may show save only while the `文案` view owns the editable form. Generation remains the result commit action, and navigation to the next slot must stay blocked while the current slot has unsaved copy or Prompt changes.
 - Domain-specific slot cards and version tiles stay with their owning components until a second real consumer proves that a shared primitive would remove duplication.
 - Platform rule packs own platform labels, colors, dimensions, slots, prompt rules, compliance rules, and export names.
 - Page components must not redefine shared tokens or platform rules with one-off constants.
@@ -290,7 +301,9 @@ Still out of scope for this minimal loop (add only when pain is repeated): Story
 
 - Commerce Ops tokens, typography, spacing, radius, borders, state colors, and the `208px` rail are owned by the single top `:root` block.
 - Amazon and Taobao use the same three-column production shell at `1100px` and above, slots + inspector with a source drawer from `900px` to `1099px`, and the desktop-only gate at `899px` and below.
+- Amazon and Taobao preparation/production states use the same four-stage workflow strip; browser checks protect the Taobao `检查策划 → 逐图生产` transition as a representative cross-platform consumer.
 - Listing / A+ and settings mode selection use `SegmentedControl`; operating modes use neutral `StatusChip` semantics.
+- A+ module setup now uses one compact summary and one staged dialog before and after planning; base text style and optional hidden style-board attachment have explicit, synchronized ownership and scoped create/delete copy.
 - Generated results use fixed-ratio `MediaSlot`; the inspector footer uses `ActionBar` and keeps save / generate actions visible without covering Prompt content.
 - Library, source, history, compliance, export, shell runtime, and Amazon consumers share the same status and control primitives.
 - 淘宝分析、固定 5+7 槽位、手机预览和历史导出继续复用同一套 `Panel`、`Button`、`StatusChip`、`Dialog`、`MediaSlot` 和 `ActionBar`；生产记录样式只引用已声明的视觉 Token。

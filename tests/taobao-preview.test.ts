@@ -82,7 +82,12 @@ describe("Taobao mobile preview", () => {
     expect(markup).toContain("淘宝手机商品页预览");
     expect(markup.match(/aria-label="查看 TB-HERO-/g)).toHaveLength(5);
     expect(markup.match(/data-slot-key="TB-DETAIL-/g)).toHaveLength(7);
-    expect(markup).toContain("缺少 12 个槽位");
+    expect(markup).toContain("当前商品");
+    expect(markup).toContain("还需完成 12 个槽位");
+    expect(markup).toContain("头图 5 个 · 详情 7 个");
+    expect(markup).toContain("查看槽位明细");
+    expect(markup).not.toContain("当前 session");
+    expect(markup).not.toContain("session_taobao");
     expect(markup).toContain("导出当前结果");
   });
 });

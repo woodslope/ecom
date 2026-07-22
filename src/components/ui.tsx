@@ -151,8 +151,10 @@ export function MediaSlot({
     >
       {state === "ready" && src ? <img src={src} alt={alt} onLoad={onLoad} /> : null}
       {state === "loading" ? (
-        <span className="media-slot__loading" aria-label="正在加载">
-          <span className="media-slot__skeleton" />
+        <span className="media-slot__loading" aria-label="正在生成图片">
+          <span className="media-slot__skeleton media-slot__skeleton--image" />
+          <span className="media-slot__skeleton media-slot__skeleton--caption" />
+          <span className="media-slot__loading-label">正在生成图片</span>
         </span>
       ) : null}
       {state === "error" ? (
@@ -277,6 +279,7 @@ export function Dialog({
   title,
   eyebrow,
   footer,
+  variant = "modal",
   className = "",
   onClose,
   children,
@@ -285,6 +288,7 @@ export function Dialog({
   title: string;
   eyebrow?: string;
   footer?: ReactNode;
+  variant?: "modal" | "sidebar";
   className?: string;
   onClose: () => void;
   children: ReactNode;
@@ -341,10 +345,14 @@ export function Dialog({
   if (!open) return null;
 
   return (
-    <div className="dialog-layer" role="presentation" onMouseDown={onClose}>
+    <div
+      className={`dialog-layer dialog-layer--${variant}`}
+      role="presentation"
+      onMouseDown={onClose}
+    >
       <section
         ref={dialogRef}
-        className={`dialog ${className}`.trim()}
+        className={`dialog dialog--${variant} ${className}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -356,7 +364,7 @@ export function Dialog({
             {eyebrow ? <span className="dialog__eyebrow">{eyebrow}</span> : null}
             <h2 id={titleId}>{title}</h2>
           </div>
-          <IconButton label="关闭弹窗" onClick={onClose}>
+          <IconButton label={variant === "sidebar" ? "关闭侧栏" : "关闭弹窗"} onClick={onClose}>
             <X size={18} />
           </IconButton>
         </header>

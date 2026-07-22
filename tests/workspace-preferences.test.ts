@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  readAmazonDraftProjectConfirmSkip,
+  readDemoModeBannerDismissed,
   readLastPlatform,
   readLastPlatformOrDefault,
+  writeAmazonDraftProjectConfirmSkip,
+  writeDemoModeBannerDismissed,
   writeLastPlatform,
 } from "../src/domain/workspace/preferences";
 
-function createStorage(initialValue: string | null = null) {
-  let value = initialValue;
+function createStorage(initial: Record<string, string | null> = {}) {
+  const values = new Map(Object.entries(initial));
   return {
-    getItem: () => value,
-    setItem: (_key: string, nextValue: string) => {
-      value = nextValue;
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, nextValue: string) => {
+      values.set(key, nextValue);
     },
   };
 }
@@ -32,7 +36,23 @@ describe("workspace platform preference", () => {
     writeLastPlatform(storage, "amazon");
     expect(readLastPlatform(storage)).toBe("amazon");
 
-    storage.setItem("ignored", "pinduoduo");
+    storage.setItem("ecom-workbench.last-platform.v1", "pinduoduo");
     expect(readLastPlatform(storage)).toBeNull();
+  });
+
+  it("persists demo mode banner dismissal", () => {
+    const storage = createStorage();
+    expect(readDemoModeBannerDismissed(storage)).toBe(false);
+    writeDemoModeBannerDismissed(storage, true);
+    expect(readDemoModeBannerDismissed(storage)).toBe(true);
+    writeDemoModeBannerDismissed(storage, false);
+    expect(readDemoModeBannerDismissed(storage)).toBe(false);
+  });
+
+  it("persists Amazon draft-project confirmation skip", () => {
+    const storage = createStorage();
+    expect(readAmazonDraftProjectConfirmSkip(storage)).toBe(false);
+    writeAmazonDraftProjectConfirmSkip(storage, true);
+    expect(readAmazonDraftProjectConfirmSkip(storage)).toBe(true);
   });
 });

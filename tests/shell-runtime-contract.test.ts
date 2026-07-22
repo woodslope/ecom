@@ -38,7 +38,9 @@ describe("workbench runtime context", () => {
     );
 
     expect(markup).toContain("runtime-badge");
+    expect(markup).toContain("runtime-badge-button");
     expect(markup).toContain("当前运行模式：演示引擎");
+    expect(markup).toContain("打开设置切换 Demo / API");
     expect(markup).toContain("desktop-only-gate");
     expect(markup).toContain("当前只支持电脑端浏览");
     expect(markup).toContain(String(DESKTOP_MIN_WIDTH));

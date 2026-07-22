@@ -2,7 +2,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { TaobaoAnalysisSummary, TaobaoIntake } from "../src/components/TaobaoIntake";
+import {
+  TaobaoAnalysisSummary,
+  TaobaoIntake,
+  taobaoAnalysisHasReference,
+} from "../src/components/TaobaoIntake";
 import { PlatformWorkspace } from "../src/components/PlatformWorkspace";
 import { createPlanningInputSignature } from "../src/domain/planning/input-signature";
 import { applyTaobaoAnalysisToFacts } from "../src/domain/platforms/taobao-analysis";
@@ -28,6 +32,32 @@ const project = {
 };
 
 describe("Taobao intake", () => {
+  it("aligns analysis readiness with the PlatformWorkspace reference gate", () => {
+    expect(
+      taobaoAnalysisHasReference({ selectedReferenceCount: 0, pendingFileCount: 0 }),
+    ).toBe(false);
+    expect(
+      taobaoAnalysisHasReference({ selectedReferenceCount: 1, pendingFileCount: 0 }),
+    ).toBe(true);
+    expect(
+      taobaoAnalysisHasReference({ selectedReferenceCount: 0, pendingFileCount: 2 }),
+    ).toBe(true);
+  });
+
+  it("offers a library exit when no product is loaded", () => {
+    const markup = renderToStaticMarkup(createElement(TaobaoIntake, {
+      activeProject: null,
+      assets: [],
+      loading: false,
+      error: null,
+      onAnalyze: async () => undefined,
+      onOpenLibrary: () => undefined,
+    }));
+
+    expect(markup).toContain("先选择商品资料");
+    expect(markup).toContain("打开资料库");
+  });
+
   it("renders product text, image input, existing references, and a Taobao analysis action", () => {
     const markup = renderToStaticMarkup(createElement(TaobaoIntake, {
       activeProject: project,
@@ -54,9 +84,28 @@ describe("Taobao intake", () => {
     expect(markup).toContain("淘宝商品资料");
     expect(markup).toContain('aria-label="淘宝分析图片"');
     expect(markup).toContain("正面图.png");
-    expect(markup).toContain("分析淘宝商品");
+    expect(markup).toContain("分析并策划");
     expect(markup).toContain("不会自动修改资料库");
+    expect(markup).toContain("载入资料库");
+    expect(markup).toContain("手动填写");
+    expect(markup).toContain("云感旅行颈枕");
     expect(markup).not.toContain("Amazon Listing");
+  });
+
+  it("blocks analysis without a reference image and explains the shared planning gate", () => {
+    const markup = renderToStaticMarkup(createElement(TaobaoIntake, {
+      activeProject: project,
+      assets: [],
+      loading: false,
+      error: null,
+      onAnalyze: async () => undefined,
+      onOpenLibrary: () => undefined,
+    }));
+
+    expect(markup).toContain("淘宝策划需要至少一张参考图");
+    expect(markup).toContain("打开资料库");
+    expect(markup).toContain("disabled");
+    expect(markup).toContain("与后续策划一致");
   });
 
   it("shows explainable analysis fields, missing facts, and forbidden-claim warnings", () => {
@@ -71,6 +120,7 @@ describe("Taobao intake", () => {
         missingFacts: ["目标人群"],
         warnings: ["禁用声明不得进入文案"],
       },
+      onReanalyze: () => undefined,
     }));
 
     expect(markup).toContain("商品分析结果");
@@ -81,6 +131,7 @@ describe("Taobao intake", () => {
     expect(markup).toContain("禁用声明不得进入文案");
     expect(markup).toContain("来源记录 · 1");
     expect(markup).toContain("共享商品");
+    expect(markup).toContain("重新分析");
   });
 
   it("presents the fixed five-gallery plus seven-detail planning contract", () => {
@@ -138,9 +189,10 @@ describe("Taobao intake", () => {
       onUpdateSlot: async () => true,
     }));
 
-    expect(markup).toContain("5 张主图 + 7 张详情图");
-    expect(markup).toContain("AI 策划淘宝商品生产包");
-    expect(markup).toContain('data-workflow-id="taobao-product"');
+    expect(markup).toContain("固定图组");
+    expect(markup).toContain("AI 策划");
+    expect(markup).toContain("淘宝 / 天猫");
+    expect(markup).not.toContain("Listing / A+");
   });
 
   it("checks slot copy against forbidden claims owned by the Taobao session", () => {

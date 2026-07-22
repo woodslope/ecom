@@ -58,7 +58,7 @@ export function AssetLibrary({
               accept="image/*"
               multiple
               onChange={changeFiles}
-              data-testid="asset-upload"
+              data-testid="asset-library-upload"
             />
           </>
         ) : null}

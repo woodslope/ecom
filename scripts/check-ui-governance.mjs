@@ -211,6 +211,116 @@ function walkTsx(dir, out = []) {
       );
     }
   }
+
+  for (const fileName of ["AmazonIntake.tsx", "TaobaoIntake.tsx", "PlatformWorkspace.tsx"]) {
+    const component = read(join(componentsDir, fileName));
+    if (!component.includes("<WorkflowStepper")) {
+      fail(`${fileName} must use the shared WorkflowStepper for platform progress.`);
+    }
+  }
+}
+
+// --- 5. Cross-platform product context and dense-detail ownership ---
+{
+  const ui = read(join(componentsDir, "ui.tsx"));
+  const amazonWorkspace = read(join(componentsDir, "AmazonWorkspace.tsx"));
+  const taobaoWorkspace = read(join(componentsDir, "TaobaoWorkspace.tsx"));
+  const amazonIntake = read(join(componentsDir, "AmazonIntake.tsx"));
+  const taobaoIntake = read(join(componentsDir, "TaobaoIntake.tsx"));
+  const css = read(stylesPath);
+
+  for (const [name, source] of [
+    ["AmazonWorkspace.tsx", amazonWorkspace],
+    ["TaobaoWorkspace.tsx", taobaoWorkspace],
+  ]) {
+    if (!source.includes("<ProductContextBar")) {
+      fail(`${name} must render the shared ProductContextBar in preparation and production states.`);
+    }
+  }
+
+  for (const [name, source] of [
+    ["AmazonIntake.tsx", amazonIntake],
+    ["TaobaoIntake.tsx", taobaoIntake],
+  ]) {
+    if (source.includes("切换商品")) {
+      fail(`${name} must not duplicate product switching owned by ProductContextBar.`);
+    }
+  }
+
+  if (!ui.includes('variant?: "modal" | "sidebar"')) {
+    fail("ui.tsx Dialog must own the shared sidebar variant for dense workspace details.");
+  }
+  if (!css.includes(".dialog.dialog--sidebar")) {
+    fail("styles.css must own shared sidebar Dialog geometry.");
+  }
+}
+
+// --- 6. Slot inspector has one detail-view owner ---
+{
+  const inspector = read(join(componentsDir, "SlotInspector.tsx"));
+  const css = read(stylesPath);
+
+  for (const needle of [
+    "<SegmentedControl",
+    'ariaLabel="槽位检查视图"',
+    'hidden={activePane !== "versions"}',
+    'hidden={activePane !== "checks"}',
+    'hidden={activePane !== "copilot"}',
+    "disabled={submitting || draftDirty}",
+  ]) {
+    if (!inspector.includes(needle)) {
+      fail(`SlotInspector.tsx missing the single-view ownership hook ${JSON.stringify(needle)}.`);
+    }
+  }
+
+  for (const legacyHook of ["inspector-section__toggle", "slot-inspector__strategy-toggle"]) {
+    if (inspector.includes(legacyHook) || css.includes(`.${legacyHook}`)) {
+      fail(`Legacy SlotInspector expansion owner "${legacyHook}" must stay removed.`);
+    }
+  }
+
+  if (!css.includes(".slot-inspector__views.segmented-control")) {
+    fail("styles.css must own the four-view SlotInspector switcher geometry.");
+  }
+}
+
+// --- 7. Amazon A+ and style configuration keep one stable owner ---
+{
+  const controls = read(join(componentsDir, "AmazonSessionControls.tsx"));
+  const intake = read(join(componentsDir, "AmazonIntake.tsx"));
+  const stylePicker = read(join(componentsDir, "StyleReferencePicker.tsx"));
+  const styleEditor = read(join(componentsDir, "StyleReferenceEditorDialog.tsx"));
+
+  for (const needle of [
+    'className="aplus-module-summary"',
+    "moduleDraft",
+    'title="编排 A+ 模块"',
+    "应用编排",
+  ]) {
+    if (!controls.includes(needle)) {
+      fail(`AmazonSessionControls.tsx missing staged A+ module ownership hook ${JSON.stringify(needle)}.`);
+    }
+  }
+  if (controls.includes("aplus-module-readonly")) {
+    fail("AmazonSessionControls.tsx must not switch A+ module ownership to a plan-only inline variant.");
+  }
+
+  for (const needle of ["basePresetId", "onBasePresetChange", 'aria-label="附加风格板"']) {
+    if (!stylePicker.includes(needle)) {
+      fail(`StyleReferencePicker.tsx missing style ownership hook ${JSON.stringify(needle)}.`);
+    }
+  }
+  if (!intake.includes('setSelectedStyleReferenceId(`preset:${next.stylePresetId}`)')) {
+    fail("AmazonIntake.tsx must keep built-in style-board selection synchronized with the base preset.");
+  }
+  for (const legacyCopy of ["隐藏风格参考图", "编辑为我的风格", "编辑我的风格"]) {
+    if (stylePicker.includes(legacyCopy) || styleEditor.includes(legacyCopy)) {
+      fail(`Amazon style configuration still contains ambiguous legacy copy ${JSON.stringify(legacyCopy)}.`);
+    }
+  }
+  if (!styleEditor.includes("保存到当前商品")) {
+    fail("StyleReferenceEditorDialog.tsx must name the persistence scope in its save action.");
+  }
 }
 
 // --- Report ---

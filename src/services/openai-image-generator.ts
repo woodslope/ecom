@@ -167,7 +167,24 @@ function dataUrlBlob(url: string): Blob | null {
   try { return new Blob([decodeBase64(match[2]!)], { type: match[1]! }); } catch { return null; }
 }
 
-function httpError(response: Response): OpenAIImageGeneratorError {
+async function providerErrorDetail(response: Response): Promise<string | null> {
+  try {
+    const payload = (await response.clone().json()) as unknown;
+    if (typeof payload !== "object" || payload === null) return null;
+    const record = payload as Record<string, unknown>;
+    const nested = typeof record.error === "object" && record.error !== null
+      ? record.error as Record<string, unknown>
+      : null;
+    const candidate = nested?.message ?? nested?.detail ?? record.message ?? record.detail;
+    if (typeof candidate !== "string") return null;
+    const detail = candidate.replace(/\s+/g, " ").trim();
+    return detail.length > 0 ? detail.slice(0, 240) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function httpError(response: Response): Promise<OpenAIImageGeneratorError> {
   if (response.status === 401) {
     return new OpenAIImageGeneratorError(
       "auth",
@@ -196,9 +213,12 @@ function httpError(response: Response): OpenAIImageGeneratorError {
       response.status,
     );
   }
+  const detail = await providerErrorDetail(response);
   return new OpenAIImageGeneratorError(
     "http",
-    `图片 API 请求失败（HTTP ${response.status}），请稍后重试或检查服务商状态。`,
+    detail
+      ? `图片 API 请求失败（HTTP ${response.status}）：${detail}`
+      : `图片 API 请求失败（HTTP ${response.status}），请稍后重试或检查服务商状态。`,
     response.status,
   );
 }
@@ -226,7 +246,7 @@ async function outputBlob(
   if (typeof output?.url === "string") {
     const response = await fetcher(output.url, { signal });
     if (!response.ok) {
-      throw httpError(response);
+      throw await httpError(response);
     }
     const blob = await response.blob();
     if (blob.size === 0 || (blob.type && !blob.type.toLowerCase().startsWith("image/"))) {
@@ -331,7 +351,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
         }),
         signal,
       });
-      if (!response.ok) throw httpError(response);
+      if (!response.ok) throw await httpError(response);
       const payload = await response.json() as ChatImageResponse;
       const url = payload.choices?.[0]?.message?.images?.[0]?.image_url?.url;
       if (typeof url !== "string") throw formatError();
@@ -382,7 +402,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
           reference.blob.type === reference.mimeType
             ? reference.blob
             : reference.blob.slice(0, reference.blob.size, reference.mimeType);
-        form.append("image", image, reference.name);
+        form.append("image[]", image, reference.name);
       }
       body = form;
       headers = { Authorization: `Bearer ${this.options.apiKey}` };
@@ -410,7 +430,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
       },
     );
     if (!response.ok) {
-      throw httpError(response);
+      throw await httpError(response);
     }
     const payload = await parseImagesResponse(response);
     const blob = await outputBlob(payload, this.fetch, signal);

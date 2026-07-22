@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AmazonIntake } from "../src/components/AmazonIntake";
-import { AmazonWorkspace } from "../src/components/AmazonWorkspace";
+import { AmazonSessionSummary, AmazonWorkspace } from "../src/components/AmazonWorkspace";
 import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import type { ProductFacts } from "../src/domain/projects/types";
@@ -45,6 +45,44 @@ function dependencies() {
 }
 
 describe("Amazon direct intake", () => {
+  it("keeps a custom style asset while saving new task reference files", async () => {
+    const deps = {
+      ...dependencies(),
+      assetRepository: createMemoryAssetRepository(),
+    };
+    const store = createWorkbenchStore(deps);
+    await store.getState().initialize();
+    const project = await store.getState().createProject({ name: "带风格的商品", facts: sharedFacts });
+    const style = await store.getState().createStyleReference("clean-retail", {
+      name: "静谧棚拍",
+    });
+
+    const session = await store.getState().startAmazonSession({
+      projectId: project!.id,
+      workflowId: "amazon-listing",
+      listingText: "Title: Styled Travel Pillow\n- Washable cover",
+      files: [new File(["image"], "front.png", { type: "image/png" })],
+      selectedReferenceAssetIds: [],
+      selectedStyleReferenceId: style!.metadata.id,
+      options: {
+        marketplaceId: "us",
+        plannerMode: "listing",
+        listingImageCount: 7,
+        aPlusType: "standard-large",
+        sizeTier: "2K",
+        stylePresetId: "clean-retail",
+      },
+    });
+
+    expect(session).not.toBeNull();
+    expect(session?.selectedStyleReferenceId).toBe(style!.metadata.id);
+    expect(session?.selectedReferenceAssetIds).toHaveLength(1);
+    expect(store.getState().assets.filter((asset) => asset.metadata.kind === "reference"))
+      .toHaveLength(1);
+    expect(store.getState().assets.filter((asset) => asset.metadata.kind === "style-reference"))
+      .toHaveLength(1);
+  });
+
   it("persists Listing input and options in a session without overwriting shared facts", async () => {
     const deps = dependencies();
     const project = await deps.projectRepository.create({ name: "共享商品", facts: sharedFacts });
@@ -250,10 +288,38 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).toContain('title="先填写 Listing 原文"');
     expect(directMarkup).toContain('class="amazon-session-controls__additional"');
     expect(directMarkup).toContain("style-reference-picker--embedded");
+    expect(directMarkup).toContain("载入资料库");
+    expect(directMarkup).toContain("手动填写");
     expect(directMarkup).not.toContain('class="action-bar');
     expect(directMarkup).not.toContain("打开资料库");
     expect(existingMarkup).toContain("不会自动覆盖共享商品资料");
     expect(existingMarkup).toContain("同步到共享商品资料");
+    expect(existingMarkup).toContain("Session-only Travel Pillow");
+  });
+
+  it("preloads shared facts into Listing draft when no session draft exists", () => {
+    const markup = renderToStaticMarkup(
+      createElement(AmazonIntake, {
+        activeProject: {
+          id: "project_01",
+          name: "共享商品",
+          facts: sharedFacts,
+          createdAt: "2026-07-20T01:00:00.000Z",
+          updatedAt: "2026-07-20T01:00:00.000Z",
+        },
+        assets: [],
+        session: undefined,
+        loading: false,
+        planning: false,
+        error: null,
+        onSubmit: async () => null,
+        onSyncListingFacts: async () => false,
+      }),
+    );
+
+    expect(markup).toContain("Title: 共享商品名称");
+    expect(markup).toContain("共享卖点");
+    expect(markup).toContain("资料库");
   });
 
   it("keeps the selected A+ mode when the target workflow has no session yet", () => {
@@ -368,12 +434,23 @@ describe("Amazon direct intake", () => {
       ),
     );
 
-    expect(markup).toContain("本次任务输入");
-    expect(markup).toContain("Persisted Session Listing");
-    expect(markup).toContain("日本站");
+    expect(markup).toContain("任务输入");
     expect(markup).toContain("Listing 9 张");
-    expect(markup).toContain("4K");
-    expect(markup).toContain("front-reference.png");
     expect(markup).toContain("生产工作台");
+
+    const summary = renderToStaticMarkup(
+      createElement(AmazonSessionSummary, {
+        open: true,
+        session: session!,
+        assets: store.getState().assets,
+        onClose: () => undefined,
+      }),
+    );
+    expect(summary).toContain("本次任务输入");
+    expect(summary).toContain("dialog--sidebar");
+    expect(summary).toContain("Persisted Session Listing");
+    expect(summary).toContain("日本站");
+    expect(summary).toContain("4K");
+    expect(summary).toContain("front-reference.png");
   });
 });

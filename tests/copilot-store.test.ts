@@ -94,12 +94,14 @@ describe("workbench Copilot", () => {
     });
     const store = createWorkbenchStore(deps);
     await store.getState().createProject({ name: "淘宝 Copilot", facts: productFacts });
+    const [asset] = await store.getState().uploadReferenceFiles([
+      new File([new Uint8Array([1, 2, 3])], "正面图.png", { type: "image/png" }),
+    ]);
     await store.getState().analyzeTaobaoProduct({
       productText: "禁用声明：治疗失眠",
       files: [],
-      selectedReferenceAssetIds: [],
+      selectedReferenceAssetIds: [asset.metadata.id],
     });
-    await store.getState().planPlatform("taobao");
 
     expect(
       await store.getState().runCopilotCommand("taobao", "TB-HERO-02", "check-compliance"),

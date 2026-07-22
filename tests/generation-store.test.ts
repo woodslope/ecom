@@ -265,7 +265,7 @@ describe("workbench generation versions", () => {
     let fail = false;
     const generator: ImageGenerator = {
       async generate(request, signal): Promise<GeneratedImage> {
-        if (fail) throw new Error("图片服务暂时不可用");
+        if (fail) throw new Error("图片服务暂时不可用。");
         return demoImageGenerator.generate(request, signal);
       },
     };
@@ -285,6 +285,7 @@ describe("workbench generation versions", () => {
     });
     expect(store.getState().assets).toHaveLength(1);
     expect(store.getState().generationError).toContain("图片服务暂时不可用");
+    expect(store.getState().generationError).not.toContain("。。");
     expect(store.getState().generationErrorTarget).toEqual({
       platformId: "amazon",
       slotKey: "PT01",

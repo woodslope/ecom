@@ -163,8 +163,9 @@ describe("OpenAIImageGenerator", () => {
     expect(form.get("n")).toBe("1");
     expect(form.get("size")).toBe("2000x2000");
     expect(form.get("response_format")).toBe("b64_json");
-    const images = form.getAll("image") as Array<Blob & { name?: string }>;
+    const images = form.getAll("image[]") as Array<Blob & { name?: string }>;
     expect(images).toHaveLength(2);
+    expect(form.getAll("image")).toHaveLength(0);
     expect(images.map((image) => [image.name, image.type])).toEqual([
       ["front.png", "image/png"],
       ["detail.webp", "image/webp"],
@@ -352,6 +353,35 @@ describe("OpenAIImageGenerator", () => {
         message: expect.not.stringContaining(apiKey),
       }),
     );
+  });
+
+  it("surfaces a bounded provider detail for actionable HTTP 400 errors", async () => {
+    const apiKey = "sensitive-api-key";
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({
+        error: { message: `unsupported image parameter for this model ${apiKey}` },
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const generator = new OpenAIImageGenerator({
+      baseUrl: "https://provider.example/v1",
+      apiKey,
+      model: "image-model",
+      fetch: fetchMock,
+    });
+
+    const error = await generator
+      .generate(request, new AbortController().signal)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toEqual(expect.objectContaining({
+      code: "http",
+      status: 400,
+      userMessage: expect.stringContaining("unsupported image parameter"),
+      message: expect.not.stringContaining(apiKey),
+    }));
   });
 
   it.each([

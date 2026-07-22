@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowRight, Bot, ChevronDown, Copy, LoaderCircle, Save, ShieldAlert, Square, WandSparkles } from "lucide-react";
+import { ArrowRight, Bot, Copy, LoaderCircle, Save, ShieldAlert, Square, WandSparkles } from "lucide-react";
 
 import {
   activeSlotVersion,
@@ -18,7 +18,24 @@ import { GenerationActions } from "./GenerationActions";
 import { ImageTools } from "./ImageTools";
 import { MaskEditorDialog } from "./MaskEditorDialog";
 import { VersionStrip } from "./VersionStrip";
-import { ActionBar, Button, Field, MediaSlot, StatusChip, StatusMessage } from "./ui";
+import {
+  ActionBar,
+  Button,
+  Field,
+  MediaSlot,
+  SegmentedControl,
+  StatusChip,
+  StatusMessage,
+} from "./ui";
+
+type InspectorPane = "copy" | "versions" | "checks" | "copilot";
+
+const inspectorPanes = [
+  { value: "copy", label: "文案" },
+  { value: "versions", label: "版本" },
+  { value: "checks", label: "检查" },
+  { value: "copilot", label: "Copilot" },
+] as const satisfies readonly { value: InspectorPane; label: string }[];
 
 export function isSlotDraftDirty(
   slot: PlannedSlot,
@@ -112,10 +129,7 @@ export function SlotInspector({
   const [externalBody, setExternalBody] = useState(slot.externalText?.body ?? "");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  /** Secondary panels start collapsed so Prompt + Generate stay above the fold. */
-  const [metaOpen, setMetaOpen] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
-  const [strategyOpen, setStrategyOpen] = useState(false);
+  const [activePane, setActivePane] = useState<InspectorPane>("copy");
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [maskEditorSaving, setMaskEditorSaving] = useState(false);
   const [maskEditorError, setMaskEditorError] = useState<string | null>(null);
@@ -139,7 +153,6 @@ export function SlotInspector({
   const copilotPatchDisabledReason = copilotDisabledReason ?? (hasExternalText
     ? "当前模块使用图片外文案；请直接编辑外部标题和正文。"
     : undefined);
-  const copilotExpanded = copilotOpen || Boolean(copilotRunning || copilotError || copilotMessage);
   const generationDisabled =
     planNeedsRefresh ||
     draftDirty ||
@@ -149,7 +162,7 @@ export function SlotInspector({
   const generationDisabledReason = planNeedsRefresh
     ? "当前策划已过期，请先重新策划。"
     : draftDirty
-    ? "当前 Prompt 或可见文案尚未保存，请先保存文案与提示词。"
+    ? "当前 Prompt 或可见文案尚未保存，请先在“文案”中保存后再生成。"
     : saveState === "saving" || saving
       ? "槽位草稿正在保存，请稍候。"
       : generationLocked && !generating
@@ -183,6 +196,7 @@ export function SlotInspector({
     setExternalBody(slot.externalText?.body ?? "");
     setCopyState("idle");
     setSaveState("idle");
+    setActivePane("copy");
   }, [slot.externalText?.body, slot.externalText?.title, slot.prompt, slot.slotKey, slot.visibleCopy]);
 
   useEffect(() => {
@@ -190,24 +204,20 @@ export function SlotInspector({
   }, [activeVersion?.id]);
 
   useEffect(() => {
-    // Only auto-open meta when there is an actionable compliance finding.
+    // Actionable findings belong to the single inspector view owner.
     if (
       complianceResult &&
       complianceResult.findings.some(
         (finding) => finding.severity === "error" || finding.severity === "warning",
       )
     ) {
-      setMetaOpen(true);
+      setActivePane("checks");
     }
   }, [complianceResult, slot.slotKey]);
 
   useEffect(() => {
-    if (copilotRunning || copilotError || copilotMessage) setCopilotOpen(true);
+    if (copilotRunning || copilotError || copilotMessage) setActivePane("copilot");
   }, [copilotRunning, copilotError, copilotMessage, slot.slotKey]);
-
-  useEffect(() => {
-    setStrategyOpen(false);
-  }, [slot.slotKey]);
 
   useEffect(() => {
     onDirtyChange(draftDirty);
@@ -233,8 +243,6 @@ export function SlotInspector({
     }
   };
 
-  const strategyPreview =
-    slot.strategy.length > 72 ? `${slot.strategy.slice(0, 72).trim()}…` : slot.strategy;
   const complianceBadge =
     complianceResult?.findings.some((f) => f.severity === "error")
       ? "合规有错误"
@@ -288,31 +296,16 @@ export function SlotInspector({
         </div>
       </header>
 
-      {/* Scroll middle: all dense secondary + primary fields */}
-      <div className="slot-inspector__scroll" role="region" aria-label="槽位内容">
-        {slot.strategy ? (
-          <div className="slot-inspector__strategy">
-            <button
-              type="button"
-              className="slot-inspector__strategy-toggle"
-              aria-expanded={strategyOpen}
-              onClick={() => setStrategyOpen((value) => !value)}
-            >
-              <span>{strategyOpen ? "收起策划说明" : "策划说明"}</span>
-              {!strategyOpen ? (
-                <em className="slot-inspector__strategy-preview">{strategyPreview}</em>
-              ) : null}
-              <ChevronDown
-                size={15}
-                className={
-                  strategyOpen ? "inspector-section__chevron is-open" : "inspector-section__chevron"
-                }
-              />
-            </button>
-            {strategyOpen ? <p className="slot-inspector__strategy-body">{slot.strategy}</p> : null}
-          </div>
-        ) : null}
+      <SegmentedControl
+        className="slot-inspector__views"
+        ariaLabel="槽位检查视图"
+        options={inspectorPanes}
+        value={activePane}
+        onChange={setActivePane}
+      />
 
+      {/* Scroll middle: current result plus one active detail view. */}
+      <div className="slot-inspector__scroll" role="region" aria-label="槽位内容">
         <section className="generated-result generated-result--compact" aria-label="当前生成结果">
           <div className="generated-result__row">
             <MediaSlot
@@ -344,147 +337,173 @@ export function SlotInspector({
                 </StatusMessage>
               ) : (
                 <p className="generated-result__hint">
-                  {activeVersion ? "可切换历史版本。" : "确认 Prompt 后在底部生成。"}
+                  {generating
+                    ? "正在生成当前槽位，完成后会自动显示并保留为新版本。"
+                    : activeVersion
+                      ? "可切换历史版本。"
+                      : "确认 Prompt 后在底部生成。"}
                 </p>
               )}
-              {versionState && versionState.versions.length > 0 ? (
-                <VersionStrip
-                  state={versionState}
-                  slot={slot}
-                  assets={assets}
-                  planningInputSignature={planningInputSignature}
-                  disabled={generating || generationLocked}
-                  onActivate={onActivateVersion}
-                />
-              ) : null}
-              {activeVersion && activeAsset ? (
-                <ImageTools
-                  fileName={activeAsset.metadata.name}
-                  editingSupported={imageEditingSupported && Boolean(onMaskEdit)}
-                  editingDisabledReason={
-                    onMaskEdit ? imageEditingDisabledReason : "当前工作流没有可用的图片编辑入口。"
-                  }
-                  busy={busy || maskEditorSaving}
-                  onDownload={() => onDownloadVersion?.(activeVersion, activeAsset)}
-                  onUseAsReference={() => onUseAsReference?.(activeAsset)}
-                  onEdit={openMaskEditor}
-                />
+              {versionState?.versions.length ? (
+                <p className="generated-result__version-summary">
+                  已保留 {versionState.versions.length} 个版本，当前操作请到“版本”。
+                </p>
               ) : null}
             </div>
           </div>
         </section>
 
-        <form id="slot-inspector-form" className="slot-inspector__form" onSubmit={submit}>
-          {hasExternalText ? (
-            <div className="slot-inspector__external-copy" aria-label="A+ 图片外文案">
-              <div className="slot-inspector__external-copy-header">
-                <strong>A+ 图片外文案</strong>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="compact"
-                  disabled={submitting || !externalTitle.trim() || !externalBody.trim()}
-                  onClick={() => void copyExternalText()}
-                >
-                  <Copy size={14} />
-                  复制外部文案
-                </Button>
+        <form
+          id="slot-inspector-form"
+          className="slot-inspector__form slot-inspector__pane"
+          aria-label="文案与提示词"
+          hidden={activePane !== "copy"}
+          onSubmit={submit}
+        >
+            {hasExternalText ? (
+              <div className="slot-inspector__external-copy" aria-label="A+ 图片外文案">
+                <div className="slot-inspector__external-copy-header">
+                  <strong>A+ 图片外文案</strong>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="compact"
+                    disabled={submitting || !externalTitle.trim() || !externalBody.trim()}
+                    onClick={() => void copyExternalText()}
+                  >
+                    <Copy size={14} />
+                    复制外部文案
+                  </Button>
+                </div>
+                <Field label="外部标题（图片外）">
+                  <input
+                    aria-label="外部标题（图片外）"
+                    value={externalTitle}
+                    disabled={submitting}
+                    onChange={(event) => {
+                      setExternalTitle(event.target.value);
+                      setCopyState("idle");
+                      setSaveState("idle");
+                    }}
+                  />
+                </Field>
+                <Field label="外部正文（图片外）">
+                  <textarea
+                    aria-label="外部正文（图片外）"
+                    value={externalBody}
+                    disabled={submitting}
+                    rows={4}
+                    onChange={(event) => {
+                      setExternalBody(event.target.value);
+                      setCopyState("idle");
+                      setSaveState("idle");
+                    }}
+                  />
+                </Field>
+                {copyState === "copied" ? (
+                  <StatusMessage tone="success">外部标题与正文已复制。</StatusMessage>
+                ) : null}
+                {copyState === "error" ? (
+                  <StatusMessage tone="danger">复制失败，请手动选择外部文案。</StatusMessage>
+                ) : null}
               </div>
-              <Field label="外部标题（图片外）">
-                <input
-                  aria-label="外部标题（图片外）"
-                  value={externalTitle}
-                  disabled={submitting}
-                  onChange={(event) => {
-                    setExternalTitle(event.target.value);
-                    setCopyState("idle");
-                    setSaveState("idle");
-                  }}
-                />
-              </Field>
-              <Field label="外部正文（图片外）">
+            ) : (
+              <Field label="可见文案">
                 <textarea
-                  aria-label="外部正文（图片外）"
-                  value={externalBody}
-                  disabled={submitting}
-                  rows={4}
+                  aria-label="可见文案"
+                  className="slot-inspector__visible-copy"
+                  placeholder={isMain ? "Amazon MAIN 不使用可见文案" : undefined}
+                  value={visibleCopy}
+                  disabled={isMain || submitting}
+                  rows={isMain ? 2 : 3}
                   onChange={(event) => {
-                    setExternalBody(event.target.value);
-                    setCopyState("idle");
+                    setVisibleCopy(event.target.value);
                     setSaveState("idle");
                   }}
                 />
               </Field>
-              {copyState === "copied" ? (
-                <StatusMessage tone="success">外部标题与正文已复制。</StatusMessage>
-              ) : null}
-              {copyState === "error" ? (
-                <StatusMessage tone="danger">复制失败，请手动选择外部文案。</StatusMessage>
-              ) : null}
-            </div>
-          ) : (
-            <Field label="可见文案">
+            )}
+            <Field
+              label={promptLabel}
+              hint={
+                usesEnglishPrompt
+                  ? "英文模型指令；品牌/型号/尺寸等事实可保留原文。"
+                  : undefined
+              }
+            >
               <textarea
-                aria-label="可见文案"
-                className="slot-inspector__visible-copy"
-                placeholder={isMain ? "Amazon MAIN 不使用可见文案" : undefined}
-                value={visibleCopy}
-                disabled={isMain || submitting}
-                rows={isMain ? 2 : 3}
+                aria-label={promptLabel}
+                className="slot-inspector__prompt"
+                value={prompt}
+                disabled={submitting}
+                rows={8}
                 onChange={(event) => {
-                  setVisibleCopy(event.target.value);
+                  setPrompt(event.target.value);
                   setSaveState("idle");
                 }}
               />
             </Field>
-          )}
-          <Field
-            label={promptLabel}
-            hint={
-              usesEnglishPrompt
-                ? "英文模型指令；品牌/型号/尺寸等事实可保留原文。"
-                : undefined
-            }
-          >
-            <textarea
-              aria-label={promptLabel}
-              className="slot-inspector__prompt"
-              value={prompt}
-              disabled={submitting}
-              rows={8}
-              onChange={(event) => {
-                setPrompt(event.target.value);
-                setSaveState("idle");
-              }}
-            />
-          </Field>
-          {saveState === "saved" ? (
-            <StatusMessage tone="success">用户编辑：槽位草稿已保存。</StatusMessage>
-          ) : null}
-          {saveState === "error" ? (
-            <StatusMessage tone="danger">保存失败，当前输入仍保留，请检查提示后重试。</StatusMessage>
-          ) : null}
+            {saveState === "saved" ? (
+              <StatusMessage tone="success">用户编辑：槽位草稿已保存。</StatusMessage>
+            ) : null}
+            {saveState === "error" ? (
+              <StatusMessage tone="danger">保存失败，当前输入仍保留，请检查提示后重试。</StatusMessage>
+            ) : null}
         </form>
 
-        <section className="inspector-section">
-          <button
-            type="button"
-            className="inspector-section__toggle"
-            aria-expanded={metaOpen}
-            onClick={() => setMetaOpen((value) => !value)}
-          >
-            <span>
-              策划依据与合规
-              {complianceBadge ? ` · ${complianceBadge}` : ""}
-            </span>
-            <ChevronDown
-              size={16}
-              className={
-                metaOpen ? "inspector-section__chevron is-open" : "inspector-section__chevron"
-              }
-            />
-          </button>
-          <div className="inspector-section__body" hidden={!metaOpen}>
+        <section
+          className="slot-inspector__pane slot-inspector__versions"
+          aria-label="版本与图片工具"
+          hidden={activePane !== "versions"}
+        >
+            <div className="slot-inspector__pane-heading">
+              <strong>版本与图片工具</strong>
+              <span>
+                {versionState?.versions.length
+                  ? `${versionState.versions.length} 个历史版本，只导出当前版本。`
+                  : "生成首张图片后，可在这里切换、下载或继续编辑。"}
+              </span>
+            </div>
+            {versionState && versionState.versions.length > 0 ? (
+              <VersionStrip
+                state={versionState}
+                slot={slot}
+                assets={assets}
+                planningInputSignature={planningInputSignature}
+                disabled={generating || generationLocked}
+                onActivate={onActivateVersion}
+              />
+            ) : (
+              <StatusMessage>当前槽位还没有图片版本。</StatusMessage>
+            )}
+            {activeVersion && activeAsset ? (
+              <ImageTools
+                fileName={activeAsset.metadata.name}
+                editingSupported={imageEditingSupported && Boolean(onMaskEdit)}
+                editingDisabledReason={
+                  onMaskEdit ? imageEditingDisabledReason : "当前工作流没有可用的图片编辑入口。"
+                }
+                busy={busy || maskEditorSaving}
+                onDownload={() => onDownloadVersion?.(activeVersion, activeAsset)}
+                onUseAsReference={() => onUseAsReference?.(activeAsset)}
+                onEdit={openMaskEditor}
+              />
+            ) : null}
+        </section>
+
+        <section
+          className="slot-inspector__pane slot-inspector__checks"
+          aria-label="策划与合规检查"
+          hidden={activePane !== "checks"}
+        >
+            {slot.strategy ? (
+              <section className="slot-inspector__strategy" aria-labelledby="slot-strategy-title">
+                <div className="slot-inspector__section-title">
+                  <strong id="slot-strategy-title">策划说明</strong>
+                </div>
+                <p>{slot.strategy}</p>
+              </section>
+            ) : null}
             <section className="slot-inspector__evidence" aria-labelledby="slot-evidence-title">
               <div className="slot-inspector__section-title">
                 <ShieldAlert size={15} />
@@ -503,96 +522,81 @@ export function SlotInspector({
                 <p>{slot.negativePrompt}</p>
               </div>
             ) : null}
-          </div>
         </section>
 
-        <section className="inspector-section">
-          <button
-            type="button"
-            className="inspector-section__toggle"
-            aria-expanded={copilotExpanded}
-            onClick={() => setCopilotOpen((value) => !value)}
-          >
-            <span>AI Copilot</span>
-            <ChevronDown
-              size={16}
-              className={
-                copilotExpanded ? "inspector-section__chevron is-open" : "inspector-section__chevron"
-              }
-            />
-          </button>
-          <div className="inspector-section__body" hidden={!copilotExpanded}>
-            <section className="slot-inspector__copilot" aria-label="AI Copilot">
-              <p className="visually-hidden">写入动作只调整当前槽位；检查与解释只返回建议</p>
-              {copilotRunning ? (
-                <StatusMessage className="copilot-status">
-                  <span>
-                    <LoaderCircle className="spin" size={14} />
-                    Copilot 正在处理当前槽位请求
-                  </span>
-                  <Button variant="secondary" onClick={onCancelCopilot}>
-                    <Square size={13} />
-                    取消请求
-                  </Button>
-                </StatusMessage>
-              ) : null}
-              {copilotError ? <StatusMessage tone="danger">{copilotError}</StatusMessage> : null}
-              {copilotMessage ? <StatusMessage>{copilotMessage}</StatusMessage> : null}
-              {!copilotRunning && copilotLockReason ? (
-                <StatusMessage tone="warning">{copilotLockReason}</StatusMessage>
-              ) : null}
-              {copilotPatchDisabledReason ? (
-                <StatusMessage tone="warning">{copilotPatchDisabledReason}</StatusMessage>
-              ) : null}
-              <div className="copilot-actions">
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  disabled={submitting || copilotLocked || Boolean(copilotPatchDisabledReason)}
-                  onClick={() => onCopilotCommand("shorten-copy")}
-                >
-                  <WandSparkles size={13} />
-                  缩短文案
+        <section
+          className="slot-inspector__pane slot-inspector__copilot"
+          aria-label="AI Copilot"
+          hidden={activePane !== "copilot"}
+        >
+            <p className="visually-hidden">写入动作只调整当前槽位；检查与解释只返回建议</p>
+            {copilotRunning ? (
+              <StatusMessage className="copilot-status">
+                <span>
+                  <LoaderCircle className="spin" size={14} />
+                  Copilot 正在处理当前槽位请求
+                </span>
+                <Button variant="secondary" onClick={onCancelCopilot}>
+                  <Square size={13} />
+                  取消请求
                 </Button>
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  disabled={submitting || copilotLocked || Boolean(copilotPatchDisabledReason)}
-                  onClick={() => onCopilotCommand("strengthen-evidence")}
-                >
-                  <WandSparkles size={13} />
-                  强化证据
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  disabled={submitting || copilotLocked || Boolean(copilotPatchDisabledReason)}
-                  onClick={() => onCopilotCommand("adapt-platform")}
-                >
-                  <WandSparkles size={13} />
-                  适配平台
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  disabled={submitting || copilotLocked || Boolean(copilotDisabledReason)}
-                  onClick={() => onCopilotCommand("check-compliance")}
-                >
-                  <ShieldAlert size={13} />
-                  检查 Prompt
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  disabled={submitting || copilotLocked || Boolean(copilotDisabledReason)}
-                  onClick={() => onCopilotCommand("explain-next")}
-                >
-                  <Bot size={13} />
-                  解释下一步
-                </Button>
-              </div>
-            </section>
-          </div>
+              </StatusMessage>
+            ) : null}
+            {copilotError ? <StatusMessage tone="danger">{copilotError}</StatusMessage> : null}
+            {copilotMessage ? <StatusMessage>{copilotMessage}</StatusMessage> : null}
+            {!copilotRunning && copilotLockReason ? (
+              <StatusMessage tone="warning">{copilotLockReason}</StatusMessage>
+            ) : null}
+            {copilotPatchDisabledReason ? (
+              <StatusMessage tone="warning">{copilotPatchDisabledReason}</StatusMessage>
+            ) : null}
+            <div className="copilot-actions">
+              <Button
+                variant="secondary"
+                size="compact"
+                disabled={submitting || copilotLocked || Boolean(copilotPatchDisabledReason)}
+                onClick={() => onCopilotCommand("shorten-copy")}
+              >
+                <WandSparkles size={13} />
+                缩短文案
+              </Button>
+              <Button
+                variant="secondary"
+                size="compact"
+                disabled={submitting || copilotLocked || Boolean(copilotPatchDisabledReason)}
+                onClick={() => onCopilotCommand("strengthen-evidence")}
+              >
+                <WandSparkles size={13} />
+                强化证据
+              </Button>
+              <Button
+                variant="secondary"
+                size="compact"
+                disabled={submitting || copilotLocked || Boolean(copilotPatchDisabledReason)}
+                onClick={() => onCopilotCommand("adapt-platform")}
+              >
+                <WandSparkles size={13} />
+                适配平台
+              </Button>
+              <Button
+                variant="secondary"
+                size="compact"
+                disabled={submitting || copilotLocked || Boolean(copilotDisabledReason)}
+                onClick={() => onCopilotCommand("check-compliance")}
+              >
+                <ShieldAlert size={13} />
+                检查 Prompt
+              </Button>
+              <Button
+                variant="secondary"
+                size="compact"
+                disabled={submitting || copilotLocked || Boolean(copilotDisabledReason)}
+                onClick={() => onCopilotCommand("explain-next")}
+              >
+                <Bot size={13} />
+                解释下一步
+              </Button>
+            </div>
         </section>
       </div>
 
@@ -602,23 +606,25 @@ export function SlotInspector({
         ariaLabel="槽位操作"
         secondary={
           <div className="slot-inspector__secondary-actions">
-            <Button
-              type="submit"
-              form="slot-inspector-form"
-              variant="secondary"
-              size="compact"
-              disabled={submitting || prompt.trim().length === 0}
-              title={
-                submitting
-                  ? "当前有保存、生成或策划刷新进行中。"
-                  : prompt.trim().length === 0
-                    ? "请先填写图片提示词再保存。"
-                    : undefined
-              }
-            >
-              <Save size={15} />
-              {busy ? "保存中…" : hasExternalText ? "保存外部文案与提示词" : "保存文案与提示词"}
-            </Button>
+            {activePane === "copy" ? (
+              <Button
+                type="submit"
+                form="slot-inspector-form"
+                variant="secondary"
+                size="compact"
+                disabled={submitting || prompt.trim().length === 0}
+                title={
+                  submitting
+                    ? "当前有保存、生成或策划刷新进行中。"
+                    : prompt.trim().length === 0
+                      ? "请先填写图片提示词再保存。"
+                      : undefined
+                }
+              >
+                <Save size={15} />
+                {busy ? "保存中…" : hasExternalText ? "保存外部文案与提示词" : "保存文案与提示词"}
+              </Button>
+            ) : null}
             {nextSlotAction && activeVersion ? (
               <GenerationActions
                 hasVersion
@@ -636,7 +642,8 @@ export function SlotInspector({
           nextSlotAction ? (
             <Button
               size="compact"
-              disabled={submitting}
+              disabled={submitting || draftDirty}
+              title={draftDirty ? "请先在“文案”中保存当前修改，再切换槽位。" : undefined}
               onClick={nextSlotAction.onSelect}
             >
               {nextSlotAction.label}

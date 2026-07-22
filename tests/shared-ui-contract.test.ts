@@ -94,6 +94,7 @@ describe("shared workbench primitives", () => {
         open: true,
         title: "连接与生成模式",
         eyebrow: "运行设置",
+        variant: "sidebar",
         onClose: () => undefined,
         children: createElement("p", null, "设置内容"),
       }),
@@ -127,6 +128,8 @@ describe("shared workbench primitives", () => {
     expect(field).toContain("field__hint");
     expect(dialog).toContain('role="dialog"');
     expect(dialog).toContain('aria-modal="true"');
+    expect(dialog).toContain("dialog--sidebar");
+    expect(dialog).toContain("关闭侧栏");
     expect(tooltip).toContain('data-tooltip="设置"');
     expect(status).toContain("status-message--warning");
     expect(buttons.match(/type="button"/g)).toHaveLength(2);
@@ -190,6 +193,20 @@ describe("shared workbench primitives", () => {
     expect(appShellSource).toContain("workspace");
     expect(appShellSource).toContain("desktop-only-gate");
     expect(appShellSource).toContain("PlatformRail");
+  });
+
+  it("keeps slot details under one inspector view owner", () => {
+    const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+    expect(slotInspectorSource).toContain("<SegmentedControl");
+    expect(slotInspectorSource).toContain('ariaLabel="槽位检查视图"');
+    expect(slotInspectorSource).toContain('hidden={activePane !== "versions"}');
+    expect(slotInspectorSource).toContain('hidden={activePane !== "checks"}');
+    expect(slotInspectorSource).toContain('hidden={activePane !== "copilot"}');
+    expect(slotInspectorSource).toContain("disabled={submitting || draftDirty}");
+    expect(slotInspectorSource).not.toContain("inspector-section__toggle");
+    expect(slotInspectorSource).not.toContain("slot-inspector__strategy-toggle");
+    expect(styles).toContain(".slot-inspector__views.segmented-control");
   });
 
 });

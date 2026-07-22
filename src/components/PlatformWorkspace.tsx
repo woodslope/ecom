@@ -32,6 +32,12 @@ import {
   getAmazonPrimaryAction,
   getAmazonStage,
 } from "../domain/workspace/amazon-stage";
+import {
+  getPlatformPrimaryAction,
+  getPlatformStage,
+  getPlatformStageIndex,
+  getPlatformStageLabel,
+} from "../domain/workspace/platform-stage";
 import type { WorkbenchAsset } from "../store/workbench-store";
 import {
   AmazonSessionControls,
@@ -45,6 +51,7 @@ import { ProductSourcePanel } from "./ProductSourcePanel";
 import { SlotBoard } from "./SlotBoard";
 import { SlotInspector } from "./SlotInspector";
 import { TaobaoMobilePreview } from "./TaobaoMobilePreview";
+import { WorkflowStepper } from "./WorkflowStepper";
 import type { GenerationTarget } from "./GenerationActions";
 import { Button, EmptyState, IconButton, Panel, StatusChip, StatusMessage } from "./ui";
 
@@ -84,6 +91,7 @@ export function PlatformWorkspace({
   exportError = null,
   onCreate,
   onOpenLibrary,
+  onOpenProductPicker,
   onRequestUpload,
   onSave,
   onUpload,
@@ -107,6 +115,7 @@ export function PlatformWorkspace({
   onCancelCopilot = () => undefined,
   onWorkspaceDirtyChange = () => undefined,
   onStartBatch,
+  onOpenHistory,
   batchJob,
 }: {
   platform: PlatformId;
@@ -134,6 +143,7 @@ export function PlatformWorkspace({
   exportError?: string | null;
   onCreate: () => void;
   onOpenLibrary?: () => void;
+  onOpenProductPicker?: () => void;
   onRequestUpload?: () => void;
   onSave: (input: UpdateProductProjectInput) => Promise<boolean>;
   onUpload: (files: File[]) => Promise<void>;
@@ -167,6 +177,7 @@ export function PlatformWorkspace({
   onCancelCopilot?: () => void;
   onWorkspaceDirtyChange?: (reason: string | null) => void;
   onStartBatch?: () => void;
+  onOpenHistory?: () => void;
   batchJob?: ExecutionJob;
 }) {
   const rulePack = resolveRulePackForPlan(platform, plan);
@@ -175,10 +186,28 @@ export function PlatformWorkspace({
     isAmazon ? plan : null,
     isAmazon ? amazonPlannerMode : undefined,
   );
+  const [amazonModeSwitchWarning, setAmazonModeSwitchWarning] = useState<string | null>(null);
   const changeAmazonSession = async (next: typeof amazonSession) => {
     if (next.plannerMode !== amazonSession.plannerMode) {
       const switched = await onAmazonPlannerModeChange(next.plannerMode);
-      if (!switched) return;
+      if (!switched) {
+        const reason =
+          planningPlatformId
+            ? `${getPlatformRulePack(planningPlatformId).label} 正在策划，请完成或取消后再切换 Listing / A+。`
+            : generatingSlot
+              ? "当前有图片生成任务，请完成后再切换 Listing / A+。"
+              : copilotTarget
+                ? "Copilot 请求处理中，请完成后再切换 Listing / A+。"
+                : exporting
+                  ? "交付包导出中，请完成后再切换 Listing / A+。"
+                  : generationRecoveryRequired
+                    ? "图片版本待恢复，请先重试恢复后再切换 Listing / A+。"
+                    : "Listing / A+ 模式切换未完成，请稍后重试。";
+        setAmazonModeSwitchWarning(reason);
+        return;
+      }
+      setAmazonModeSwitchWarning(null);
+      return;
     }
     setAmazonSession(next);
   };
@@ -229,6 +258,27 @@ export function PlatformWorkspace({
   const amazonPrimaryAction = liveProductionSession && !planNeedsRefresh
     ? getAmazonPrimaryAction(liveProductionSession)
     : undefined;
+  const platformStage = getPlatformStage({
+    platform,
+    session: productionSession,
+    plan,
+    hasTaobaoAnalysis: Boolean(productionSession?.taobaoAnalysis),
+    slotVersions: slotVersionStates,
+    planInputSignature: currentPlanInputSignature,
+    selectedSlotKey,
+  });
+  const platformPrimaryAction =
+    !planNeedsRefresh
+      ? getPlatformPrimaryAction({
+          platform,
+          session: productionSession,
+          plan,
+          hasTaobaoAnalysis: Boolean(productionSession?.taobaoAnalysis),
+          slotVersions: slotVersionStates,
+          planInputSignature: currentPlanInputSignature,
+          selectedSlotKey,
+        })
+      : undefined;
   const selectedSlot = plan?.slots.find((slot) => slot.slotKey === selectedSlotKey);
   const selectedRule = rulePack.slots.find((slot) => slot.key === selectedSlot?.slotKey);
   const complianceResult =
@@ -324,6 +374,7 @@ export function PlatformWorkspace({
   const [sourceDirty, setSourceDirty] = useState(false);
   const [slotDirty, setSlotDirty] = useState(false);
   const [taobaoPreviewOpen, setTaobaoPreviewOpen] = useState(false);
+  const [slotSwitchWarning, setSlotSwitchWarning] = useState<string | null>(null);
   // Shell v1: after a plan exists, keep the middle+right stage primary.
   const [sourceCollapsed, setSourceCollapsed] = useState(() =>
     shouldDefaultCollapseSource(
@@ -366,6 +417,9 @@ export function PlatformWorkspace({
     onWorkspaceDirtyChange(draftReason);
     return () => onWorkspaceDirtyChange(null);
   }, [draftReason, onWorkspaceDirtyChange]);
+  useEffect(() => {
+    if (!slotDirty) setSlotSwitchWarning(null);
+  }, [slotDirty]);
   const planDisabledReason = draftReason ?? (!activeProject
     ? "请先在资料库创建或选择商品资料"
     : loading
@@ -436,8 +490,12 @@ export function PlatformWorkspace({
         source: {
           title: activeProject ? "下一步：上传参考图" : "下一步：准备商品资料",
           description: activeProject
-            ? "左侧可粘贴 Listing 并上传参考图；完整多项目管理在「资料库」。"
-            : "在资料库新建档案，或在此创建后进入 Amazon Listing / A+。",
+            ? isAmazon
+              ? "左侧可粘贴 Listing 并上传参考图；完整多项目管理在「资料库」。"
+              : "左侧可补充商品资料并上传参考图；完整多项目管理在「资料库」。"
+            : isAmazon
+              ? "在资料库新建档案，或在此创建后进入 Amazon Listing / A+。"
+              : "请先在资料库建立商品档案，再进入淘宝商品生产包。",
           onClick: activeProject ? requestUpload : onCreate,
         },
         plan: {
@@ -445,7 +503,7 @@ export function PlatformWorkspace({
             ? amazonSession.plannerMode === "aplus"
               ? "下一步：AI 策划 A+ 模块"
               : "下一步：AI 策划 Listing 图"
-            : "下一步：AI 策划淘宝商品生产包",
+            : "下一步：AI 策划",
           description: isAmazon
             ? `按上方模式生成 ${plannedSlotCount} 个${amazonSession.plannerMode === "aplus" ? " A+" : " Listing"} 槽位（站点 / 张数 / 风格可在「调整参数」中修改）。`
             : "固定生成 5 张主图和 7 张详情图，槽位顺序与规则由商品生产包统一管理。",
@@ -453,37 +511,28 @@ export function PlatformWorkspace({
         },
         generate: {
           title: completedSlots === 0 ? "下一步：生成第一张图片" : "下一步：继续生成下一张",
-          description: "中间选槽位，右侧改 Prompt 后逐张生成；可随时切换 Listing / A+ 模式并重新策划。",
+          description: isAmazon
+            ? "中间选槽位，右侧改 Prompt 后逐张生成；可随时切换 Listing / A+ 模式并重新策划。"
+            : "中间选槽位，右侧改 Prompt 后逐张生成；也可一键批量生成剩余主图与详情图。",
           onClick: () => nextSlotKey && onGenerateSlot(nextSlotKey),
         },
         deliver: {
           title: completedSlots === (plan?.slots.length ?? 0) ? "下一步：导出交付包" : "下一步：检查并导出",
-          description: `${completedSlots} / ${plan?.slots.length ?? 0} 已有活动版本。历史任务在左侧「任务历史」。`,
+          description: isAmazon
+            ? `${completedSlots} / ${plan?.slots.length ?? 0} 已有活动版本。历史任务在左侧「任务历史」。`
+            : `${completedSlots} / ${plan?.slots.length ?? 0} 已有活动版本。可用手机预览检查版式，历史任务在「生产记录」。`,
           onClick: onExport,
         },
       }[workflowStage]
     : null;
 
   const displayedAmazonStage = planNeedsRefresh ? "review" : amazonStage;
-  const stageShort = displayedAmazonStage === "prepare"
-    ? "准备"
-    : displayedAmazonStage === "review"
-      ? "策划检查"
-      : displayedAmazonStage === "produce"
-        ? "逐图生产"
-        : displayedAmazonStage === "deliver"
-          ? "交付检查"
-          : null;
-  const stageIndex = displayedAmazonStage === "prepare"
-    ? 1
-    : displayedAmazonStage === "review"
-      ? 2
-      : displayedAmazonStage === "produce"
-        ? 3
-        : displayedAmazonStage === "deliver"
-          ? 4
-          : 0;
+  void displayedAmazonStage;
 
+  const displayedStage = planNeedsRefresh ? "review" : platformStage;
+  const sharedStageLabel = getPlatformStageLabel(displayedStage);
+  const sharedStageIndex = getPlatformStageIndex(displayedStage);
+  const inspectorPrimaryAction = isAmazon ? amazonPrimaryAction : platformPrimaryAction;
   return (
     <div className="platform-workspace-view platform-workspace-view--production-shell">
       {isAmazon ? (
@@ -498,11 +547,9 @@ export function PlatformWorkspace({
               ) : (
                 <StatusChip tone="neutral">主路径</StatusChip>
               )}
-              {stageShort ? (
-                <span className="workbench-chrome__step" aria-label={`当前步骤 ${stageIndex} / 4`}>
-                  {stageIndex}/4 · {stageShort}
-                </span>
-              ) : null}
+              <span className="workbench-chrome__step" aria-label={`当前步骤 ${sharedStageIndex} / 4`}>
+                {sharedStageIndex}/4 · {sharedStageLabel}
+              </span>
             </div>
             <AmazonSessionControls
               value={amazonSession}
@@ -530,8 +577,25 @@ export function PlatformWorkspace({
                   title={batchActionDisabled ? "当前没有可批量生成的槽位，或已有任务正在执行。" : undefined}
                   onClick={onStartBatch}
                 >
-                  {batchJob?.status === "running" ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}
-                  {batchJob?.status === "running" ? "批量执行中" : `批量生成剩余槽位（${pendingSlotCount}）`}
+                  {batchJob?.status === "running" || batchJob?.status === "queued" ? (
+                    <LoaderCircle className="spin" size={15} />
+                  ) : (
+                    <Sparkles size={15} />
+                  )}
+                  {batchJob && (batchJob.status === "running" || batchJob.status === "queued" || batchJob.status === "paused")
+                    ? `批量 ${batchJob.progress.completed}/${batchJob.progress.total} · ${
+                        batchJob.status === "running"
+                          ? "执行中"
+                          : batchJob.status === "queued"
+                            ? "排队"
+                            : "已暂停"
+                      }`
+                    : `批量生成剩余槽位（${pendingSlotCount}）`}
+                </Button>
+              ) : null}
+              {batchJob && onOpenHistory ? (
+                <Button variant="secondary" size="compact" onClick={onOpenHistory}>
+                  查看任务
                 </Button>
               ) : null}
               <Button
@@ -560,100 +624,122 @@ export function PlatformWorkspace({
               ) : null}
             </div>
           ) : null}
+          <WorkflowStepper
+            platform="amazon"
+            stage={displayedStage}
+            completedSlots={completedSlots}
+            totalSlots={plan?.slots.length ?? 0}
+          />
         </header>
       ) : (
         <>
-          <div className="workbench-toolbar">
-          <div className="workbench-toolbar__title" data-workflow-id="taobao-product">
-            <h1>淘宝 / 天猫</h1>
-            {plan ? (
-              <StatusChip tone="mode">
-                {plan.source === "demo" ? "Demo" : "API"}
-              </StatusChip>
-            ) : (
-              <StatusChip tone="neutral">商品生产包</StatusChip>
-            )}
-            </div>
-            <div className="workbench-toolbar__actions">
-              {plan ? (
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  onClick={() => setTaobaoPreviewOpen(true)}
-                >
-                  <Smartphone size={15} />
-                  手机预览
-                </Button>
-              ) : null}
-              {plan ? (
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  disabled={batchActionDisabled}
-                  title={batchActionDisabled ? "当前没有可批量生成的槽位，或已有任务正在执行。" : undefined}
-                  onClick={onStartBatch}
-                >
-                  {batchJob?.status === "running" ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}
-                  {batchJob?.status === "running" ? "批量执行中" : `批量生成剩余槽位（${pendingSlotCount}）`}
-                </Button>
-              ) : null}
-              <Button
-                variant="secondary"
-                size="compact"
-                aria-expanded={!sourceCollapsed}
-                aria-controls="workbench-source-column"
-                onClick={() => setSourceCollapsed((value) => !value)}
-              >
-                <FileText size={15} />
-                {sourceCollapsed ? "展开资料" : "收起资料"}
-              </Button>
-              <Button
-                variant="primary"
-                disabled={planActionDisabled}
-                title={planDisabledReason}
-                aria-describedby={planDescriptionId}
-                onClick={runAmazonPlan}
-              >
-                {planning ? (
-                  <LoaderCircle className="spin" size={16} />
-                ) : plan ? (
-                  <RotateCcw size={16} />
-              ) : (
-                <Sparkles size={16} />
-              )}
-                {planning
-                  ? "正在策划..."
-                  : plan
-                    ? "重新策划"
-                    : isAmazon
-                      ? "AI 策划"
-                      : "AI 策划淘宝商品生产包"}
-              </Button>
-            </div>
-          </div>
-          {workflowStage && workflowAction ? (
-            <section className="amazon-workflow" aria-label={isAmazon ? "平台工作流程" : "淘宝商品生产包流程"}>
-              {!isAmazon ? (
-                <div className="taobao-workflow__fixed">
-                  <strong>固定图组</strong>
-                  <span>5 张主图 + 7 张详情图</span>
-                </div>
-              ) : null}
-              <div className="amazon-workflow__next">
-                <div>
-                  <strong>{workflowAction.title}</strong>
-                  <span>{workflowAction.description}</span>
-                </div>
-                {workflowAction.onClick ? (
-                  <Button disabled={workflowActionDisabled} onClick={workflowAction.onClick}>
-                    {workflowAction.title}
+          <header className="workbench-chrome" aria-label="淘宝工作台顶栏">
+            <div className="workbench-chrome__main">
+              <div className="workbench-chrome__brand">
+                <h1>淘宝 / 天猫</h1>
+                {plan ? (
+                  <StatusChip tone="mode">
+                    {plan.source === "demo" ? "Demo" : "API"}
+                  </StatusChip>
+                ) : (
+                  <StatusChip tone="neutral">商品生产包</StatusChip>
+                )}
+              <span className="workbench-chrome__step" aria-label={`当前步骤 ${sharedStageIndex} / 4`}>
+                {sharedStageIndex}/4 · {sharedStageLabel}
+              </span>
+              </div>
+              <div className="workbench-chrome__tools">
+                {plan ? (
+                  <Button
+                    variant="secondary"
+                    size="compact"
+                    onClick={() => setTaobaoPreviewOpen(true)}
+                  >
+                    <Smartphone size={15} />
+                    手机预览
                   </Button>
                 ) : null}
+                {plan ? (
+                  <Button
+                    variant="secondary"
+                    size="compact"
+                    disabled={batchActionDisabled}
+                    title={batchActionDisabled ? "当前没有可批量生成的槽位，或已有任务正在执行。" : undefined}
+                    onClick={onStartBatch}
+                  >
+                    {batchJob?.status === "running" || batchJob?.status === "queued" ? (
+                      <LoaderCircle className="spin" size={15} />
+                    ) : (
+                      <Sparkles size={15} />
+                    )}
+                    {batchJob && (batchJob.status === "running" || batchJob.status === "queued" || batchJob.status === "paused")
+                      ? `批量 ${batchJob.progress.completed}/${batchJob.progress.total} · ${
+                          batchJob.status === "running"
+                            ? "执行中"
+                            : batchJob.status === "queued"
+                              ? "排队"
+                              : "已暂停"
+                        }`
+                      : `批量生成剩余槽位（${pendingSlotCount}）`}
+                  </Button>
+                ) : null}
+                {batchJob && onOpenHistory ? (
+                  <Button variant="secondary" size="compact" onClick={onOpenHistory}>
+                    查看任务
+                  </Button>
+                ) : null}
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  aria-expanded={!sourceCollapsed}
+                  aria-controls="workbench-source-column"
+                  onClick={() => setSourceCollapsed((value) => !value)}
+                >
+                  <FileText size={15} />
+                  {sourceCollapsed ? "资料" : "收起资料"}
+                </Button>
+                <Button
+                  variant={plan ? "secondary" : "primary"}
+                  size="compact"
+                  disabled={planActionDisabled}
+                  title={planDisabledReason}
+                  aria-describedby={planDescriptionId}
+                  onClick={runAmazonPlan}
+                >
+                  {planning ? (
+                    <LoaderCircle className="spin" size={15} />
+                  ) : plan ? (
+                    <RotateCcw size={15} />
+                  ) : (
+                    <Sparkles size={15} />
+                  )}
+                  {planning ? "正在策划..." : plan ? "重新策划" : "AI 策划"}
+                </Button>
               </div>
-            </section>
-          ) : null}
+            </div>
+            {!plan ? (
+              <div className="workbench-chrome__onboarding">
+                <span>固定图组 5 主图 + 7 详情。有分析后可直接策划；入口「分析并策划」会一并完成分析与策划。</span>
+              </div>
+            ) : null}
+            <WorkflowStepper
+              platform="taobao"
+              stage={displayedStage}
+              completedSlots={completedSlots}
+              totalSlots={plan?.slots.length ?? 0}
+            />
+          </header>
         </>
       )}
+
+      {amazonModeSwitchWarning ? (
+        <StatusMessage tone="warning" className="amazon-mode-switch-warning">
+          <span>{amazonModeSwitchWarning}</span>
+          <IconButton label="关闭模式切换提示" onClick={() => setAmazonModeSwitchWarning(null)}>
+            <X size={15} />
+          </IconButton>
+        </StatusMessage>
+      ) : null}
 
       {planningPlatformId ? (
         <StatusMessage
@@ -678,6 +764,10 @@ export function PlatformWorkspace({
         <StatusMessage id="workspace-draft-status" tone="warning">
           {draftReason}
         </StatusMessage>
+      ) : null}
+
+      {slotSwitchWarning ? (
+        <StatusMessage tone="warning">{slotSwitchWarning}</StatusMessage>
       ) : null}
 
       {planRefreshReason ? (
@@ -736,11 +826,21 @@ export function PlatformWorkspace({
               eyebrow="需要商品资料"
               icon={<ImagePlus size={24} />}
               title="还没有载入商品资料"
-              description="平台工作区只负责图组制作。先在资料库建立商品档案，再回来生成当前平台的策划。"
+              description="平台工作区只负责图组制作。先选择或新建商品档案，再回来生成当前平台的策划。"
               action={
                 <div className="platform-empty-actions">
+                  {onOpenProductPicker ? (
+                    <Button onClick={onOpenProductPicker}>
+                      <PackageOpen size={15} />
+                      选择商品
+                    </Button>
+                  ) : null}
+                  <Button variant="secondary" onClick={onCreate}>
+                    <Sparkles size={15} />
+                    新建商品
+                  </Button>
                   {onOpenLibrary ? (
-                    <Button onClick={onOpenLibrary}>
+                    <Button variant="secondary" onClick={onOpenLibrary}>
                       <Upload size={15} />
                       打开资料库
                     </Button>
@@ -766,7 +866,11 @@ export function PlatformWorkspace({
               planningInputSignature={currentPlanInputSignature}
               disabled={planning || loading}
               onSelect={(slotKey) => {
-                if (slotDirty) return;
+                if (slotDirty) {
+                  setSlotSwitchWarning("当前槽位有未保存修改，请先保存文案与提示词，再切换槽位。");
+                  return;
+                }
+                setSlotSwitchWarning(null);
                 onSelectSlot(slotKey);
               }}
             />
@@ -859,14 +963,16 @@ export function PlatformWorkspace({
               onCopilotCommand={(command) => onCopilotCommand(selectedSlot.slotKey, command)}
               onCancelCopilot={onCancelCopilot}
               nextSlotAction={
-                amazonPrimaryAction?.kind === "select"
+                inspectorPrimaryAction?.kind === "select"
                   ? {
-                      label: amazonPrimaryAction.label,
-                      onSelect: () => onSelectSlot(amazonPrimaryAction.slotKey),
+                      label: inspectorPrimaryAction.label,
+                      onSelect: () => onSelectSlot(inspectorPrimaryAction.slotKey),
                     }
                   : undefined
               }
-              generationActionVariant={amazonStage === "deliver" ? "secondary" : "primary"}
+              generationActionVariant={
+                (isAmazon ? amazonStage : platformStage) === "deliver" ? "secondary" : "primary"
+              }
             />
           </Panel>
         ) : (

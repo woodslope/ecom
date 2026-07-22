@@ -60,6 +60,14 @@ export function commitAnalysis(
   };
 }
 
+/** Drop analysis so the Taobao intake can reopen; keep source inputs and any prior plan. */
+export function clearTaobaoAnalysis(session: PlatformSession, now: string): PlatformSession {
+  const next = structuredClone(session);
+  delete next.taobaoAnalysis;
+  next.updatedAt = now;
+  return next;
+}
+
 export function commitPlan(input: PlanCommitInput): {
   session: PlatformSession;
   run: ProductionRun;

@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { ChevronDown, FileText, Images } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { FileText, Images } from "lucide-react";
 
 import type { ProductProject } from "../domain/projects/types";
 import { getAPlusContentTypeLabel } from "../domain/platforms/amazon-catalog";
@@ -12,7 +12,8 @@ import type {
 import type { StartAmazonSessionInput, WorkbenchAsset } from "../store/workbench-store";
 import type { StyleReferenceDraft } from "../domain/assets/style-reference";
 import { AmazonIntake } from "./AmazonIntake";
-import { StatusMessage } from "./ui";
+import { ProductContextBar } from "./ProductContextBar";
+import { Dialog, StatusMessage } from "./ui";
 
 function sessionModeLabel(session: PlatformSession): string {
   if (session.options.platformId !== "amazon") return "Amazon";
@@ -24,12 +25,16 @@ function sessionModeLabel(session: PlatformSession): string {
   } 个模块`;
 }
 
-function AmazonSessionSummary({
+export function AmazonSessionSummary({
+  open,
   session,
   assets,
+  onClose,
 }: {
+  open: boolean;
   session: PlatformSession;
   assets: WorkbenchAsset[];
+  onClose: () => void;
 }) {
   if (session.options.platformId !== "amazon") return null;
   const options = session.options;
@@ -42,15 +47,17 @@ function AmazonSessionSummary({
     "默认风格";
 
   return (
-    <details className="amazon-session-summary">
-      <summary>
-        <FileText size={16} aria-hidden="true" />
-        <strong>本次任务输入</strong>
-        <span>
-          {sessionModeLabel(session)} · {getAmazonMarketplaceLabel(options.marketplaceId)} · {options.sizeTier}
-        </span>
-        <ChevronDown size={16} aria-hidden="true" />
-      </summary>
+    <Dialog
+      open={open}
+      title="本次任务输入"
+      eyebrow="Amazon 商品上下文"
+      variant="sidebar"
+      className="amazon-session-summary"
+      onClose={onClose}
+    >
+      <StatusMessage>
+        {sessionModeLabel(session)} · {getAmazonMarketplaceLabel(options.marketplaceId)} · {options.sizeTier}
+      </StatusMessage>
       <div className="amazon-session-summary__body">
         <section>
           <strong>Listing 原文</strong>
@@ -73,7 +80,7 @@ function AmazonSessionSummary({
       {session.styleReferenceNotice ? (
         <StatusMessage tone="warning">{session.styleReferenceNotice}</StatusMessage>
       ) : null}
-    </details>
+    </Dialog>
   );
 }
 
@@ -87,6 +94,9 @@ export function AmazonWorkspace({
   error,
   onStartSession,
   onSyncListingFacts,
+  onOpenLibrary,
+  onOpenProductPicker,
+  onWorkspaceDirtyChange,
   onCreateStyleReference = async () => null,
   onRemoveAsset = async () => undefined,
   children,
@@ -100,31 +110,55 @@ export function AmazonWorkspace({
   error: string | null;
   onStartSession: (input: StartAmazonSessionInput) => Promise<PlatformSession | null>;
   onSyncListingFacts: (listingText: string) => Promise<boolean>;
+  onOpenLibrary?: () => void;
+  onOpenProductPicker?: () => void;
+  onWorkspaceDirtyChange?: (reason: string | null) => void;
   onCreateStyleReference?: (presetId: string, draft: Partial<StyleReferenceDraft>) => Promise<WorkbenchAsset | null>;
   onRemoveAsset?: (id: string) => Promise<void>;
   children: ReactNode;
 }) {
-  if (session?.plan) {
-    return (
-      <div className="amazon-workspace">
-        <AmazonSessionSummary session={session} assets={assets} />
-        {children}
-      </div>
-    );
-  }
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const statusLabel = session?.plan ? sessionModeLabel(session) : "准备资料";
+
   return (
-    <AmazonIntake
-      activeProject={activeProject}
-      assets={assets}
-      session={session}
-      plannerMode={plannerMode}
-      loading={loading}
-      planning={planning}
-      error={error}
-      onSubmit={onStartSession}
-      onSyncListingFacts={onSyncListingFacts}
-      onCreateStyleReference={onCreateStyleReference}
-      onRemoveAsset={onRemoveAsset}
-    />
+    <div className="amazon-workspace">
+      <ProductContextBar
+        platformLabel="Amazon"
+        project={activeProject}
+        statusLabel={statusLabel}
+        statusTone={session?.plan ? "success" : "neutral"}
+        detailLabel={session?.plan ? "任务输入" : undefined}
+        disabled={loading || planning}
+        onOpenDetails={session?.plan ? () => setSummaryOpen(true) : undefined}
+        onSwitchProduct={onOpenProductPicker}
+        onOpenLibrary={onOpenLibrary}
+      />
+      {session?.plan ? (
+        children
+      ) : (
+        <AmazonIntake
+          activeProject={activeProject}
+          assets={assets}
+          session={session}
+          plannerMode={plannerMode}
+          loading={loading}
+          planning={planning}
+          error={error}
+          onSubmit={onStartSession}
+          onSyncListingFacts={onSyncListingFacts}
+          onDirtyChange={onWorkspaceDirtyChange}
+          onCreateStyleReference={onCreateStyleReference}
+          onRemoveAsset={onRemoveAsset}
+        />
+      )}
+      {session?.plan ? (
+        <AmazonSessionSummary
+          open={summaryOpen}
+          session={session}
+          assets={assets}
+          onClose={() => setSummaryOpen(false)}
+        />
+      ) : null}
+    </div>
   );
 }

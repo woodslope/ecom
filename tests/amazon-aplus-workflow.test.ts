@@ -306,7 +306,7 @@ describe("Amazon A+ workflow", () => {
     expect(amazonControlsMatchPlan({ ...controls, marketplaceId: "jp" }, plan)).toBe(false);
   });
 
-  it("keeps a planned A+ module list read-only until the user enters adjustment mode", async () => {
+  it("keeps one compact A+ module owner before and after planning", async () => {
     const plan = await demoPlanner.plan(
       facts,
       amazonRulePack,
@@ -326,9 +326,11 @@ describe("Amazon A+ workflow", () => {
       }),
     );
 
-    expect(prepareMarkup).toContain("删除第 1 个模块");
-    expect(plannedMarkup).toContain("当前策划模块只读");
-    expect(plannedMarkup).toContain("调整模块");
+    expect(prepareMarkup).toContain("策划时按此顺序生成槽位");
+    expect(prepareMarkup).toContain("编排模块");
+    expect(prepareMarkup).not.toContain("删除第 1 个模块");
+    expect(plannedMarkup).toContain("应用修改后需重新策划");
+    expect(plannedMarkup).toContain("编排模块");
     expect(plannedMarkup).not.toContain("删除第 1 个模块");
   });
 });

@@ -221,6 +221,33 @@ describe("generation UI contract", () => {
     expect(markup).toContain("请重新生成后再计入交付");
   });
 
+  it("renders one active slot-detail view instead of stacked accordions", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SlotInspector, {
+        rulePack: amazonRulePack,
+        slot: {
+          slotKey: "PT01",
+          visibleCopy: "Current copy",
+          strategy: "Current strategy",
+          evidence: ["Current evidence"],
+          prompt: "Current prompt",
+          negativePrompt: "Negative",
+        },
+        versionState,
+        assets,
+        onSave: async () => true,
+      }),
+    );
+
+    expect(markup).toContain('aria-label="槽位检查视图"');
+    expect(markup.match(/role="tab"/g)).toHaveLength(4);
+    expect(markup).toContain('aria-label="文案与提示词"');
+    expect(markup.match(/hidden=""/g)).toHaveLength(3);
+    expect(markup).toContain('aria-label="版本与图片工具" hidden=""');
+    expect(markup).toContain('aria-label="策划与合规检查" hidden=""');
+    expect(markup).not.toContain('aria-expanded=');
+  });
+
   it("shows a current generated version as complete instead of keeping the planning gap badge", () => {
     const currentVersionState: SlotVersionState = {
       ...versionState,

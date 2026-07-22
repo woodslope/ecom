@@ -67,12 +67,14 @@ export function TaobaoMobilePreview({
   }, [defaultGalleryKey, open, sourceId]);
 
   const selectedGallery = model.gallery.find((item) => item.slotKey === selectedGalleryKey) ?? model.gallery[0];
+  const missingGalleryCount = model.gallery.filter((item) => item.missing).length;
+  const missingDetailCount = model.details.filter((item) => item.missing).length;
 
   return (
     <Dialog
       open={open}
       title="淘宝手机商品页预览"
-      eyebrow={source === "run" ? "历史快照" : "当前 session"}
+      eyebrow={source === "run" ? "历史快照" : "当前商品"}
       className="taobao-preview-dialog"
       onClose={onClose}
       footer={
@@ -97,11 +99,17 @@ export function TaobaoMobilePreview({
             <Smartphone size={18} aria-hidden="true" />
             <strong>{title}</strong>
           </div>
-          <code>{sourceId}</code>
           {model.missingSlots.length > 0 ? (
-            <StatusMessage tone="warning">
-              缺少 {model.missingSlots.length} 个槽位：{model.missingSlots.join("、")}
-            </StatusMessage>
+            <div className="taobao-preview-meta__readiness">
+              <StatusMessage tone="warning" className="taobao-preview-meta__summary">
+                <strong>还需完成 {model.missingSlots.length} 个槽位</strong>
+                <span>头图 {missingGalleryCount} 个 · 详情 {missingDetailCount} 个</span>
+              </StatusMessage>
+              <details className="taobao-preview-meta__details">
+                <summary>查看槽位明细</summary>
+                <span>{model.missingSlots.join("、")}</span>
+              </details>
+            </div>
           ) : (
             <StatusMessage tone="success">主图与详情图已完整。</StatusMessage>
           )}

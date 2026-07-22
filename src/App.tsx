@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Check, FolderOpen, PackageOpen, RefreshCw, X } from "lucide-react";
 
 import { AppShell } from "./components/AppShell";
@@ -9,23 +9,46 @@ import {
   GenerationFailureStatus,
   GenerationTaskStatus,
 } from "./components/GenerationActions";
+import { GlobalAssetUpload } from "./components/GlobalAssetUpload";
+import { ConfirmLeaveDialog } from "./components/ConfirmLeaveDialog";
 import { LibraryView } from "./components/LibraryView";
 import { platformIdForWorkflow } from "./components/PlatformProgress";
 import { PlatformWorkspace } from "./components/PlatformWorkspace";
 import { ProjectDialog } from "./components/ProjectDialog";
+import {
+  PlatformProductPickerDialog,
+  type PlatformProductPickerChoice,
+} from "./components/PlatformProductPickerDialog";
 import { TaskHistoryArchive } from "./components/TaskHistory";
 import { TaobaoWorkspace } from "./components/TaobaoWorkspace";
-import { Badge, Button, EmptyState, IconButton, StatusMessage } from "./components/ui";
+import { Button, Dialog, EmptyState, IconButton, StatusChip, StatusMessage } from "./components/ui";
 import type { NavigationItemId } from "./domain/platforms/types";
 import type { ExecutionJob } from "./domain/jobs/types";
 import type { HistoryQueryService } from "./domain/history/query";
 import { getPlatformRulePack } from "./domain/platforms/registry";
+import { hasUsableProductFacts } from "./domain/projects/product-source-text";
 import type { ProductProject, UpdateProductProjectInput } from "./domain/projects/types";
 import { runtimeSupportsImageEditing, type RuntimeMode } from "./domain/settings";
 import type { PlatformWorkflowId } from "./domain/workspace/project-workspace";
 import type { ProductionRunRecord } from "./domain/tasks";
-import { readLastPlatformOrDefault, writeLastPlatform } from "./domain/workspace/preferences";
+import {
+  OVERVIEW_EMPTY_STATUS,
+  resolveOverviewNextAction,
+} from "./domain/workspace/overview-guidance";
+import {
+  hasPlatformTaskWork,
+  shouldPromptPlatformProductPicker,
+} from "./domain/workspace/platform-product-picker";
+import {
+  readAmazonDraftProjectConfirmSkip,
+  readDemoModeBannerDismissed,
+  readLastPlatformOrDefault,
+  writeAmazonDraftProjectConfirmSkip,
+  writeDemoModeBannerDismissed,
+  writeLastPlatform,
+} from "./domain/workspace/preferences";
 import { useWorkbenchStore, type WorkbenchAsset } from "./store/workbench-store";
+import type { StartAmazonSessionInput } from "./store/workbench-store";
 
 function initialNavigationItem(): NavigationItemId {
   if (typeof window === "undefined") return "amazon";
@@ -38,6 +61,7 @@ function Overview({
   assetCount,
   generatedCount,
   runtimeMode,
+  preferredPlatform,
   onOpenPlatform,
 }: {
   projects: ProductProject[];
@@ -45,25 +69,14 @@ function Overview({
   assetCount: number;
   generatedCount: number;
   runtimeMode: RuntimeMode;
+  preferredPlatform: "taobao" | "amazon";
   onOpenPlatform: (platformId: "taobao" | "amazon" | "library") => void;
 }) {
-  const nextAction = !activeProject
-    ? {
-        title: "从资料库建立商品档案",
-        actionLabel: "进入资料库",
-        onAction: () => onOpenPlatform("library"),
-      }
-    : assetCount === 0
-      ? {
-          title: "补参考图后进入 Amazon 出图",
-          actionLabel: "进入 Amazon",
-          onAction: () => onOpenPlatform("amazon"),
-        }
-      : {
-          title: "Amazon：选 Listing 或 A+ 后策划出图",
-          actionLabel: "进入 Amazon",
-          onAction: () => onOpenPlatform("amazon"),
-        };
+  const nextAction = resolveOverviewNextAction({
+    hasActiveProject: Boolean(activeProject),
+    assetCount,
+    preferredPlatform,
+  });
 
   return (
     <div className="overview-view">
@@ -76,23 +89,17 @@ function Overview({
                 ? `资料 ${projects.length} · 参考图 ${assetCount} · 生成图 ${generatedCount} · ${
                     runtimeMode === "api" ? "API" : "演示"
                   }`
-                : "资料库建档 → Amazon 分模式策划 → 逐图生成 → 导出"}
+                : OVERVIEW_EMPTY_STATUS}
               {runtimeMode === "api" ? (
                 <span className="visually-hidden">当前浏览器保存的 API 配置</span>
               ) : null}
             </p>
-            {/* keep metric hook for any residual tests */}
-            <div className="metric metric--yellow visually-hidden" aria-hidden="true">
-              <span>运行模式</span>
-              <strong>{runtimeMode === "api" ? "API" : "演示"}</strong>
-              <p>
-                {runtimeMode === "api" ? "当前浏览器保存的 API 配置" : "不会调用外部模型"}
-              </p>
-            </div>
           </div>
           <div className="overview-next-action overview-next-action--compact">
             <strong>{nextAction.title}</strong>
-            <Button onClick={nextAction.onAction}>{nextAction.actionLabel}</Button>
+            <Button onClick={() => onOpenPlatform(nextAction.destination)}>
+              {nextAction.actionLabel}
+            </Button>
           </div>
         </div>
         <div className="overview-top-grid overview-platform-entry">
@@ -121,6 +128,35 @@ function Overview({
             </span>
           </button>
         </div>
+
+        {activeProject ? (
+          <div className="overview-metrics" aria-label="工作台摘要">
+            <div className="metric metric--blue">
+              <span>商品档案</span>
+              <strong className="metric__text-value">{projects.length}</strong>
+              <p>共享商品事实</p>
+            </div>
+            <div className="metric metric--neutral">
+              <span>参考图</span>
+              <strong>{assetCount}</strong>
+              <p>可用于平台策划</p>
+            </div>
+            <div className="metric metric--green">
+              <span>已生成</span>
+              <strong>{generatedCount}</strong>
+              <p>当前浏览器中的结果</p>
+            </div>
+            <div className="metric metric--yellow">
+              <span>运行模式</span>
+              <strong className="metric__text-value">
+                {runtimeMode === "api" ? "API" : "演示"}
+              </strong>
+              <p>
+                {runtimeMode === "api" ? "当前浏览器保存的 API 配置" : "不会调用外部模型"}
+              </p>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {projects.length === 0 ? (
@@ -134,7 +170,11 @@ function Overview({
             <ul className="empty-state__checklist empty-state__checklist--horizontal">
               <li><Check size={15} />建立商品档案</li>
               <li><Check size={15} />上传参考素材</li>
-              <li><Check size={15} />进入平台制作</li>
+              {preferredPlatform === "taobao" ? (
+                <li><Check size={15} />分析并策划淘宝图组</li>
+              ) : (
+                <li><Check size={15} />进入 Amazon 策划出图</li>
+              )}
             </ul>
           }
           action={<Button onClick={() => onOpenPlatform("library")}>进入资料库</Button>}
@@ -173,10 +213,22 @@ function HistoryView({
   onExportRun: (record: ProductionRunRecord) => void;
   historyQueryService: HistoryQueryService | null;
 }) {
+  const activeJobCount = jobs.filter((job) =>
+    job.status === "queued" || job.status === "running" || job.status === "paused",
+  ).length;
+
   return (
     <div className="simple-view">
       <div className="workbench-toolbar">
-        <h1>生产记录</h1>
+        <div className="workbench-toolbar__title-block">
+          <h1>生产记录</h1>
+          <span>查看批量任务、历史 Run 与交付结果</span>
+        </div>
+        <div className="workbench-toolbar__actions">
+          <StatusChip tone={activeJobCount > 0 ? "info" : "neutral"}>
+            {activeJobCount > 0 ? `${activeJobCount} 个进行中` : "当前无进行中任务"}
+          </StatusChip>
+        </div>
       </div>
       <ExecutionJobPanel
         jobs={jobs}
@@ -202,8 +254,44 @@ function HistoryView({
 export function App() {
   const [activeItem, setActiveItem] = useState<NavigationItemId>(initialNavigationItem);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [projectPendingDelete, setProjectPendingDelete] = useState<ProductProject | null>(null);
+  const [productPickerPlatform, setProductPickerPlatform] = useState<"taobao" | "amazon" | null>(
+    null,
+  );
+  /** Pending seed that needs user confirmation before overwriting an existing draft/plan. */
+  const [pendingIntakeSeed, setPendingIntakeSeed] = useState<{
+    projectId: string;
+    platform: "taobao" | "amazon";
+  } | null>(null);
+  /** Skip the next platform-entry picker once (e.g. 资料库「开始制作」 already chose a product). */
+  const skipProductPickerOnceRef = useRef(false);
+  /**
+   * Seed with the initial nav item so cold-start restore of Amazon/淘宝 does not
+   * immediately trap the first paint under a product picker overlay.
+   * The picker still opens on explicit platform navigation.
+   */
+  const previousNavItemRef = useRef<NavigationItemId | null>(initialNavigationItem());
   const [workspaceDirtyReason, setWorkspaceDirtyReason] = useState<string | null>(null);
   const [navigationWarning, setNavigationWarning] = useState<string | null>(null);
+  const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
+  const [exportFeedback, setExportFeedback] = useState<string | null>(null);
+  const [pendingLeave, setPendingLeave] = useState<
+    | { kind: "nav"; item: NavigationItemId }
+    | { kind: "project"; projectId: string }
+    | null
+  >(null);
+  const [pendingAmazonDraft, setPendingAmazonDraft] = useState<StartAmazonSessionInput | null>(
+    null,
+  );
+  const [skipAmazonDraftConfirm, setSkipAmazonDraftConfirm] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return readAmazonDraftProjectConfirmSkip(window.localStorage);
+  });
+  const [demoBannerDismissed, setDemoBannerDismissed] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return readDemoModeBannerDismissed(window.localStorage);
+  });
+  const openGlobalFilePickerRef = useRef<(() => void) | null>(null);
   const {
     initialized,
     loading,
@@ -249,6 +337,8 @@ export function App() {
     startAmazonSession,
     startTaobaoSession,
     analyzeTaobaoProduct,
+    reopenTaobaoAnalysis,
+    seedPlatformIntakeFromProject,
     syncAmazonListingFacts,
     createProject,
     updateActiveProject,
@@ -312,8 +402,50 @@ export function App() {
 
   const blockUnsavedNavigation = () => {
     if (!workspaceDirtyReason) return false;
-    setNavigationWarning(`${workspaceDirtyReason} 保存后再继续。`);
+    setNavigationWarning(`${workspaceDirtyReason} 可保存、丢弃后再继续，或取消。`);
     return true;
+  };
+  const requestNavigation = (item: NavigationItemId) => {
+    if (item === activeItem) return;
+    if (workspaceDirtyReason) {
+      setPendingLeave({ kind: "nav", item });
+      setNavigationWarning(`${workspaceDirtyReason} 可保存、丢弃后再继续，或取消。`);
+      return;
+    }
+    changeActiveItem(item);
+  };
+  const requestProjectChange = (id: string) => {
+    if (id === activeProject?.id) return;
+    if (workspaceDirtyReason) {
+      setPendingLeave({ kind: "project", projectId: id });
+      setNavigationWarning(`${workspaceDirtyReason} 可保存、丢弃后再继续，或取消。`);
+      return;
+    }
+    void selectProject(id);
+  };
+  const discardPendingLeave = () => {
+    const pending = pendingLeave;
+    setPendingLeave(null);
+    setNavigationWarning(null);
+    handleWorkspaceDirtyChange(null);
+    if (!pending) return;
+    if (pending.kind === "nav") {
+      setActiveItem(pending.item);
+      clearPlanningError();
+      if (pending.item === "taobao" || pending.item === "amazon") {
+        writeLastPlatform(window.localStorage, pending.item);
+      }
+      return;
+    }
+    void selectProject(pending.projectId);
+  };
+  const savePendingLeave = async () => {
+    // ProductSourcePanel owns the draft, so return to the panel without implying
+    // that the dialog itself has saved anything.
+    setNavigationWarning(
+      `${workspaceDirtyReason ?? "有未保存修改"} 请先在资料面板点击「保存」，再切换。`,
+    );
+    setPendingLeave(null);
   };
 
   const create = async (input: Parameters<typeof createProject>[0]) => {
@@ -325,13 +457,37 @@ export function App() {
   const removeCurrentProject = async (id: string) => {
     const project = projects.find((candidate) => candidate.id === id);
     if (!project) return false;
-    if (!window.confirm(`确定删除项目“${project.name}”吗？项目内素材、策划和生成记录都会被清理。`)) {
-      return false;
-    }
-    return removeProject(id);
+    clearError();
+    setProjectPendingDelete(project);
+    return false;
+  };
+  const confirmProjectDelete = async () => {
+    if (!projectPendingDelete) return;
+    const projectId = projectPendingDelete.id;
+    const removed = await removeProject(projectId);
+    if (removed) setProjectPendingDelete(null);
   };
   const upload = async (files: File[]) => {
-    await uploadReferenceFiles(files);
+    const beforeIds = new Set(assets.map((asset) => asset.metadata.id));
+    const result = await uploadReferenceFiles(files);
+    const addedCount = result.filter((asset) => !beforeIds.has(asset.metadata.id)).length;
+    if (addedCount > 0) {
+      setUploadFeedback(`已上传 ${addedCount} 张参考图`);
+    }
+  };
+  const requestGlobalUpload = () => {
+    openGlobalFilePickerRef.current?.();
+  };
+  const dismissDemoBanner = () => {
+    setDemoBannerDismissed(true);
+    if (typeof window !== "undefined") {
+      writeDemoModeBannerDismissed(window.localStorage, true);
+    }
+  };
+  const openSettingsFromBanner = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("ecom:open-settings", { detail: { open: true } }));
+    }
   };
   const remove = async (id: string) => {
     await removeAsset(id);
@@ -353,11 +509,19 @@ export function App() {
       writeLastPlatform(window.localStorage, item);
     }
   };
+  const applyPlatformIntakeSeed = async (
+    projectId: string,
+    platform: "taobao" | "amazon",
+    options?: { force?: boolean },
+  ): Promise<"seeded" | "needs-confirm" | "skipped" | "failed"> => {
+    return seedPlatformIntakeFromProject(projectId, platform, options);
+  };
   const openLibraryWorkflow = async (
     projectId: string,
     workflowId: PlatformWorkflowId,
   ) => {
     if (blockUnsavedNavigation()) return;
+    skipProductPickerOnceRef.current = true;
     if (activeProject?.id !== projectId) {
       await selectProject(projectId);
     }
@@ -366,11 +530,51 @@ export function App() {
         workflowId === "amazon-aplus" ? "aplus" : "listing",
       );
     }
-    changeActiveItem(platformIdForWorkflow(workflowId));
+    const platform = platformIdForWorkflow(workflowId);
+    const seedResult = await applyPlatformIntakeSeed(projectId, platform);
+    if (seedResult === "needs-confirm") {
+      setPendingIntakeSeed({ projectId, platform });
+    }
+    changeActiveItem(platform);
   };
   const changeActiveProject = (id: string) => {
     if (id === activeProject?.id || blockUnsavedNavigation()) return;
     void selectProject(id);
+  };
+  const handleProductPickerChoice = async (choice: PlatformProductPickerChoice) => {
+    const platform = productPickerPlatform;
+    if (!platform) return;
+    if (choice.kind === "create") {
+      setProductPickerPlatform(null);
+      openProjectDialog();
+      return;
+    }
+    if (choice.kind === "library") {
+      setProductPickerPlatform(null);
+      changeActiveItem("library");
+      return;
+    }
+    if (choice.kind === "manual") {
+      setProductPickerPlatform(null);
+      return;
+    }
+    setProductPickerPlatform(null);
+    if (choice.projectId === activeProject?.id) return;
+    if (workspaceDirtyReason) {
+      setPendingLeave({ kind: "project", projectId: choice.projectId });
+      setNavigationWarning(`${workspaceDirtyReason} 可保存、丢弃后再切换商品，或取消。`);
+      return;
+    }
+    await selectProject(choice.projectId);
+  };
+  const confirmPendingIntakeSeed = async () => {
+    if (!pendingIntakeSeed) return;
+    const { projectId, platform } = pendingIntakeSeed;
+    setPendingIntakeSeed(null);
+    await applyPlatformIntakeSeed(projectId, platform, { force: true });
+  };
+  const cancelPendingIntakeSeed = () => {
+    setPendingIntakeSeed(null);
   };
   const openGenerationErrorTarget = () => {
     if (!generationErrorTarget) return;
@@ -392,6 +596,24 @@ export function App() {
     anchor.click();
     anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setExportFeedback(`已开始下载 ${exported.fileName}`);
+  };
+  const startAmazonSessionWithDraftGuard = async (input: StartAmazonSessionInput) => {
+    if (!input.projectId && !activeProject && !skipAmazonDraftConfirm) {
+      setPendingAmazonDraft(input);
+      return null;
+    }
+    return startAmazonSession(input);
+  };
+  const confirmAmazonDraftSession = async (remember: boolean) => {
+    if (!pendingAmazonDraft) return;
+    if (remember && typeof window !== "undefined") {
+      writeAmazonDraftProjectConfirmSkip(window.localStorage, true);
+      setSkipAmazonDraftConfirm(true);
+    }
+    const input = pendingAmazonDraft;
+    setPendingAmazonDraft(null);
+    await startAmazonSession(input);
   };
   const downloadGeneratedImage = (asset: WorkbenchAsset) => {
     const anchor = document.createElement("a");
@@ -446,6 +668,65 @@ export function App() {
         .map((asset) => asset.metadata.id),
     });
   }, [activeItem, activeProject, activeTaobaoSession, assets, initialized, startTaobaoSession]);
+
+  useEffect(() => {
+    if (!initialized) return;
+    const previous = previousNavItemRef.current;
+    const enteredPlatform =
+      (activeItem === "taobao" || activeItem === "amazon") && previous !== activeItem;
+    previousNavItemRef.current = activeItem;
+
+    if (activeItem !== "taobao" && activeItem !== "amazon") {
+      setProductPickerPlatform(null);
+      return;
+    }
+    // Only auto-open when navigating into a platform, not when project/session updates.
+    if (!enteredPlatform) return;
+
+    if (skipProductPickerOnceRef.current) {
+      skipProductPickerOnceRef.current = false;
+      setProductPickerPlatform(null);
+      return;
+    }
+    const hasWork =
+      activeItem === "taobao"
+        ? hasPlatformTaskWork({
+            platform: "taobao",
+            hasTaobaoAnalysis: Boolean(activeTaobaoSession?.taobaoAnalysis),
+            hasPlan: Boolean(activeTaobaoSession?.plan || plans.taobao),
+            hasTaobaoDraft: Boolean(
+              activeTaobaoSession?.sourceInput.taobaoProduct?.productText?.trim() ||
+                (activeProject && hasUsableProductFacts(activeProject.facts)),
+            ),
+          })
+        : hasPlatformTaskWork({
+            platform: "amazon",
+            hasPlan: Boolean(activeAmazonSession?.plan || plans.amazon),
+            hasListingDraft: Boolean(activeAmazonSession?.sourceInput.listingText?.trim()),
+          });
+    if (
+      shouldPromptPlatformProductPicker({
+        platform: activeItem,
+        projectCount: projects.length,
+        hasPlatformWork: hasWork,
+      })
+    ) {
+      setProductPickerPlatform(activeItem);
+    } else {
+      setProductPickerPlatform(null);
+    }
+  }, [
+    activeAmazonSession?.plan,
+    activeAmazonSession?.sourceInput.listingText,
+    activeItem,
+    activeTaobaoSession?.plan,
+    activeTaobaoSession?.taobaoAnalysis,
+    activeProject,
+    initialized,
+    plans.amazon,
+    plans.taobao,
+    projects.length,
+  ]);
   const imageEditingSupported = runtimeSupportsImageEditing(runtimeSettings);
   const imageEditingDisabledReason = imageEditingSupported
     ? undefined
@@ -467,6 +748,11 @@ export function App() {
           assetCount={assets.filter((asset) => asset.metadata.kind === "reference").length}
           generatedCount={assets.filter((asset) => asset.metadata.kind === "generated").length}
           runtimeMode={runtimeSettings.mode}
+          preferredPlatform={readLastPlatformOrDefault(
+            typeof window === "undefined"
+              ? { getItem: () => null, setItem: () => undefined }
+              : window.localStorage,
+          )}
           onOpenPlatform={(item) => changeActiveItem(item)}
         />
       ) : null}
@@ -502,10 +788,13 @@ export function App() {
             loading={loading}
             planning={planningPlatformId === "amazon"}
             error={planningError}
-            onStartSession={startAmazonSession}
+            onStartSession={startAmazonSessionWithDraftGuard}
             onSyncListingFacts={syncAmazonListingFacts}
+            onOpenLibrary={() => changeActiveItem("library")}
+            onOpenProductPicker={() => setProductPickerPlatform("amazon")}
             onCreateStyleReference={createStyleReference}
             onRemoveAsset={removeAsset}
+            onWorkspaceDirtyChange={handleWorkspaceDirtyChange}
           >
             <PlatformWorkspace
               platform="amazon"
@@ -534,9 +823,8 @@ export function App() {
               exportError={exportErrorPlatform === "amazon" ? exportError : null}
               onCreate={openProjectDialog}
               onOpenLibrary={() => changeActiveItem("library")}
-              onRequestUpload={() => {
-                document.querySelector<HTMLInputElement>('[data-testid="asset-upload"]')?.click();
-              }}
+              onOpenProductPicker={() => setProductPickerPlatform("amazon")}
+              onRequestUpload={requestGlobalUpload}
               onSave={save}
               onUpload={upload}
               onRemove={remove}
@@ -556,6 +844,7 @@ export function App() {
                   : generateSlot("amazon", slotKey))
               }
               onStartBatch={() => void startBatchGeneration("amazon")}
+              onOpenHistory={() => changeActiveItem("history")}
               onActivateVersion={(slotKey, versionId) =>
                 void activateSlotVersion("amazon", slotKey, versionId)
               }
@@ -582,9 +871,33 @@ export function App() {
             activeProject={activeProject}
             assets={assets}
             session={activeTaobaoSession}
-            loading={loading}
+            loading={loading || planningPlatformId === "taobao"}
+            analysisLockedReason={
+              planningPlatformId && planningPlatformId !== "taobao"
+                ? `${getPlatformRulePack(planningPlatformId).label} 正在生成平台策划，请完成或取消后再分析淘宝商品。`
+                : undefined
+            }
+            onCancelPlanning={cancelPlanning}
             error={planningError}
             onAnalyze={analyzeTaobaoProduct}
+            onOpenLibrary={() => changeActiveItem("library")}
+            onOpenProductPicker={() => setProductPickerPlatform("taobao")}
+            onWorkspaceDirtyChange={handleWorkspaceDirtyChange}
+            onReanalyze={() => void reopenTaobaoAnalysis(activeTaobaoSession?.id)}
+            reanalyzeDisabled={Boolean(
+              loading ||
+                planningPlatformId ||
+                generatingSlot ||
+                exportingPlatform ||
+                workspaceDirtyReason,
+            )}
+            reanalyzeDisabledReason={
+              workspaceDirtyReason
+                ? `${workspaceDirtyReason} 保存后再重新分析。`
+                : planningPlatformId || generatingSlot || exportingPlatform
+                  ? "当前有进行中的任务，请完成后再重新分析。"
+                  : undefined
+            }
           >
             <PlatformWorkspace
               platform="taobao"
@@ -612,9 +925,8 @@ export function App() {
               exportError={exportErrorPlatform === "taobao" ? exportError : null}
               onCreate={openProjectDialog}
               onOpenLibrary={() => changeActiveItem("library")}
-              onRequestUpload={() => {
-                document.querySelector<HTMLInputElement>('[data-testid="asset-upload"]')?.click();
-              }}
+              onOpenProductPicker={() => setProductPickerPlatform("taobao")}
+              onRequestUpload={requestGlobalUpload}
               onSave={save}
               onUpload={upload}
               onRemove={remove}
@@ -634,6 +946,7 @@ export function App() {
                   : generateSlot("taobao", slotKey))
               }
               onStartBatch={() => void startBatchGeneration("taobao")}
+              onOpenHistory={() => changeActiveItem("history")}
               onActivateVersion={(slotKey, versionId) =>
                 void activateSlotVersion("taobao", slotKey, versionId)
               }
@@ -684,7 +997,7 @@ export function App() {
   return (
     <AppShell
       activeItem={activeItem}
-      onActiveItemChange={changeActiveItem}
+      onActiveItemChange={requestNavigation}
       projects={projects}
       activeProject={activeProject}
       loading={loading}
@@ -703,13 +1016,61 @@ export function App() {
       onTestTextConnection={(settings) => testRuntimeConnection(settings, "text")}
       onTestImageConnection={(settings) => testRuntimeConnection(settings, "image")}
       onCreateProject={openProjectDialog}
-      onSelectProject={changeActiveProject}
+      onSelectProject={requestProjectChange}
     >
+      <GlobalAssetUpload
+        disabled={loading || !activeProject}
+        onUpload={upload}
+      >
+        {({ openFilePicker }) => {
+          openGlobalFilePickerRef.current = openFilePicker;
+          return null;
+        }}
+      </GlobalAssetUpload>
       <div className="workspace-content-stack">
         {!initialized && loading ? <StatusMessage>正在恢复本地商品资料与图片...</StatusMessage> : null}
         {warning ? <StatusMessage tone="warning">{warning}</StatusMessage> : null}
         {navigationWarning ? (
           <StatusMessage tone="warning">{navigationWarning}</StatusMessage>
+        ) : null}
+        {uploadFeedback ? (
+          <StatusMessage tone="success" className="upload-feedback-banner">
+            <span>{uploadFeedback}</span>
+            <IconButton
+              label="关闭上传反馈"
+              onClick={() => setUploadFeedback(null)}
+            >
+              <X size={15} />
+            </IconButton>
+          </StatusMessage>
+        ) : null}
+        {exportFeedback ? (
+          <StatusMessage tone="success" className="export-feedback-banner" data-testid="export-feedback">
+            <span>{exportFeedback}</span>
+            <IconButton label="关闭导出反馈" onClick={() => setExportFeedback(null)}>
+              <X size={15} />
+            </IconButton>
+          </StatusMessage>
+        ) : null}
+        {!demoBannerDismissed &&
+        runtimeSettings.mode === "demo" &&
+        (activeItem === "amazon" || activeItem === "taobao") ? (
+          <StatusMessage tone="warning" className="demo-mode-banner" data-testid="demo-mode-banner">
+            <span>
+              当前为演示模式，不会调用外部模型。
+              <Button
+                type="button"
+                variant="secondary"
+                size="compact"
+                onClick={openSettingsFromBanner}
+              >
+                打开设置
+              </Button>
+            </span>
+            <IconButton label="关闭演示模式提示" onClick={dismissDemoBanner}>
+              <X size={15} />
+            </IconButton>
+          </StatusMessage>
         ) : null}
         {resourceRestoreError ? (
           <StatusMessage tone="danger" className="workbench-error">
@@ -767,6 +1128,119 @@ export function App() {
         onClose={closeProjectDialog}
         onCreate={create}
       />
+      <PlatformProductPickerDialog
+        open={productPickerPlatform !== null}
+        platformLabel={
+          productPickerPlatform === "taobao"
+            ? "淘宝 / 天猫"
+            : productPickerPlatform === "amazon"
+              ? "Amazon"
+              : "平台"
+        }
+        projects={projects}
+        activeProjectId={activeProject?.id}
+        allowManualWithoutProject={productPickerPlatform === "amazon"}
+        loading={loading}
+        onClose={() => setProductPickerPlatform(null)}
+        onChoose={(choice) => void handleProductPickerChoice(choice)}
+      />
+      <ConfirmLeaveDialog
+        open={pendingLeave !== null}
+        description={
+          workspaceDirtyReason
+            ? `${workspaceDirtyReason} 离开前请先在资料面板保存，或丢弃修改后继续。`
+            : "当前有未保存修改。离开前请先保存或丢弃。"
+        }
+        onSave={() => void savePendingLeave()}
+        onDiscard={discardPendingLeave}
+        onCancel={() => {
+          setPendingLeave(null);
+          setNavigationWarning(null);
+        }}
+      />
+      <Dialog
+        open={projectPendingDelete !== null}
+        title={`删除“${projectPendingDelete?.name ?? "商品"}”？`}
+        eyebrow="删除商品档案"
+        onClose={loading ? () => undefined : () => setProjectPendingDelete(null)}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={loading}
+              onClick={() => setProjectPendingDelete(null)}
+            >
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              loading={loading}
+              loadingLabel="正在删除…"
+              onClick={() => void confirmProjectDelete()}
+            >
+              删除商品
+            </Button>
+          </>
+        }
+      >
+        <p>
+          商品资料、参考素材、平台策划和生成记录都会从当前浏览器清理。此操作无法撤销。
+        </p>
+        {projectPendingDelete && error ? (
+          <StatusMessage tone="danger">{error}</StatusMessage>
+        ) : null}
+      </Dialog>
+      <Dialog
+        open={pendingAmazonDraft !== null}
+        title="创建 Amazon 草稿商品？"
+        eyebrow="无商品档案"
+        onClose={() => setPendingAmazonDraft(null)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPendingAmazonDraft(null)}>
+              取消
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => void confirmAmazonDraftSession(true)}
+            >
+              创建并不再询问
+            </Button>
+            <Button onClick={() => void confirmAmazonDraftSession(false)}>
+              创建草稿商品
+            </Button>
+          </>
+        }
+      >
+        <p>
+          当前没有选中商品档案。继续将根据 Listing 自动创建「Amazon 草稿商品」本地档案，并只保存在本浏览器。
+        </p>
+      </Dialog>
+      <Dialog
+        open={pendingIntakeSeed !== null}
+        title="覆盖当前草稿？"
+        eyebrow="载入商品资料"
+        onClose={loading ? () => undefined : cancelPendingIntakeSeed}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={loading}
+              onClick={cancelPendingIntakeSeed}
+            >
+              保留草稿
+            </Button>
+            <Button disabled={loading} onClick={() => void confirmPendingIntakeSeed()}>
+              {loading ? "载入中…" : "覆盖并载入"}
+            </Button>
+          </>
+        }
+      >
+        <p>
+          当前{pendingIntakeSeed?.platform === "taobao" ? "淘宝" : "Amazon"}
+          任务已有草稿或策划。载入资料库会用共享商品资料与参考图覆盖任务输入；已有策划将被清除，需重新生成。
+        </p>
+      </Dialog>
     </AppShell>
   );
 }

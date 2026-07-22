@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import appSource from "../src/App.tsx?raw";
+import platformWorkspaceSource from "../src/components/PlatformWorkspace.tsx?raw";
 import {
   PlatformWorkspace,
   shouldDefaultCollapseSource,
@@ -52,6 +53,17 @@ describe("platform workspace contract", () => {
       'if (!initialized || activeItem !== "taobao" || !activeProject || activeTaobaoSession) return;',
     );
     expect(appSource).toContain("productionSession={activeTaobaoSession}");
+    expect(appSource).toContain("onOpenLibrary={() => changeActiveItem(\"library\")}");
+    expect(appSource).toContain("resolveOverviewNextAction");
+  });
+
+  it("blocks silent slot switches while the selected slot draft is dirty", () => {
+    expect(workspaceDraftReason(false, true)).toBe(
+      "当前槽位有未保存修改，请先保存文案与提示词。",
+    );
+    expect(platformWorkspaceSource).toContain(
+      "当前槽位有未保存修改，请先保存文案与提示词，再切换槽位。",
+    );
   });
 
   it("keeps three columns from 1100px and uses a source drawer only below it", () => {

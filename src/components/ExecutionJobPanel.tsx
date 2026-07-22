@@ -2,7 +2,7 @@ import { ListTodo, Play, RotateCcw, Square } from "lucide-react";
 
 import type { ExecutionJob } from "../domain/jobs/types";
 import { getPlatformWorkflow } from "../domain/platforms/registry";
-import { Button, EmptyState, Panel, StatusChip } from "./ui";
+import { Button, Panel, StatusChip } from "./ui";
 
 const statusLabel: Record<ExecutionJob["status"], string> = {
   queued: "排队中",
@@ -45,12 +45,11 @@ export function ExecutionJobPanel({
       action={<StatusChip tone={jobs.some((job) => job.status === "running") ? "info" : "neutral"}>{jobs.length}</StatusChip>}
     >
       {jobs.length === 0 ? (
-        <EmptyState
-          variant="result"
-          icon={<ListTodo size={23} />}
-          title="还没有本地任务"
-          description="在平台工作区完成策划后，可以批量生成尚未完成的槽位。"
-        />
+        <div className="execution-job-empty">
+          <ListTodo size={18} aria-hidden="true" />
+          <span>暂无批量任务</span>
+          <small>在平台工作区批量生成后，这里会显示进度和恢复操作。</small>
+        </div>
       ) : (
         <div className="execution-job-list">
           {jobs.map((job) => {
