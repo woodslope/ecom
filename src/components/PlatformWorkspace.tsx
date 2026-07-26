@@ -35,8 +35,6 @@ import {
 import {
   getPlatformPrimaryAction,
   getPlatformStage,
-  getPlatformStageIndex,
-  getPlatformStageLabel,
 } from "../domain/workspace/platform-stage";
 import type { WorkbenchAsset } from "../store/workbench-store";
 import {
@@ -46,12 +44,13 @@ import {
   expectedSlotCount,
   useAmazonSessionControls,
 } from "./AmazonSessionControls";
+import { AmazonMobilePreview } from "./AmazonMobilePreview";
 import { ExportPanel } from "./ExportPanel";
+import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
 import { ProductSourcePanel } from "./ProductSourcePanel";
 import { SlotBoard } from "./SlotBoard";
 import { SlotInspector } from "./SlotInspector";
 import { TaobaoMobilePreview } from "./TaobaoMobilePreview";
-import { WorkflowStepper } from "./WorkflowStepper";
 import type { GenerationTarget } from "./GenerationActions";
 import { Button, EmptyState, IconButton, Panel, StatusChip, StatusMessage } from "./ui";
 
@@ -355,7 +354,9 @@ export function PlatformWorkspace({
           ? `${getPlatformRulePack(copilotTarget.platformId).label} · ${copilotTarget.slotKey} 正在处理 Copilot 请求，请先等待或取消。`
           : exporting
             ? "当前交付包正在导出，请完成后再修改商品资料。"
-            : undefined;
+            : activeProject?.scope === "task-draft" && productionSession?.localizedFactsDraft
+              ? "当前任务的中文事实快照只读，请在“任务输入”中编辑站点语言草稿。"
+              : undefined;
   const generationLocked = Boolean(
     loading ||
       generationRecoveryRequired ||
@@ -374,6 +375,7 @@ export function PlatformWorkspace({
   const hasPlan = Boolean(plan);
   const [sourceDirty, setSourceDirty] = useState(false);
   const [slotDirty, setSlotDirty] = useState(false);
+  const [amazonPreviewOpen, setAmazonPreviewOpen] = useState(false);
   const [taobaoPreviewOpen, setTaobaoPreviewOpen] = useState(false);
   const [slotSwitchWarning, setSlotSwitchWarning] = useState<string | null>(null);
   // Shell v1: after a plan exists, keep the middle+right stage primary.
@@ -507,7 +509,7 @@ export function PlatformWorkspace({
             : "下一步：AI 策划",
           description: isAmazon
             ? `按上方模式生成 ${plannedSlotCount} 个${amazonSession.plannerMode === "aplus" ? " A+" : " Listing"} 槽位（站点 / 张数 / 风格可在「调整参数」中修改）。`
-            : "固定生成 5 张主图和 7 张详情图，槽位顺序与规则由商品生产包统一管理。",
+            : "固定图组：5 张主图 + 7 张详情图，槽位顺序与规则由商品生产包统一管理。",
           onClick: runAmazonPlan,
         },
         generate: {
@@ -527,212 +529,133 @@ export function PlatformWorkspace({
       }[workflowStage]
     : null;
 
-  const displayedAmazonStage = planNeedsRefresh ? "review" : amazonStage;
-  void displayedAmazonStage;
-
   const displayedStage = planNeedsRefresh ? "review" : platformStage;
-  const sharedStageLabel = getPlatformStageLabel(displayedStage);
-  const sharedStageIndex = getPlatformStageIndex(displayedStage);
   const inspectorPrimaryAction = isAmazon ? amazonPrimaryAction : platformPrimaryAction;
+  const shellBadge = plan ? (
+    <StatusChip tone="mode">{plan.source === "demo" ? "Demo" : "API"}</StatusChip>
+  ) : (
+    <StatusChip tone="neutral">{isAmazon ? "主路径" : "商品生产包"}</StatusChip>
+  );
+  const shellControls = isAmazon ? (
+    <AmazonSessionControls
+      value={amazonSession}
+      disabled={planning || loading}
+      hasPlan={Boolean(plan)}
+      preferCollapsed
+      collapseKey={productionSession?.id ?? activeProject?.id ?? "amazon-current"}
+      embedded
+      onChange={(next) => void changeAmazonSession(next)}
+      planAction={{
+        label: planning ? "策划中…" : plan ? "重新策划" : "生成图片策划",
+        disabled: planActionDisabled,
+        title: planDisabledReason,
+        describedBy: planDescriptionId,
+        busy: planning,
+        variant: plan ? "secondary" : "primary",
+        onClick: runAmazonPlan,
+      }}
+    />
+  ) : null;
+  const shellActions = (
+    <>
+      {plan ? (
+        <Button
+          variant="secondary"
+          size="compact"
+          onClick={() => isAmazon ? setAmazonPreviewOpen(true) : setTaobaoPreviewOpen(true)}
+        >
+          <Smartphone size={15} />
+          手机预览
+        </Button>
+      ) : null}
+      {plan ? (
+        <Button
+          variant="secondary"
+          size="compact"
+          disabled={batchActionDisabled}
+          title={batchActionDisabled ? "当前没有可批量生成的槽位，或已有任务正在执行。" : undefined}
+          onClick={onStartBatch}
+        >
+          {batchJob?.status === "running" || batchJob?.status === "queued" ? (
+            <LoaderCircle className="spin" size={15} />
+          ) : (
+            <Sparkles size={15} />
+          )}
+          {batchJob && (batchJob.status === "running" || batchJob.status === "queued" || batchJob.status === "paused")
+            ? `批量 ${batchJob.progress.completed}/${batchJob.progress.total} · ${
+                batchJob.status === "running"
+                  ? "执行中"
+                  : batchJob.status === "queued"
+                    ? "排队"
+                    : "已暂停"
+              }`
+            : `批量生成剩余槽位（${pendingSlotCount}）`}
+        </Button>
+      ) : null}
+      {batchJob && onOpenHistory ? (
+        <Button variant="secondary" size="compact" onClick={onOpenHistory}>
+          查看任务
+        </Button>
+      ) : null}
+      <Button
+        variant="secondary"
+        size="compact"
+        aria-expanded={!sourceCollapsed}
+        aria-controls="workbench-source-column"
+        onClick={() => setSourceCollapsed((value) => !value)}
+      >
+        <FileText size={15} />
+        {sourceCollapsed ? "资料" : "收起资料"}
+      </Button>
+      {!isAmazon ? (
+        <Button
+          variant={plan ? "secondary" : "primary"}
+          size="compact"
+          disabled={planActionDisabled}
+          title={planDisabledReason}
+          aria-describedby={planDescriptionId}
+          onClick={runAmazonPlan}
+        >
+          {planning ? (
+            <LoaderCircle className="spin" size={15} />
+          ) : plan ? (
+            <RotateCcw size={15} />
+          ) : (
+            <Sparkles size={15} />
+          )}
+          {planning ? "正在策划..." : plan ? "重新策划" : "生成图片策划"}
+        </Button>
+      ) : null}
+    </>
+  );
   return (
-    <div className="platform-workspace-view platform-workspace-view--production-shell">
-      {isAmazon ? (
-        <header className="workbench-chrome" aria-label="Amazon 工作台顶栏">
-          <div className="workbench-chrome__main">
-            <div className="workbench-chrome__brand">
-              <h1>Amazon</h1>
-              {plan ? (
-                <StatusChip tone="mode">
-                  {plan.source === "demo" ? "Demo" : "API"}
-                </StatusChip>
-              ) : (
-                <StatusChip tone="neutral">主路径</StatusChip>
-              )}
-              <span className="workbench-chrome__step" aria-label={`当前步骤 ${sharedStageIndex} / 4`}>
-                {sharedStageIndex}/4 · {sharedStageLabel}
-              </span>
-            </div>
-            <AmazonSessionControls
-              value={amazonSession}
-              disabled={planning || loading}
-              hasPlan={Boolean(plan)}
-              preferCollapsed={Boolean(plan) && !planNeedsRefresh}
-              embedded
-              onChange={(next) => void changeAmazonSession(next)}
-              planAction={{
-                label: planning ? "策划中…" : plan ? "重新策划" : "生成图片策划",
-                disabled: planActionDisabled,
-                title: planDisabledReason,
-                describedBy: planDescriptionId,
-                busy: planning,
-                variant: plan ? "secondary" : "primary",
-                onClick: runAmazonPlan,
-              }}
-            />
-            <div className="workbench-chrome__tools">
-              {plan ? (
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  disabled={batchActionDisabled}
-                  title={batchActionDisabled ? "当前没有可批量生成的槽位，或已有任务正在执行。" : undefined}
-                  onClick={onStartBatch}
-                >
-                  {batchJob?.status === "running" || batchJob?.status === "queued" ? (
-                    <LoaderCircle className="spin" size={15} />
-                  ) : (
-                    <Sparkles size={15} />
-                  )}
-                  {batchJob && (batchJob.status === "running" || batchJob.status === "queued" || batchJob.status === "paused")
-                    ? `批量 ${batchJob.progress.completed}/${batchJob.progress.total} · ${
-                        batchJob.status === "running"
-                          ? "执行中"
-                          : batchJob.status === "queued"
-                            ? "排队"
-                            : "已暂停"
-                      }`
-                    : `批量生成剩余槽位（${pendingSlotCount}）`}
-                </Button>
-              ) : null}
-              {batchJob && onOpenHistory ? (
-                <Button variant="secondary" size="compact" onClick={onOpenHistory}>
-                  查看任务
-                </Button>
-              ) : null}
+    <PlatformWorkflowShell
+      platform={platform}
+      title={isAmazon ? "Amazon" : "淘宝 / 天猫"}
+      stage={displayedStage}
+      completedSlots={completedSlots}
+      totalSlots={plan?.slots.length ?? 0}
+      badge={shellBadge}
+      controls={shellControls}
+      actions={shellActions}
+      onboarding={
+        !plan && workflowAction ? (
+          <>
+            <span>{workflowAction.description}</span>
+            {workflowAction.onClick ? (
               <Button
-                variant="secondary"
                 size="compact"
-                aria-expanded={!sourceCollapsed}
-                aria-controls="workbench-source-column"
-                onClick={() => setSourceCollapsed((value) => !value)}
+                disabled={workflowActionDisabled}
+                onClick={workflowAction.onClick}
               >
-                <FileText size={15} />
-                {sourceCollapsed ? "资料" : "收起资料"}
+                {workflowAction.title}
               </Button>
-            </div>
-          </div>
-          {!plan && workflowAction ? (
-            <div className="workbench-chrome__onboarding">
-              <span>{workflowAction.description}</span>
-              {workflowAction.onClick ? (
-                <Button
-                  size="compact"
-                  disabled={workflowActionDisabled}
-                  onClick={workflowAction.onClick}
-                >
-                  {workflowAction.title}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-          <WorkflowStepper
-            platform="amazon"
-            stage={displayedStage}
-            completedSlots={completedSlots}
-            totalSlots={plan?.slots.length ?? 0}
-          />
-        </header>
-      ) : (
-        <>
-          <header className="workbench-chrome" aria-label="淘宝工作台顶栏">
-            <div className="workbench-chrome__main">
-              <div className="workbench-chrome__brand">
-                <h1>淘宝 / 天猫</h1>
-                {plan ? (
-                  <StatusChip tone="mode">
-                    {plan.source === "demo" ? "Demo" : "API"}
-                  </StatusChip>
-                ) : (
-                  <StatusChip tone="neutral">商品生产包</StatusChip>
-                )}
-              <span className="workbench-chrome__step" aria-label={`当前步骤 ${sharedStageIndex} / 4`}>
-                {sharedStageIndex}/4 · {sharedStageLabel}
-              </span>
-              </div>
-              <div className="workbench-chrome__tools">
-                {plan ? (
-                  <Button
-                    variant="secondary"
-                    size="compact"
-                    onClick={() => setTaobaoPreviewOpen(true)}
-                  >
-                    <Smartphone size={15} />
-                    手机预览
-                  </Button>
-                ) : null}
-                {plan ? (
-                  <Button
-                    variant="secondary"
-                    size="compact"
-                    disabled={batchActionDisabled}
-                    title={batchActionDisabled ? "当前没有可批量生成的槽位，或已有任务正在执行。" : undefined}
-                    onClick={onStartBatch}
-                  >
-                    {batchJob?.status === "running" || batchJob?.status === "queued" ? (
-                      <LoaderCircle className="spin" size={15} />
-                    ) : (
-                      <Sparkles size={15} />
-                    )}
-                    {batchJob && (batchJob.status === "running" || batchJob.status === "queued" || batchJob.status === "paused")
-                      ? `批量 ${batchJob.progress.completed}/${batchJob.progress.total} · ${
-                          batchJob.status === "running"
-                            ? "执行中"
-                            : batchJob.status === "queued"
-                              ? "排队"
-                              : "已暂停"
-                        }`
-                      : `批量生成剩余槽位（${pendingSlotCount}）`}
-                  </Button>
-                ) : null}
-                {batchJob && onOpenHistory ? (
-                  <Button variant="secondary" size="compact" onClick={onOpenHistory}>
-                    查看任务
-                  </Button>
-                ) : null}
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  aria-expanded={!sourceCollapsed}
-                  aria-controls="workbench-source-column"
-                  onClick={() => setSourceCollapsed((value) => !value)}
-                >
-                  <FileText size={15} />
-                  {sourceCollapsed ? "资料" : "收起资料"}
-                </Button>
-                <Button
-                  variant={plan ? "secondary" : "primary"}
-                  size="compact"
-                  disabled={planActionDisabled}
-                  title={planDisabledReason}
-                  aria-describedby={planDescriptionId}
-                  onClick={runAmazonPlan}
-                >
-                  {planning ? (
-                    <LoaderCircle className="spin" size={15} />
-                  ) : plan ? (
-                    <RotateCcw size={15} />
-                  ) : (
-                    <Sparkles size={15} />
-                  )}
-                  {planning ? "正在策划..." : plan ? "重新策划" : "生成图片策划"}
-                </Button>
-              </div>
-            </div>
-            {!plan ? (
-              <div className="workbench-chrome__onboarding">
-                <span>固定图组 5 主图 + 7 详情。「生成图片策划」会统一分析资料与本次勾选的商品图。</span>
-              </div>
             ) : null}
-            <WorkflowStepper
-              platform="taobao"
-              stage={displayedStage}
-              completedSlots={completedSlots}
-              totalSlots={plan?.slots.length ?? 0}
-            />
-          </header>
-        </>
-      )}
-
+          </>
+        ) : undefined
+      }
+    >
+      <div className="platform-workspace-view platform-workspace-view--production-shell">
       {amazonModeSwitchWarning ? (
         <StatusMessage tone="warning" className="amazon-mode-switch-warning">
           <span>{amazonModeSwitchWarning}</span>
@@ -1045,6 +968,22 @@ export function PlatformWorkspace({
           onClose={() => setTaobaoPreviewOpen(false)}
         />
       ) : null}
+      {isAmazon && plan ? (
+        <AmazonMobilePreview
+          open={amazonPreviewOpen}
+          title={activeProject?.facts.productName || "Amazon 商品"}
+          source="session"
+          sourceId={productionSession?.id ?? `amazon-${activeProject?.id ?? "current"}`}
+          plan={plan}
+          planningInputSignature={planInputSignature}
+          slotVersions={slotVersionStates ?? productionSession?.slotVersions}
+          assetUrls={Object.fromEntries(assets.map((asset) => [asset.metadata.id, asset.objectUrl]))}
+          exporting={exporting}
+          onExport={onExport}
+          onClose={() => setAmazonPreviewOpen(false)}
+        />
+      ) : null}
     </div>
+    </PlatformWorkflowShell>
   );
 }

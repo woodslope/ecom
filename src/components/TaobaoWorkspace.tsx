@@ -49,17 +49,19 @@ export function TaobaoWorkspace({
 
   return (
     <div className="taobao-workspace">
-      <ProductContextBar
-        platformLabel="淘宝 / 天猫"
-        project={activeProject}
-        statusLabel={hasPlan ? qualityLabel ?? "图片策划" : qualityLabel ?? "准备"}
-        statusTone={hasPlan ? "success" : "neutral"}
-        detailLabel={analysis ? "分析详情" : undefined}
-        disabled={loading}
-        onOpenDetails={analysis ? () => setAnalysisOpen(true) : undefined}
-        onSwitchProduct={onOpenProductPicker}
-        onOpenLibrary={onOpenLibrary}
-      />
+      {hasPlan ? (
+        <ProductContextBar
+          platformLabel="淘宝 / 天猫"
+          project={activeProject}
+          statusLabel={qualityLabel ?? "图片策划"}
+          statusTone="success"
+          detailLabel={analysis ? "分析详情" : undefined}
+          disabled={loading}
+          onOpenDetails={analysis ? () => setAnalysisOpen(true) : undefined}
+          onSwitchProduct={onOpenProductPicker}
+          onOpenLibrary={onOpenLibrary}
+        />
+      ) : null}
       {hasPlan ? (
         children
       ) : (
@@ -75,6 +77,7 @@ export function TaobaoWorkspace({
           onDirtyChange={onWorkspaceDirtyChange}
           onOpenLibrary={onOpenLibrary}
           onOpenProductPicker={onOpenProductPicker}
+          onOpenAnalysisDetails={analysis ? () => setAnalysisOpen(true) : undefined}
         />
       )}
       {analysis ? (

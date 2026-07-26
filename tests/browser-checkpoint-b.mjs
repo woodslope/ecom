@@ -89,16 +89,58 @@ async function startAmazonPlanning(page) {
   } catch {
     // A selected product does not need the one-time draft confirmation.
   }
+  const localizedFactsReview = page.getByRole("region", {
+    name: "站点语言草稿",
+    exact: true,
+  });
+  const slotCard = page.locator(".slot-card").first();
+  const planningError = page.locator(".status-message--danger").first();
+  let outcome = await Promise.race([
+    localizedFactsReview.waitFor({ state: "visible" }).then(() => "review"),
+    slotCard.waitFor({ state: "visible" }).then(() => "planned"),
+    planningError.waitFor({ state: "visible" }).then(() => "error"),
+  ]);
+  if (outcome === "error") {
+    const message = await planningError.innerText();
+    if (message.includes("站点语言草稿")) {
+      await localizedFactsReview.waitFor({ state: "visible" });
+      outcome = "review";
+    } else {
+      throw new Error(`Amazon 策划失败：${message}`);
+    }
+  }
+  if (outcome === "review") {
+    await localizedFactsReview
+      .getByRole("button", { name: "确认并生成图片策划", exact: true })
+      .click();
+    const confirmedOutcome = await Promise.race([
+      slotCard.waitFor({ state: "visible" }).then(() => "planned"),
+      planningError.waitFor({ state: "visible" }).then(() => "error"),
+    ]);
+    if (confirmedOutcome === "error") {
+      throw new Error(`Amazon 策划失败：${await planningError.innerText()}`);
+    }
+  }
 }
 
 async function planMarketplace(browser, baseUrl, marketplaceId, expectedCopy, screenshotName) {
   const { context, page, errors } = await openAmazonPage(browser, baseUrl);
+  await page.getByRole("button", { name: "调整参数", exact: true }).click();
   await page.getByLabel("目标站点", { exact: true }).selectOption(marketplaceId);
   await page.getByLabel("Amazon Listing 原文", { exact: true }).fill(
     "Title: Northwind Travel Pillow\n\nAbout this item\n- Washable cover\n- 28 x 25 x 12 cm\n\nSKU: NW-P01",
   );
   await startAmazonPlanning(page);
   await page.locator(".slot-card").filter({ hasText: "PT01" }).waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "手机预览", exact: true }).click();
+  const preview = page.getByRole("dialog", { name: "Amazon 手机内容预览", exact: true });
+  await preview.waitFor({ state: "visible" });
+  assert(
+    (await preview.locator('[aria-label^="查看 "]').count()) === 7,
+    `${marketplaceId} Listing 手机预览缩略图数量不正确`,
+  );
+  assert((await preview.innerText()).includes("还需完成 7 个槽位"), `${marketplaceId} Listing 缺失提示不正确`);
+  await preview.getByRole("button", { name: "关闭弹窗", exact: true }).click();
   await page.locator(".slot-card").filter({ hasText: "PT01" }).click();
   const visibleCopy = await page.getByLabel("可见文案", { exact: true }).inputValue();
   assert(visibleCopy === expectedCopy, `${marketplaceId} 可见文案未本地化：${visibleCopy}`);
@@ -117,6 +159,7 @@ async function planMarketplace(browser, baseUrl, marketplaceId, expectedCopy, sc
 
 async function verifyAPlusWorkflow(browser, baseUrl) {
   const { context, page, errors } = await openAmazonPage(browser, baseUrl);
+  await page.getByRole("button", { name: "调整参数", exact: true }).click();
   await page.getByRole("tab", { name: "A+ 图", exact: true }).click();
   await page.getByLabel("A+ 类型", { exact: true }).selectOption("standard-large");
   await page.getByRole("button", { name: "编排模块", exact: true }).click();
@@ -198,6 +241,41 @@ async function verifyAPlusWorkflow(browser, baseUrl) {
     !(await page.getByRole("button", { name: "重新策划", exact: true }).isDisabled()),
     "模块改变后重新策划入口不可用",
   );
+  await page.getByRole("button", { name: "收起参数", exact: true }).click();
+  assert(
+    await page.getByRole("button", { name: "调整参数", exact: true }).isVisible(),
+    "策划过期后参数区无法保持收起",
+  );
+  assert(
+    !(await page.getByLabel("目标站点", { exact: true }).isVisible()),
+    "策划过期后参数区被自动展开",
+  );
+  await page.getByRole("button", { name: "手机预览", exact: true }).click();
+  const preview = page.getByRole("dialog", { name: "Amazon 手机内容预览", exact: true });
+  await preview.waitFor({ state: "visible" });
+  assert(
+    (await preview.locator('[data-slot-key^="A+S"]').count()) === 8,
+    "A+ 手机预览没有按当前已保存策划展示模块",
+  );
+  const previewText = await preview.innerText();
+  assert(previewText.includes("Verified washable cover"), "A+ 手机预览未显示已有外置标题");
+  assert(previewText.includes("The removable cover supports easier routine care."), "A+ 手机预览未显示已有外置正文");
+  assert(!previewText.includes("价格") && !previewText.includes("评分"), "A+ 手机预览伪装了商品页未知信息");
+  await preview.getByRole("button", { name: "关闭弹窗", exact: true }).click();
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.getByRole("button", { name: "调整参数", exact: true }).click();
+  const parameterBand = await page.evaluate(() => {
+    const main = document.querySelector(".workbench-chrome__main")?.getBoundingClientRect();
+    const params = document.querySelector(".amazon-session-controls__params")?.getBoundingClientRect();
+    return {
+      mainWidth: main?.width ?? 0,
+      paramsWidth: params?.width ?? 0,
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  });
+  assert(parameterBand.paramsWidth >= parameterBand.mainWidth - 40, "参数带没有横跨顶栏可用宽度");
+  assert(!parameterBand.overflow, "900px 下 Amazon 顶栏出现横向溢出");
+  await page.setViewportSize({ width: 1280, height: 800 });
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );

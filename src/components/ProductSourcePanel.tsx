@@ -61,6 +61,7 @@ export function ProductSourcePanel({
   disabledReason,
   showListingPaste = false,
   showAssets = true,
+  hideHeader = false,
   onDirtyChange = () => undefined,
   onSave,
   onUpload,
@@ -73,6 +74,7 @@ export function ProductSourcePanel({
   /** AIS-style paste for title / bullets / description (Amazon path). */
   showListingPaste?: boolean;
   showAssets?: boolean;
+  hideHeader?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
   onSave: (input: UpdateProductProjectInput) => Promise<boolean>;
   onUpload: (files: File[]) => Promise<void>;
@@ -185,12 +187,20 @@ export function ProductSourcePanel({
     <Panel
       title="当前资料"
       className="workbench-panel product-source-panel"
+      hideHeader={hideHeader}
       action={<StatusChip tone={assets.length > 0 ? "success" : "neutral"}>{assets.length} 图</StatusChip>}
     >
       <div className="product-source-panel__scroll">
         {showAssets ? (
-          <AssetLibrary assets={assets} loading={controlsDisabled} onUpload={onUpload} onRemove={onRemove} />
+          <AssetLibrary
+            assets={assets}
+            loading={loading}
+            disabled={Boolean(disabledReason)}
+            onUpload={onUpload}
+            onRemove={onRemove}
+          />
         ) : null}
+        {disabledReason ? <StatusMessage tone="warning">{disabledReason}</StatusMessage> : null}
         <form className="source-form" onSubmit={save}>
           {showListingPaste ? (
             <div className="listing-paste" aria-label="粘贴 Amazon Listing 文本">
@@ -299,7 +309,6 @@ export function ProductSourcePanel({
               }}
             />
           </Field>
-          {disabledReason ? <StatusMessage tone="warning">{disabledReason}</StatusMessage> : null}
           {saveState === "saved" ? (
             <StatusMessage tone="success">商品资料已保存。</StatusMessage>
           ) : null}

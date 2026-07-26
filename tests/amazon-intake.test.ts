@@ -9,6 +9,7 @@ import { createMemoryProjectRepository } from "../src/domain/projects/repository
 import type { ProductFacts } from "../src/domain/projects/types";
 import { getAPlusModuleSpecs } from "../src/domain/platforms/amazon-catalog";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
+import type { PlatformSession } from "../src/domain/workspace/project-workspace";
 import { demoPlanner } from "../src/services/demo-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
@@ -44,6 +45,20 @@ function dependencies() {
   };
 }
 
+async function confirmAmazonDraft(
+  store: ReturnType<typeof createWorkbenchStore>,
+  session: PlatformSession,
+) {
+  await store.getState().confirmLocalizedFacts(
+    session.id,
+    session.localizedFactsDraft!.localizedFacts,
+  );
+  await store.getState().planPlatform("amazon", session.options.platformId === "amazon"
+    ? session.options
+    : undefined);
+  return store.getState().sessions.find((item) => item.id === session.id)!;
+}
+
 describe("Amazon direct intake", () => {
   it("keeps a custom style asset while saving new task reference files", async () => {
     const deps = {
@@ -75,12 +90,15 @@ describe("Amazon direct intake", () => {
     });
 
     expect(session).not.toBeNull();
-    expect(session?.selectedStyleReferenceId).toBe(style!.metadata.id);
+    expect(session?.selectedStyleReferenceId).not.toBe(style!.metadata.id);
+    expect(store.getState().activeProject).toMatchObject({ scope: "task-draft" });
+    expect(store.getState().projects).toEqual([project]);
     expect(session?.selectedReferenceAssetIds).toHaveLength(1);
     expect(store.getState().assets.filter((asset) => asset.metadata.kind === "reference"))
       .toHaveLength(1);
-    expect(store.getState().assets.filter((asset) => asset.metadata.kind === "style-reference"))
-      .toHaveLength(1);
+    expect(store.getState().assets.some(
+      (asset) => asset.metadata.id === session?.selectedStyleReferenceId && asset.metadata.kind === "style-reference",
+    )).toBe(true);
   });
 
   it("starts from only a product image and creates a restorable local draft", async () => {
@@ -97,12 +115,14 @@ describe("Amazon direct intake", () => {
       options: { plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
     });
 
+    const plannedSession = await confirmAmazonDraft(store, session!);
+
     expect(store.getState().activeProject).toMatchObject({
       id: "project_01",
       name: "Amazon 草稿商品",
       facts: { productName: "", description: "", sellingPoints: [] },
     });
-    expect(session).toMatchObject({
+    expect(plannedSession).toMatchObject({
       projectId: "project_01",
       sourceInput: { listingText: "" },
       planningInput: {
@@ -115,7 +135,7 @@ describe("Amazon direct intake", () => {
       plan: { platformId: "amazon" },
     });
     expect(store.getState().runs[0]?.contextSnapshot.planningInput).toEqual(
-      session?.planningInput,
+      plannedSession.planningInput,
     );
 
     const restored = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
@@ -161,7 +181,9 @@ describe("Amazon direct intake", () => {
       },
     });
 
-    expect(session).toMatchObject({
+    const plannedSession = await confirmAmazonDraft(store, session!);
+
+    expect(plannedSession).toMatchObject({
       projectId: project.id,
       workflowId: "amazon-listing",
       sourceInput: { listingText: expect.stringContaining("Session-only Travel Pillow") },
@@ -234,6 +256,7 @@ describe("Amazon direct intake", () => {
     expect(await deps.assetRepository.list("project_01")).toHaveLength(1);
     expect((await deps.workspaceRepository.load("project_01")).sessions).toHaveLength(1);
     expect(store.getState().activeProject?.id).toBe("project_01");
+    await confirmAmazonDraft(store, session!);
     expect(store.getState().planningError).toContain("planner unavailable");
   });
 
@@ -334,11 +357,21 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).toContain("生成图片策划");
     expect(directMarkup).toContain("图片策划");
     expect(directMarkup).toContain('title="请填写商品资料或添加至少一张商品图。"');
-    expect(directMarkup).toContain('class="workbench-toolbar"');
+    expect(directMarkup).toContain('class="platform-workflow-shell"');
+    expect(directMarkup).toContain('class="workbench-chrome__progress-row"');
+    expect(directMarkup).not.toContain("workbench-chrome__progress-row--compact");
+    expect(directMarkup).toContain("策划检查");
+    expect(directMarkup).toContain("交付检查");
     expect(directMarkup).not.toContain('class="amazon-session-controls__additional"');
     expect(directMarkup).not.toContain("style-reference-picker--embedded");
     expect(directMarkup).toContain("从资料库选择");
     expect(directMarkup).toContain("手动填写");
+    expect(directMarkup).toContain('aria-label="Amazon 商品与任务来源"');
+    expect(directMarkup).toContain("本次任务");
+    expect(directMarkup).toContain("未绑定商品档案");
+    expect(directMarkup).not.toContain("planning-input-quality");
+    expect(directMarkup).not.toContain("任务输入来源");
+    expect(directMarkup).not.toContain("intake-source-bar");
     expect(directMarkup.indexOf("生成图片策划")).toBeLessThan(
       directMarkup.indexOf('aria-label="Amazon 策划模式"'),
     );
@@ -348,6 +381,8 @@ describe("Amazon direct intake", () => {
     expect(existingMarkup).toContain("不会自动覆盖共享商品资料");
     expect(existingMarkup).toContain("同步到共享商品资料");
     expect(existingMarkup).toContain("Session-only Travel Pillow");
+    expect(existingMarkup).toContain('aria-label="重新载入资料库内容"');
+    expect(existingMarkup.match(/<section class="product-context-bar/g)).toHaveLength(1);
   });
 
   it("waits for an explicit library choice instead of preloading the active project", () => {
@@ -373,6 +408,9 @@ describe("Amazon direct intake", () => {
     expect(markup).not.toContain("Title: 共享商品名称");
     expect(markup).toContain("从资料库选择");
     expect(markup).toContain("手动填写");
+    expect(markup).toContain("本次任务");
+    expect(markup).toContain("未绑定商品档案");
+    expect(markup).not.toContain("共享商品名称");
   });
 
   it("keeps the selected A+ mode when the target workflow has no session yet", () => {
@@ -431,6 +469,7 @@ describe("Amazon direct intake", () => {
     expect(
       session?.options.platformId === "amazon" ? session.options.aPlusModuleSpecs : [],
     ).toHaveLength(12);
+    expect(store.getState().amazonPlannerMode).toBe("aplus");
 
     const restored = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
     await restored.getState().initialize();
@@ -444,6 +483,7 @@ describe("Amazon direct intake", () => {
         ? restoredSession.options.aPlusModuleSpecs
         : [],
     ).toHaveLength(12);
+    expect(restored.getState().amazonPlannerMode).toBe("aplus");
   });
 
   it("keeps the persisted session input inspectable after planning", async () => {
@@ -471,13 +511,15 @@ describe("Amazon direct intake", () => {
       },
     });
 
+    const plannedSession = await confirmAmazonDraft(store, session!);
+
     const markup = renderToStaticMarkup(
       createElement(
         AmazonWorkspace,
         {
           activeProject: project,
           assets: store.getState().assets,
-          session: session ?? undefined,
+          session: plannedSession,
           loading: false,
           planning: false,
           error: null,
@@ -495,7 +537,7 @@ describe("Amazon direct intake", () => {
     const summary = renderToStaticMarkup(
       createElement(AmazonSessionSummary, {
         open: true,
-        session: session!,
+        session: plannedSession,
         assets: store.getState().assets,
         onClose: () => undefined,
       }),

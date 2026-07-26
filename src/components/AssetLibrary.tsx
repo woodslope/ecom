@@ -13,6 +13,7 @@ function formatBytes(size: number): string {
 export function AssetLibrary({
   assets,
   loading,
+  disabled = false,
   title = "参考素材",
   allowUpload = true,
   emptyTitle = "还没有参考图",
@@ -22,6 +23,7 @@ export function AssetLibrary({
 }: {
   assets: WorkbenchAsset[];
   loading: boolean;
+  disabled?: boolean;
   title?: string;
   allowUpload?: boolean;
   emptyTitle?: string;
@@ -47,7 +49,7 @@ export function AssetLibrary({
         </div>
         {allowUpload ? (
           <>
-            <Button variant="secondary" onClick={chooseFiles} disabled={loading}>
+            <Button variant="secondary" onClick={chooseFiles} disabled={loading || disabled}>
               <Upload size={15} />
               {loading ? "处理中" : "上传图片"}
             </Button>
@@ -73,7 +75,7 @@ export function AssetLibrary({
           description={emptyDescription}
           action={
             allowUpload ? (
-              <Button variant="secondary" onClick={chooseFiles} disabled={loading}>
+              <Button variant="secondary" onClick={chooseFiles} disabled={loading || disabled}>
                 <Upload size={15} />
                 选择图片
               </Button>
@@ -91,7 +93,7 @@ export function AssetLibrary({
                     label={`删除素材 ${asset.metadata.name}`}
                     className="asset-card__delete"
                     onClick={() => void onRemove(asset.metadata.id)}
-                    disabled={loading}
+                    disabled={loading || disabled}
                   >
                     <Trash2 size={15} />
                   </IconButton>

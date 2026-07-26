@@ -24,6 +24,8 @@ import { resolveRulePackForPlan } from "../platforms/resolve-rule-pack";
 import type { PlatformId, PlatformWorkflowId } from "../platforms/types";
 export type { PlatformWorkflowId } from "../platforms/types";
 import type { TaskRecord } from "../tasks";
+import type { PlatformFactsDraft } from "../localization/product-localizer";
+import type { ProductFacts } from "../projects/types";
 
 export const PROJECT_WORKSPACE_STORAGE_PREFIX = "ecom-workbench.workspace.v2.";
 
@@ -65,6 +67,7 @@ export interface PlatformSession {
   selectedStyleReferenceId?: string;
   styleReferenceNotice?: string;
   taobaoAnalysis?: TaobaoProductAnalysis;
+  localizedFactsDraft?: PlatformFactsDraft;
   plan?: PlatformPlan;
   planInputSignature?: string;
   selectedSlotKey?: string;
@@ -94,6 +97,7 @@ export interface PlatformRunContext {
   planningInput?: PlanningInputSnapshot;
   selectedStyleReferenceId?: string;
   taobaoAnalysis?: TaobaoProductAnalysis;
+  localizedFactsDraft?: PlatformFactsDraft;
 }
 
 export interface ProductionRun {
@@ -108,6 +112,7 @@ export interface ProductionRun {
   planSnapshot: PlatformPlan;
   planningInputSignatureSnapshot?: string;
   slotVersionsSnapshot?: Record<string, SlotVersionState>;
+  deposit?: { targetProjectId: string; depositedAt: string };
   events: ProductionEvent[];
   createdAt: string;
   updatedAt: string;
@@ -388,6 +393,68 @@ function normalizeSlotVersions(value: unknown): Record<string, SlotVersionState>
   );
 }
 
+function normalizeProductFacts(value: unknown): ProductFacts | null {
+  if (!isRecord(value)) return null;
+  const textKeys = [
+    "productName",
+    "category",
+    "brand",
+    "model",
+    "sku",
+    "targetAudience",
+    "description",
+  ] as const;
+  if (textKeys.some((key) => typeof value[key] !== "string")) return null;
+  const sellingPoints = normalizeStringArray(value.sellingPoints);
+  const forbiddenClaims = normalizeStringArray(value.forbiddenClaims);
+  if (!isRecord(value.specifications)) return null;
+  const specifications = Object.fromEntries(
+    Object.entries(value.specifications).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
+  return {
+    productName: value.productName as string,
+    category: value.category as string,
+    brand: value.brand as string,
+    model: value.model as string,
+    sku: value.sku as string,
+    targetAudience: value.targetAudience as string,
+    description: value.description as string,
+    sellingPoints,
+    forbiddenClaims,
+    specifications,
+  };
+}
+
+function normalizeLocalizedFactsDraft(value: unknown): PlatformFactsDraft | null {
+  if (
+    !isRecord(value) ||
+    typeof value.targetLocale !== "string" ||
+    !["pending", "generated", "confirmed"].includes(String(value.status)) ||
+    typeof value.updatedAt !== "string"
+  ) {
+    return null;
+  }
+  const sourceFactsSnapshot = normalizeProductFacts(value.sourceFactsSnapshot);
+  const localizedFacts = normalizeProductFacts(value.localizedFacts);
+  if (!sourceFactsSnapshot || !localizedFacts) return null;
+  return {
+    sourceFactsSnapshot,
+    localizedFacts,
+    targetLocale: value.targetLocale,
+    status: value.status as PlatformFactsDraft["status"],
+    ...(typeof value.sourceProjectId === "string"
+      ? { sourceProjectId: value.sourceProjectId }
+      : {}),
+    ...(typeof value.sourceProjectUpdatedAt === "string"
+      ? { sourceProjectUpdatedAt: value.sourceProjectUpdatedAt }
+      : {}),
+    ...(typeof value.generatedAt === "string" ? { generatedAt: value.generatedAt } : {}),
+    updatedAt: value.updatedAt,
+  };
+}
+
 function normalizeSession(value: unknown, projectId: string): PlatformSession | null {
   if (
     !isRecord(value) ||
@@ -433,6 +500,9 @@ function normalizeSession(value: unknown, projectId: string): PlatformSession | 
       : {}),
     ...(normalizeTaobaoAnalysis(value.taobaoAnalysis)
       ? { taobaoAnalysis: normalizeTaobaoAnalysis(value.taobaoAnalysis)! }
+      : {}),
+    ...(normalizeLocalizedFactsDraft(value.localizedFactsDraft)
+      ? { localizedFactsDraft: normalizeLocalizedFactsDraft(value.localizedFactsDraft)! }
       : {}),
     ...(plan ? { plan } : {}),
     ...(typeof value.planInputSignature === "string"
@@ -567,6 +637,13 @@ function normalizeRun(value: unknown, projectId: string): ProductionRun | null {
       ...(normalizeTaobaoAnalysis(value.contextSnapshot.taobaoAnalysis)
         ? { taobaoAnalysis: normalizeTaobaoAnalysis(value.contextSnapshot.taobaoAnalysis)! }
         : {}),
+      ...(normalizeLocalizedFactsDraft(value.contextSnapshot.localizedFactsDraft)
+        ? {
+            localizedFactsDraft: normalizeLocalizedFactsDraft(
+              value.contextSnapshot.localizedFactsDraft,
+            )!,
+          }
+        : {}),
     },
     planSnapshot,
     ...(typeof value.planningInputSignatureSnapshot === "string"
@@ -574,6 +651,9 @@ function normalizeRun(value: unknown, projectId: string): ProductionRun | null {
       : {}),
     ...(isRecord(value.slotVersionsSnapshot)
       ? { slotVersionsSnapshot: normalizeSlotVersions(value.slotVersionsSnapshot) }
+      : {}),
+    ...(isRecord(value.deposit) && typeof value.deposit.targetProjectId === "string" && typeof value.deposit.depositedAt === "string"
+      ? { deposit: { targetProjectId: value.deposit.targetProjectId, depositedAt: value.deposit.depositedAt } }
       : {}),
     events,
     createdAt: value.createdAt,

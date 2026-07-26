@@ -211,6 +211,7 @@ export function AmazonSessionControls({
   disabled = false,
   hasPlan = false,
   preferCollapsed = false,
+  collapseKey,
   embedded = false,
   additionalSettings,
   planAction,
@@ -221,6 +222,8 @@ export function AmazonSessionControls({
   hasPlan?: boolean;
   /** When true (e.g. a plan already exists), start with params folded so the slot board stays primary. */
   preferCollapsed?: boolean;
+  /** Resets the folded state when a different task/session becomes active. */
+  collapseKey?: string;
   /** Render as part of edge-to-edge workbench chrome (no outer card chrome). */
   embedded?: boolean;
   /** Advanced settings that belong to this same planning decision domain. */
@@ -242,7 +245,7 @@ export function AmazonSessionControls({
   const [moduleDraft, setModuleDraft] = useState<AmazonAPlusModuleSpec[] | null>(null);
   useEffect(() => {
     setParamsOpen(!preferCollapsed);
-  }, [preferCollapsed]);
+  }, [collapseKey, hasPlan, preferCollapsed]);
   useEffect(() => {
     setModuleDialogOpen(false);
     setModuleDraft(null);
@@ -332,180 +335,180 @@ export function AmazonSessionControls({
       </div>
 
       {paramsOpen ? (
-        <>
-      <div className="amazon-session-controls__fields">
-        <Field label="目标站点" className="amazon-session-controls__field">
-          <Select
-            aria-label="目标站点"
-            value={value.marketplaceId}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({
-                ...value,
-                marketplaceId: event.target.value as AmazonMarketplaceId,
-              })
-            }
-          >
-            {AMAZON_MARKETPLACES.map((market) => (
-              <option key={market.id} value={market.id}>
-                {market.label}（{market.domain}）
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <div className="amazon-session-controls__params">
+          <div className="amazon-session-controls__fields">
+            <Field label="目标站点" className="amazon-session-controls__field">
+              <Select
+                aria-label="目标站点"
+                value={value.marketplaceId}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange({
+                    ...value,
+                    marketplaceId: event.target.value as AmazonMarketplaceId,
+                  })
+                }
+              >
+                {AMAZON_MARKETPLACES.map((market) => (
+                  <option key={market.id} value={market.id}>
+                    {market.label}（{market.domain}）
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
-        {value.plannerMode === "listing" ? (
-          <Field label="Listing 张数" className="amazon-session-controls__field">
-            <Select
-              aria-label="Listing 张数"
-              value={value.listingImageCount}
-              disabled={disabled}
-              onChange={(event) =>
-                onChange({
-                  ...value,
-                  listingImageCount: Number(event.target.value),
-                })
-              }
-            >
-              {LISTING_IMAGE_COUNT_OPTIONS.map((count) => (
-                <option key={count} value={count}>
-                  {count} 张（{formatAmazonListingSlotRange(count)}）
-                </option>
-              ))}
-            </Select>
-          </Field>
-        ) : (
-          <Field label="A+ 类型" className="amazon-session-controls__field">
-            <Select
-              aria-label="A+ 类型"
-              value={value.aPlusType}
-              disabled={disabled}
-              onChange={(event) => {
-                const aPlusType = event.target.value as APlusContentType;
-                onChange({
-                  ...value,
-                  aPlusType,
-                  // Type change always resets to that type's default module list.
-                  aPlusModuleSpecs: null,
-                });
-              }}
-            >
-              {A_PLUS_CONTENT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {getAPlusContentTypeLabel(type)}
-                  {type === DEFAULT_A_PLUS_CONTENT_TYPE ? "（默认）" : ""}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        )}
+            {value.plannerMode === "listing" ? (
+              <Field label="Listing 张数" className="amazon-session-controls__field">
+                <Select
+                  aria-label="Listing 张数"
+                  value={value.listingImageCount}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChange({
+                      ...value,
+                      listingImageCount: Number(event.target.value),
+                    })
+                  }
+                >
+                  {LISTING_IMAGE_COUNT_OPTIONS.map((count) => (
+                    <option key={count} value={count}>
+                      {count} 张（{formatAmazonListingSlotRange(count)}）
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : (
+              <Field label="A+ 类型" className="amazon-session-controls__field">
+                <Select
+                  aria-label="A+ 类型"
+                  value={value.aPlusType}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const aPlusType = event.target.value as APlusContentType;
+                    onChange({
+                      ...value,
+                      aPlusType,
+                      // Type change always resets to that type's default module list.
+                      aPlusModuleSpecs: null,
+                    });
+                  }}
+                >
+                  {A_PLUS_CONTENT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {getAPlusContentTypeLabel(type)}
+                      {type === DEFAULT_A_PLUS_CONTENT_TYPE ? "（默认）" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
 
-        <Field label="生成尺寸档" className="amazon-session-controls__field">
-          <Select
-            aria-label="生成尺寸档"
-            value={value.sizeTier}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({
-                ...value,
-                sizeTier: event.target.value as SizeTier,
-              })
-            }
-          >
-            <option value="1K">1K</option>
-            <option value="2K">2K（默认）</option>
-            <option value="4K">4K</option>
-          </Select>
-        </Field>
+            <Field label="生成尺寸档" className="amazon-session-controls__field">
+              <Select
+                aria-label="生成尺寸档"
+                value={value.sizeTier}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange({
+                    ...value,
+                    sizeTier: event.target.value as SizeTier,
+                  })
+                }
+              >
+                <option value="1K">1K</option>
+                <option value="2K">2K（默认）</option>
+                <option value="4K">4K</option>
+              </Select>
+            </Field>
 
-        <Field label="基础风格" className="amazon-session-controls__field">
-          <Select
-            aria-label="基础风格"
-            value={value.stylePresetId}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({
-                ...value,
-                stylePresetId: event.target.value,
-              })
-            }
-          >
-            {AMAZON_STYLE_PRESETS.map((preset) => (
-              <option key={preset.id} value={preset.id}>
-                {preset.label}
-                {preset.id === DEFAULT_AMAZON_STYLE_PRESET_ID ? "（默认）" : ""}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-
-      {additionalSettings ? (
-        <div className="amazon-session-controls__additional">{additionalSettings}</div>
-      ) : null}
-
-      {value.plannerMode === "aplus" ? (
-        <>
-          <div className="aplus-module-summary" aria-label="A+ 模块编排摘要">
-            <div>
-              <strong>A+ 模块编排</strong>
-              <span>
-                {aPlusSpecs.length} 个模块 · {aPlusUsesDefault ? "默认清单" : "自定义清单"}
-                {hasPlan ? " · 应用修改后需重新策划" : " · 策划时按此顺序生成槽位"}
-              </span>
-            </div>
-            <Button
-              variant="secondary"
-              size="compact"
-              disabled={disabled}
-              onClick={openModuleDialog}
-            >
-              <Pencil size={14} />
-              编排模块
-            </Button>
+            <Field label="基础风格" className="amazon-session-controls__field">
+              <Select
+                aria-label="基础风格"
+                value={value.stylePresetId}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange({
+                    ...value,
+                    stylePresetId: event.target.value,
+                  })
+                }
+              >
+                {AMAZON_STYLE_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                    {preset.id === DEFAULT_AMAZON_STYLE_PRESET_ID ? "（默认）" : ""}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           </div>
-          <Dialog
-            open={moduleDialogOpen}
-            title="编排 A+ 模块"
-            eyebrow={`${getAPlusContentTypeLabel(value.aPlusType)} · ${aPlusSpecs.length} 个模块`}
-            className="aplus-module-dialog"
-            onClose={closeModuleDialog}
-            footer={
-              <>
-                <Button variant="secondary" onClick={closeModuleDialog}>
-                  取消
-                </Button>
-                <Button onClick={applyModuleDraft}>应用编排</Button>
-              </>
-            }
-          >
-            <APlusModuleArrange
-              aPlusType={value.aPlusType}
-              specs={moduleDraft ?? aPlusSpecs}
-              disabled={disabled}
-              onChange={(next) =>
-                setModuleDraft(
-                  cloneSpecs(
-                    next
-                      ? normalizeAPlusModuleSpecs(value.aPlusType, next)
-                      : getAPlusModuleSpecs(value.aPlusType),
-                  ),
-                )
-              }
-            />
-            <p className="aplus-module-dialog__scope">
-              弹窗内调整是临时草稿；点击“应用编排”后才会更新当前任务参数。
-            </p>
-          </Dialog>
-        </>
-      ) : null}
 
-      <p className="amazon-session-controls__summary">
-        站点 {marketShort} · {value.sizeTier} 生成画布 · 风格 {styleShort}
-        {value.plannerMode === "listing" ? " · MAIN 不套用风格" : " · 改模块后请重新策划"}
-        。左侧可粘贴 Listing；完整档案在「资料库」。
-      </p>
-        </>
+          {additionalSettings ? (
+            <div className="amazon-session-controls__additional">{additionalSettings}</div>
+          ) : null}
+
+          {value.plannerMode === "aplus" ? (
+            <>
+              <div className="aplus-module-summary" aria-label="A+ 模块编排摘要">
+                <div>
+                  <strong>A+ 模块编排</strong>
+                  <span>
+                    {aPlusSpecs.length} 个模块 · {aPlusUsesDefault ? "默认清单" : "自定义清单"}
+                    {hasPlan ? " · 应用修改后需重新策划" : " · 策划时按此顺序生成槽位"}
+                  </span>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  disabled={disabled}
+                  onClick={openModuleDialog}
+                >
+                  <Pencil size={14} />
+                  编排模块
+                </Button>
+              </div>
+              <Dialog
+                open={moduleDialogOpen}
+                title="编排 A+ 模块"
+                eyebrow={`${getAPlusContentTypeLabel(value.aPlusType)} · ${aPlusSpecs.length} 个模块`}
+                className="aplus-module-dialog"
+                onClose={closeModuleDialog}
+                footer={
+                  <>
+                    <Button variant="secondary" onClick={closeModuleDialog}>
+                      取消
+                    </Button>
+                    <Button onClick={applyModuleDraft}>应用编排</Button>
+                  </>
+                }
+              >
+                <APlusModuleArrange
+                  aPlusType={value.aPlusType}
+                  specs={moduleDraft ?? aPlusSpecs}
+                  disabled={disabled}
+                  onChange={(next) =>
+                    setModuleDraft(
+                      cloneSpecs(
+                        next
+                          ? normalizeAPlusModuleSpecs(value.aPlusType, next)
+                          : getAPlusModuleSpecs(value.aPlusType),
+                      ),
+                    )
+                  }
+                />
+                <p className="aplus-module-dialog__scope">
+                  弹窗内调整是临时草稿；点击“应用编排”后才会更新当前任务参数。
+                </p>
+              </Dialog>
+            </>
+          ) : null}
+
+          <p className="amazon-session-controls__summary">
+            站点 {marketShort} · {value.sizeTier} 生成画布 · 风格 {styleShort}
+            {value.plannerMode === "listing" ? " · MAIN 不套用风格" : " · 改模块后请重新策划"}
+            。左侧可粘贴 Listing；完整档案在「资料库」。
+          </p>
+        </div>
       ) : null}
     </section>
   );

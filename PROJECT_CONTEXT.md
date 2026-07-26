@@ -134,7 +134,7 @@ flowchart LR
 - 治理实现：Token、共享 UI、页面壳、状态和动作层级是否由同一套机制拥有。
 - 工程运行：类型、测试、构建、Provider/存储契约和浏览器错误。
 
-当前浏览器证据位于 `artifacts/cross-platform-ais/`。当前收口基线为 `pnpm check:ui`、`pnpm typecheck`、`pnpm test`（74 个文件、387 项）、`pnpm build`、`VITE_BASE_PATH=/Ecom/ pnpm build`、`pnpm test:browser`；批量任务已在真实浏览器中验证，断点覆盖 `1600/1280/1100/900/899`。
+当前浏览器证据位于 `artifacts/cross-platform-ais/`。当前收口基线为 `pnpm check:ui`、`pnpm typecheck`、`pnpm test`（74 个文件、387 项）、`pnpm build`、`VITE_BASE_PATH=/ecom/ pnpm build`、`pnpm test:browser`；批量任务已在真实浏览器中验证，断点覆盖 `1600/1280/1100/900/899`。
 
 ## 8. 后续协作门禁
 

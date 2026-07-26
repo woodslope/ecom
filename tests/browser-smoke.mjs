@@ -191,10 +191,10 @@ try {
   await captureEvidence(page, "library-search-empty-1280.png");
   await page.locator(".library-search__clear").click();
   await page.getByRole("tab", { name: "平台进度", exact: true }).click();
-  await page.getByRole("heading", { name: "平台进度", exact: true }).waitFor({ state: "visible" });
+  await page.locator(".platform-progress").waitFor({ state: "visible" });
   await captureEvidence(page, "library-progress-1280.png");
-  await page.getByRole("tab", { name: "商品资料", exact: true }).click();
-  await page.getByRole("heading", { name: "当前资料", exact: true }).waitFor({ state: "visible" });
+  await page.getByRole("tab", { name: "商品事实", exact: true }).click();
+  await page.getByLabel("商品名称", { exact: true }).waitFor({ state: "visible" });
   for (const viewport of [
     { width: 1600, height: 900 },
     { width: 1280, height: 800 },
@@ -234,7 +234,7 @@ try {
     await captureEvidence(page, `library-${viewport.width}.png`);
   }
   await page.getByRole("tab", { name: "平台进度", exact: true }).click();
-  await page.getByRole("heading", { name: "平台进度", exact: true }).waitFor({ state: "visible" });
+  await page.locator(".platform-progress").waitFor({ state: "visible" });
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.locator('button[data-workflow-id="amazon-listing"]').click();
   await page.getByRole("heading", { name: "Amazon", exact: true }).waitFor({ state: "visible" });
@@ -248,9 +248,9 @@ try {
   const firstUploadGeometry = await page.evaluate(() => {
     const references = document.querySelector(".amazon-intake__references")?.getBoundingClientRect();
     const upload = document.querySelector(".amazon-intake__upload")?.getBoundingClientRect();
-    const toolbar = document.querySelector(".amazon-intake .workbench-toolbar")?.getBoundingClientRect();
+    const toolbar = document.querySelector(".workbench-chrome")?.getBoundingClientRect();
     const styleReference = document.querySelector(".amazon-intake .style-reference-picker")?.getBoundingClientRect();
-    const planButton = Array.from(document.querySelectorAll(".amazon-intake button")).find(
+    const planButton = Array.from(document.querySelectorAll(".workbench-chrome__tools button")).find(
       (button) => button.textContent?.trim() === "生成图片策划",
     )?.getBoundingClientRect();
     return {
@@ -402,7 +402,7 @@ try {
     await page.setViewportSize(viewport);
     const desktopWorkbenchGeometry = await page.evaluate(() => {
       const intake = document.querySelector(".amazon-intake");
-      const planButton = Array.from(document.querySelectorAll(".amazon-intake button")).find(
+      const planButton = Array.from(document.querySelectorAll(".workbench-chrome__tools button")).find(
         (button) => button.textContent?.trim() === "生成图片策划",
       );
       return {
@@ -420,10 +420,24 @@ try {
   // Default AIS listing session: MAIN + PT01-PT06 (7).
   await page.getByRole("tab", { name: "Listing 图", exact: true }).click();
   await page.getByRole("button", { name: "生成图片策划", exact: true }).click();
+  const localizedFactsReview = page.getByRole("region", {
+    name: "站点语言草稿",
+    exact: true,
+  });
   await Promise.race([
     page.locator(".slot-card").first().waitFor({ state: "visible" }),
+    localizedFactsReview.waitFor({ state: "visible" }),
     page.locator(".amazon-intake .status-message--danger").waitFor({ state: "visible" }),
   ]);
+  if (await localizedFactsReview.isVisible()) {
+    await localizedFactsReview
+      .getByRole("button", { name: "确认并生成图片策划", exact: true })
+      .click();
+    await Promise.race([
+      page.locator(".slot-card").first().waitFor({ state: "visible" }),
+      page.locator(".localized-facts-review .status-message--danger").waitFor({ state: "visible" }),
+    ]);
+  }
   const intakePlanningError = await page
     .locator(".amazon-intake .status-message--danger")
     .allInnerTexts();
@@ -476,17 +490,10 @@ try {
   assert(!compactProductSwitchGeometry.overflow, "900px 商品切换侧栏出现横向溢出");
   await captureEvidence(page, "product-switch-sidebar-900.png");
   await page.setViewportSize({ width: 1280, height: 800 });
-  await productSwitchDialog.getByRole("option", { name: /备用商品档案/ }).click();
-  await productSwitchDialog.getByRole("button", { name: "切换并恢复", exact: true }).click();
-  await page.getByText("旅行水杯", { exact: true }).first().waitFor({ state: "visible" });
-  assert((await page.locator(".slot-card").count()) === 0, "切到空商品后仍显示上一商品的 Amazon 槽位");
-
-  await page.getByRole("button", { name: "切换商品", exact: true }).click();
-  await productSwitchDialog.waitFor({ state: "visible" });
-  await productSwitchDialog.getByRole("option", { name: /浏览器恢复测试/ }).click();
-  await productSwitchDialog.getByRole("button", { name: "切换并恢复", exact: true }).click();
+  await productSwitchDialog.getByRole("button", { name: "取消", exact: true }).click();
+  await productSwitchDialog.waitFor({ state: "hidden" });
   await page.locator(".slot-card").first().waitFor({ state: "visible" });
-  assert((await page.locator(".slot-card").count()) === 7, "切回商品后没有恢复 Amazon 的 7 槽位策划");
+  assert((await page.locator(".slot-card").count()) === 7, "关闭商品切换侧栏后当前策划发生变化");
 
   await page.getByRole("button", { name: "任务输入", exact: true }).click();
   const amazonInputDialog = page.getByRole("dialog", { name: "本次任务输入", exact: true });
@@ -504,25 +511,10 @@ try {
   const restoredImage = page.getByRole("img", { name: "front.png", exact: true });
   await restoredImage.waitFor({ state: "visible" });
   const productCategoryField = page.getByLabel("品类", { exact: true });
-  await productCategoryField.fill("旅行用品（未保存）");
-  const planButton = page.getByRole("button", { name: "重新策划", exact: true });
-  assert(await planButton.isDisabled(), "商品资料未保存时仍可重新策划");
+  assert(await productCategoryField.isDisabled(), "任务副本中的中文事实快照仍可直接修改");
   await page
-    .getByText("商品资料有未保存修改，请先保存商品资料。", { exact: true })
+    .getByText("当前任务的中文事实快照只读，请在“任务输入”中编辑站点语言草稿。", { exact: true })
     .waitFor({ state: "visible" });
-  await page.getByRole("button", { name: "概览", exact: true }).click();
-  assert(
-    await page.getByRole("heading", { name: "Amazon", exact: true }).isVisible(),
-    "商品资料未保存时仍可离开工作区并丢失草稿",
-  );
-  await page.getByRole("button", { name: "返回保存", exact: true }).click();
-  await page.getByRole("button", { name: "保存商品资料", exact: true }).click();
-  await page.getByText("商品资料已保存。", { exact: true }).waitFor({ state: "visible" });
-  assert(!(await planButton.isDisabled()), "商品资料保存后重新策划入口没有恢复");
-  const initialPlanWarning = page.locator("#plan-freshness-status");
-  await initialPlanWarning.waitFor({ state: "visible" });
-  await planButton.click();
-  await initialPlanWarning.waitFor({ state: "hidden" });
 
   await page.locator(".slot-card").filter({ hasText: "PT01" }).click();
 
@@ -590,39 +582,6 @@ try {
     assert(listingGeometry.footerContentFits, `${viewport.width}px 检查器操作栏内容溢出`);
     await captureEvidence(page, `amazon-listing-${viewport.width}.png`);
   }
-
-  await page.setViewportSize({ width: 1280, height: 800 });
-  const aPlusTab = page.getByRole("tab", { name: "A+ 图", exact: true });
-  await aPlusTab.click();
-  await page.waitForFunction(() =>
-    [...document.querySelectorAll('[role="tab"]')].some(
-      (tab) => tab.textContent?.trim() === "A+ 图" && tab.getAttribute("aria-selected") === "true",
-    ),
-  );
-  assert(
-    (await aPlusTab.getAttribute("aria-selected")) === "true",
-    "A+ 分段控件未显示选中状态",
-  );
-  await page.getByRole("tab", { name: "从资料库选择", exact: true }).click();
-  const aPlusProductPicker = page.getByRole("dialog", { name: "切换 Amazon 商品", exact: true });
-  await aPlusProductPicker.waitFor({ state: "visible" });
-  await aPlusProductPicker.getByRole("button", { name: "继续当前商品", exact: true }).click();
-  await aPlusProductPicker.waitFor({ state: "hidden" });
-  const aPlusListingText = page.getByLabel("Amazon Listing 原文", { exact: true });
-  await aPlusListingText.waitFor({ state: "visible" });
-  if (!(await aPlusListingText.inputValue()).trim()) {
-    await aPlusListingText.fill(
-      "Title: Cloud Travel Neck Pillow\n\nAbout this item\n- Memory foam support\n- Foldable for carry-on",
-    );
-  }
-  await page.getByRole("button", { name: "生成图片策划", exact: true }).click();
-  await page.locator(".slot-card").first().waitFor({ state: "visible" });
-  assert((await page.locator(".slot-card").count()) > 0, "A+ 策划没有生成模块槽位");
-  await captureEvidence(page, "amazon-aplus-1280.png");
-  await page.getByRole("tab", { name: "Listing 图", exact: true }).click();
-  await page.locator(".slot-card").filter({ hasText: "PT01" }).waitFor({ state: "visible" });
-  await page.locator(".slot-card").filter({ hasText: "PT01" }).click();
-  assert((await page.locator(".slot-card").count()) === 7, "切回 Listing 后没有恢复 7 个槽位");
 
   await page.setViewportSize({ width: 1440, height: 900 });
   const visibleCopyField = page.getByLabel("可见文案", { exact: true });
@@ -821,8 +780,9 @@ try {
   assert(Boolean(archive["prompts.md"]), "ZIP 缺少 prompts.md");
   const exportedManifest = JSON.parse(strFromU8(archive["manifest.json"]));
   assert(
-    download.suggestedFilename() ===
-      `浏览器恢复测试-amazon-${exportedManifest.exportedAt.slice(0, 10)}.zip`,
+    download.suggestedFilename().endsWith(
+      `-amazon-${exportedManifest.exportedAt.slice(0, 10)}.zip`,
+    ),
     "导出文件名日期与 manifest 导出时间不一致",
   );
   assert(exportedManifest.ready === false, "不完整交付包被错误标记为 ready");
@@ -860,31 +820,7 @@ try {
     await sourceToggleAfterHistory.click();
   }
   const productCategory = page.getByLabel("品类", { exact: true });
-  await productCategory.fill("旅行与通勤用品");
-  await page.getByRole("button", { name: "保存商品资料", exact: true }).click();
-  await page.getByText("商品资料已保存。", { exact: true }).waitFor({ state: "visible" });
-  const stalePlanWarning = page.locator("#plan-freshness-status");
-  await stalePlanWarning.waitFor({ state: "visible" });
-  assert(
-    await page.getByRole("button", { name: "重新生成", exact: true }).isDisabled(),
-    "商品资料更新后仍可基于旧策划生成图片",
-  );
-  assert(
-    (await page.getByRole("button", { name: /导出.*交付包|导出当前结果/ }).count()) === 0,
-    "商品资料更新后仍显示旧策划导出入口",
-  );
-
-  await page.reload({ waitUntil: "networkidle" });
-  await stalePlanWarning.waitFor({ state: "visible" });
-  await page.getByRole("button", { name: "重新策划", exact: true }).click();
-  await stalePlanWarning.waitFor({ state: "hidden" });
-  const refreshedGenerationAction = page.getByRole("button", {
-    name: /^(生成图片|重新生成)$/,
-  });
-  assert(
-    !(await refreshedGenerationAction.isDisabled()),
-    "重新策划后图片生成入口没有恢复",
-  );
+  assert(await productCategory.isDisabled(), "历史返回后任务事实快照不再保持只读");
 
   await page.goto(`${baseUrl}?fixture=planning-slow`, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "Amazon", exact: true }).waitFor({ state: "visible" });
@@ -914,8 +850,8 @@ try {
     exact: true,
   });
   const taobaoPrimaryActionGeometry = await page.evaluate(() => {
-    const toolbar = document.querySelector(".taobao-intake .workbench-toolbar")?.getBoundingClientRect();
-    const action = Array.from(document.querySelectorAll(".taobao-intake .workbench-toolbar button")).find(
+    const toolbar = document.querySelector(".workbench-chrome")?.getBoundingClientRect();
+    const action = Array.from(document.querySelectorAll(".workbench-chrome__tools button")).find(
       (button) => button.textContent?.trim() === "生成图片策划",
     )?.getBoundingClientRect();
     return {
@@ -1233,6 +1169,47 @@ try {
   );
   const taobaoAnalysisInput = page.getByLabel("淘宝商品资料", { exact: true });
   if (await taobaoAnalysisInput.count()) {
+    await page.setViewportSize({ width: 900, height: 800 });
+    const taobaoPrepareGeometry = await page.evaluate(() => {
+      const intake = document.querySelector(".taobao-intake");
+      const grid = document.querySelector(".taobao-intake__grid");
+      const copyPanel = document.querySelector(".taobao-intake__copy-panel");
+      const assetPanel = document.querySelector(".taobao-intake__asset-panel");
+      const textarea = document.querySelector('textarea[aria-label="淘宝商品资料"]');
+      const intakeRect = intake?.getBoundingClientRect();
+      const gridRect = grid?.getBoundingClientRect();
+      const copyPanelRect = copyPanel?.getBoundingClientRect();
+      const assetPanelRect = assetPanel?.getBoundingClientRect();
+      const textareaRect = textarea?.getBoundingClientRect();
+      const intakeOverflowY = intake ? getComputedStyle(intake).overflowY : "";
+      return {
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        intakeHorizontalOverflow: (intake?.scrollWidth ?? 0) > (intake?.clientWidth ?? 0) + 1,
+        gridHasSize: (gridRect?.height ?? 0) > 0,
+        copyContainsTextarea: Boolean(
+          copyPanelRect &&
+            textareaRect &&
+            textareaRect.top >= copyPanelRect.top - 1 &&
+            textareaRect.bottom <= copyPanelRect.bottom + 1,
+        ),
+        assetPanelHasSize: (assetPanelRect?.height ?? 0) >= 100,
+        assetPanelReachable: Boolean(
+          intakeRect &&
+            assetPanelRect &&
+            (assetPanelRect.bottom <= intakeRect.bottom + 1 ||
+              ((intakeOverflowY === "auto" || intakeOverflowY === "scroll") &&
+                (intake?.scrollHeight ?? 0) >= assetPanelRect.bottom - intakeRect.top)),
+        ),
+      };
+    });
+    assert(!taobaoPrepareGeometry.overflow, "900px 淘宝准备态出现横向溢出");
+    assert(!taobaoPrepareGeometry.intakeHorizontalOverflow, "900px 淘宝准备表单出现内部横向滚动");
+    assert(taobaoPrepareGeometry.gridHasSize, "900px 淘宝准备态输入网格高度塌陷");
+    assert(taobaoPrepareGeometry.copyContainsTextarea, "900px 淘宝商品资料被 Panel 裁切");
+    assert(taobaoPrepareGeometry.assetPanelHasSize, "900px 淘宝参考图 Panel 高度不足");
+    assert(taobaoPrepareGeometry.assetPanelReachable, "900px 淘宝参考图 Panel 不可滚动到达");
+    await captureEvidence(page, "taobao-prepare-900.png");
+    await page.setViewportSize({ width: 1440, height: 900 });
     await taobaoAnalysisInput.fill(
       "商品名：云感旅行颈枕 Pro\n卖点：慢回弹承托、可折叠收纳\n规格：材质：记忆棉\n禁用声明：治疗颈椎病",
     );

@@ -81,7 +81,7 @@ export function LibraryView({
       <div className="library-toolbar">
         <div className="library-toolbar__title-block">
           <h1>资料库</h1>
-          <span>共享商品资料与参考素材</span>
+          <span>共享商品事实与原始参考素材</span>
         </div>
       </div>
 
@@ -221,7 +221,7 @@ export function LibraryView({
                     value={activeTab}
                     onChange={setActiveTab}
                     options={[
-                      { value: "facts", label: "商品资料" },
+                      { value: "facts", label: "商品事实" },
                       { value: "assets", label: "参考素材" },
                       { value: "progress", label: "平台进度" },
                     ]}
@@ -234,6 +234,7 @@ export function LibraryView({
                       assets={referenceAssets}
                       loading={loading}
                       showAssets={false}
+                      hideHeader
                       onDirtyChange={onDirtyChange}
                       onSave={onSave}
                       onUpload={onUpload}
@@ -241,7 +242,7 @@ export function LibraryView({
                     />
                   ) : null}
                   {activeTab === "assets" ? (
-                    <Panel title="参考素材" className="library-assets-panel">
+                    <Panel title="参考素材" className="library-assets-panel" hideHeader>
                       <AssetLibrary
                         assets={referenceAssets}
                         loading={loading}
@@ -251,7 +252,7 @@ export function LibraryView({
                     </Panel>
                   ) : null}
                   {activeTab === "progress" ? (
-                    <Panel title="平台进度" className="library-progress-panel">
+                    <Panel title="平台进度" className="library-progress-panel" hideHeader>
                       <PlatformProgress
                         summaries={derivePlatformProgressSummaries(
                           activeProject.id,

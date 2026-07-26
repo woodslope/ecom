@@ -40,7 +40,7 @@ import {
   writeDemoModeBannerDismissed,
   writeLastPlatform,
 } from "./domain/workspace/preferences";
-import { useWorkbenchStore, type WorkbenchAsset } from "./store/workbench-store";
+import { useWorkbenchStore, type WorkbenchAsset, type WorkbenchState } from "./store/workbench-store";
 
 function initialNavigationItem(): NavigationItemId {
   if (typeof window === "undefined") return "amazon";
@@ -178,6 +178,7 @@ function Overview({
 
 function HistoryView({
   projects,
+  historyProjects,
   activeProjectId,
   activeRunIds,
   jobs,
@@ -189,9 +190,12 @@ function HistoryView({
   onForkRun,
   onReuseImage,
   onExportRun,
+  onDepositRun,
+  onPrepareDepositFacts,
   historyQueryService,
 }: {
   projects: ProductProject[];
+  historyProjects: ProductProject[];
   activeProjectId?: string | null;
   activeRunIds: string[];
   jobs: ExecutionJob[];
@@ -203,6 +207,8 @@ function HistoryView({
   onForkRun: (record: ProductionRunRecord) => void;
   onReuseImage: (record: ProductionRunRecord, eventId: string) => void;
   onExportRun: (record: ProductionRunRecord) => void;
+  onDepositRun: WorkbenchState["depositRunToLibrary"];
+  onPrepareDepositFacts: WorkbenchState["prepareRunDepositFacts"];
   historyQueryService: HistoryQueryService | null;
 }) {
   const activeJobCount = jobs.filter((job) =>
@@ -230,6 +236,7 @@ function HistoryView({
       />
       <TaskHistoryArchive
         projects={projects}
+        historyProjects={historyProjects}
         activeProjectId={activeProjectId}
         activeRunIds={activeRunIds}
         onOpenLibrary={onOpenLibrary}
@@ -237,6 +244,8 @@ function HistoryView({
         onForkRun={onForkRun}
         onReuseImage={onReuseImage}
         onExportRun={onExportRun}
+        onDepositRun={onDepositRun}
+        onPrepareDepositFacts={onPrepareDepositFacts}
         historyQueryService={historyQueryService}
       />
     </div>
@@ -276,6 +285,7 @@ export function App() {
     warning,
     resourceRestoreError,
     projects,
+    allProjects,
     activeProject,
     assets,
     sessions,
@@ -316,6 +326,7 @@ export function App() {
     reopenTaobaoAnalysis,
     seedPlatformIntakeFromProject,
     syncAmazonListingFacts,
+    confirmLocalizedFacts,
     createProject,
     updateActiveProject,
     removeProject,
@@ -341,6 +352,8 @@ export function App() {
     activateSlotVersion,
     resumeRun,
     forkRun,
+    depositRunToLibrary,
+    prepareRunDepositFacts,
     reuseRunImageAsReference,
     reuseGeneratedImageAsReference,
     clearGenerationError,
@@ -668,10 +681,10 @@ export function App() {
       {activeItem === "library" ? (
         <LibraryView
           projects={projects}
-          activeProject={activeProject}
-          assets={assets}
-          sessions={sessions}
-          runs={runs}
+          activeProject={activeProject?.scope === "task-draft" ? null : activeProject}
+          assets={activeProject?.scope === "task-draft" ? [] : assets}
+          sessions={activeProject?.scope === "task-draft" ? [] : sessions}
+          runs={activeProject?.scope === "task-draft" ? [] : runs}
           loading={loading}
           onCreate={openProjectDialog}
           onSelectProject={changeActiveProject}
@@ -699,6 +712,13 @@ export function App() {
             error={planningError}
             onStartSession={startAmazonSession}
             onSyncListingFacts={syncAmazonListingFacts}
+            onConfirmLocalizedFacts={async (sessionId, facts) => {
+              const currentSession = sessions.find((candidate) => candidate.id === sessionId);
+              if (currentSession?.options.platformId !== "amazon") return;
+              const confirmed = await confirmLocalizedFacts(sessionId, facts);
+              if (!confirmed) return;
+              await planPlatform("amazon", currentSession.options);
+            }}
             onOpenLibrary={() => changeActiveItem("library")}
             onOpenProductPicker={() => setProductPickerPlatform("amazon")}
             onCreateStyleReference={createStyleReference}
@@ -882,6 +902,7 @@ export function App() {
       {activeItem === "history" ? (
         <HistoryView
           projects={projects}
+          historyProjects={allProjects}
           activeProjectId={activeProject?.id}
           activeRunIds={activeRunIds}
           jobs={jobs}
@@ -897,6 +918,8 @@ export function App() {
           })}
           onReuseImage={(record, eventId) => void reuseRunImageAsReference(record.run.id, eventId)}
           onExportRun={(record) => void exportHistoryRun(record.run.id)}
+          onDepositRun={depositRunToLibrary}
+          onPrepareDepositFacts={prepareRunDepositFacts}
           historyQueryService={historyQueryService}
         />
       ) : null}

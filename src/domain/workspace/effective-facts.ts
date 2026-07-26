@@ -5,10 +5,16 @@ import {
 } from "../planning/input-assessment";
 import type { ProductProject } from "../projects/types";
 import type { PlatformSession } from "./project-workspace";
+import { productFactsEqual } from "../localization/product-localizer";
 
 type EffectiveSessionContext = Pick<
   PlatformSession,
-  "projectId" | "workflowId" | "sourceInput" | "planningInput" | "taobaoAnalysis"
+  | "projectId"
+  | "workflowId"
+  | "sourceInput"
+  | "planningInput"
+  | "taobaoAnalysis"
+  | "localizedFactsDraft"
 >;
 
 /**
@@ -20,17 +26,26 @@ export function resolveSessionEffectiveFacts(
   session?: EffectiveSessionContext,
 ): ProductProject["facts"] {
   if (!session || session.projectId !== project.id) return project.facts;
+  let sourceFacts: ProductProject["facts"];
   if (session.workflowId === "taobao-product") {
     const baseFacts = session.planningInput?.sourceMode === "manual"
       ? createEmptyProductFacts()
       : project.facts;
-    return applyTaobaoAnalysisToFacts(baseFacts, session.taobaoAnalysis);
+    sourceFacts = applyTaobaoAnalysisToFacts(baseFacts, session.taobaoAnalysis);
+  } else {
+    sourceFacts = resolveAmazonPlanningFacts(
+      project.facts,
+      session.sourceInput.listingText,
+      session.planningInput?.sourceMode ?? "library",
+    );
   }
-  return resolveAmazonPlanningFacts(
-    project.facts,
-    session.sourceInput.listingText,
-    session.planningInput?.sourceMode ?? "library",
-  );
+  if (
+    session.localizedFactsDraft?.status === "confirmed" &&
+    productFactsEqual(session.localizedFactsDraft.sourceFactsSnapshot, sourceFacts)
+  ) {
+    return session.localizedFactsDraft.localizedFacts;
+  }
+  return sourceFacts;
 }
 
 export function resolveSessionEffectiveProject(

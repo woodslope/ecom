@@ -9,22 +9,31 @@ const WORKFLOW_STEPS: Array<{ id: WorkflowStage; label: string; hint: string }> 
   { id: "deliver", label: "交付检查", hint: "预览、合规与导出" },
 ];
 
+const COMPACT_STEP_LABELS: Record<WorkflowStage, string> = {
+  prepare: "准备",
+  review: "策划",
+  produce: "生产",
+  deliver: "交付",
+};
+
 export function WorkflowStepper({
   platform,
   stage,
   completedSlots,
   totalSlots,
+  compact = false,
 }: {
   platform: PlatformId;
   stage: WorkflowStage;
   completedSlots: number;
   totalSlots: number;
+  compact?: boolean;
 }) {
   const currentIndex = WORKFLOW_STEPS.findIndex((step) => step.id === stage);
   const progressLabel = totalSlots > 0 ? `${completedSlots}/${totalSlots} 个槽位已完成` : "等待策划";
   return (
     <div
-      className="workbench-chrome__progress-row"
+      className={`workbench-chrome__progress-row${compact ? " workbench-chrome__progress-row--compact" : ""}`}
       aria-label={`${platform === "amazon" ? "Amazon" : "淘宝 / 天猫"} 工作流程`}
     >
       <ol className="workbench-stepper">
@@ -41,14 +50,16 @@ export function WorkflowStepper({
                 {isComplete ? "✓" : index + 1}
               </span>
               <span className="workbench-stepper__copy">
-                <strong>{step.label}</strong>
-                <small>{step.hint}</small>
+                <strong>{compact ? COMPACT_STEP_LABELS[step.id] : step.label}</strong>
+                {compact ? null : <small>{step.hint}</small>}
               </span>
             </li>
           );
         })}
       </ol>
-      <span className="workbench-chrome__progress-summary">{progressLabel}</span>
+      {compact ? null : (
+        <span className="workbench-chrome__progress-summary">{progressLabel}</span>
+      )}
     </div>
   );
 }

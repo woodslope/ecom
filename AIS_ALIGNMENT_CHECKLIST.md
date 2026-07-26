@@ -90,7 +90,7 @@ Ecom 提供三套项目级文本风格预设，也允许项目范围的 style as
 | 遮罩默认、绘制、错误、保存版本、900px | `artifacts/cross-platform-ais/task11-mask-*.png` |
 | 桌面门禁与滚动/溢出 | `desktop-gate-899.png`、`amazon-compact-900.png`、浏览器烟测几何断言 |
 
-Amazon 对齐相关的最新工程证据：`pnpm check:ui`、`pnpm typecheck`、`pnpm test`（74 个文件、387/387）、`pnpm build`、`VITE_BASE_PATH=/Ecom/ pnpm build`、`pnpm test:browser` 均通过。浏览器仍有一个被过滤的既有 404 资源提示；没有未解释的 page error 或流程错误。淘宝任务 17–21、跨平台治理任务 22 和最终收口任务 23 的完整证据记录在 `TAOBAO_MXPAGE_IMPLEMENTATION_PLAN.md`。
+Amazon 对齐相关的最新工程证据：`pnpm check:ui`、`pnpm typecheck`、`pnpm test`（74 个文件、387/387）、`pnpm build`、`VITE_BASE_PATH=/ecom/ pnpm build`、`pnpm test:browser` 均通过。浏览器仍有一个被过滤的既有 404 资源提示；没有未解释的 page error 或流程错误。淘宝任务 17–21、跨平台治理任务 22 和最终收口任务 23 的完整证据记录在 `TAOBAO_MXPAGE_IMPLEMENTATION_PLAN.md`。
 
 ## 7. 对齐完成定义
 

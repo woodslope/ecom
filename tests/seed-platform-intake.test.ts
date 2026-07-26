@@ -20,11 +20,11 @@ const productFacts: ProductFacts = {
   specifications: { 材质: "记忆棉" },
 };
 
-function createDependencies(createId = () => "project_seed") {
+function createDependencies(projectIds = ["project_seed", "task_seed", "task_seed_2", "task_seed_3"]) {
   let assetSeq = 0;
   return {
     projectRepository: createMemoryProjectRepository({
-      createId,
+      createId: () => projectIds.shift()!,
       now: () => "2026-07-21T10:00:00.000Z",
     }),
     assetRepository: createMemoryAssetRepository({
@@ -62,23 +62,27 @@ describe("seedPlatformIntakeFromProject", () => {
       .seedPlatformIntakeFromProject(project!.id, "amazon");
     expect(result).toBe("seeded");
 
-    const session = store
-      .getState()
-      .sessions.find(
-        (candidate) =>
-          candidate.projectId === project!.id && candidate.workflowId === "amazon-listing",
-      );
+    const taskProject = store.getState().activeProject;
+    expect(taskProject).toMatchObject({ scope: "task-draft" });
+    expect(taskProject?.id).not.toBe(project!.id);
+    expect(store.getState().projects).toEqual([project]);
+    const session = store.getState().sessions.find(
+      (candidate) => candidate.projectId === taskProject?.id && candidate.workflowId === "amazon-listing",
+    );
     expect(session).toBeTruthy();
     expect(session?.sourceInput.listingText).toContain("Title: 云感旅行颈枕");
     expect(session?.sourceInput.listingText).toContain("- 慢回弹");
-    expect(session?.selectedReferenceAssetIds).toEqual(
-      uploaded.map((asset) => asset.metadata.id),
-    );
+    expect(session?.selectedReferenceAssetIds).toHaveLength(uploaded.length);
+    expect(session?.selectedReferenceAssetIds).not.toEqual(uploaded.map((asset) => asset.metadata.id));
+    expect(session?.planningInput).toMatchObject({
+      sourceProjectId: project!.id,
+      sourceProjectUpdatedAt: project!.updatedAt,
+    });
     expect(session?.plan).toBeUndefined();
   });
 
   it("prefills Taobao product text and reference assets without analyzing", async () => {
-    const deps = createDependencies(() => "project_taobao_seed");
+    const deps = createDependencies(["project_taobao_seed", "task_taobao_seed"]);
     const store = createWorkbenchStore(deps);
     await store.getState().initialize();
     const project = await store.getState().createProject({
@@ -94,25 +98,21 @@ describe("seedPlatformIntakeFromProject", () => {
       .seedPlatformIntakeFromProject(project!.id, "taobao");
     expect(result).toBe("seeded");
 
-    const session = store
-      .getState()
-      .sessions.find(
-        (candidate) =>
-          candidate.projectId === project!.id && candidate.workflowId === "taobao-product",
-      );
+    const taskProject = store.getState().activeProject;
+    expect(taskProject).toMatchObject({ scope: "task-draft" });
+    const session = store.getState().sessions.find(
+      (candidate) => candidate.projectId === taskProject?.id && candidate.workflowId === "taobao-product",
+    );
     expect(session?.sourceInput.taobaoProduct?.productText).toContain("商品名：云感旅行颈枕");
-    expect(session?.sourceInput.taobaoProduct?.selectedReferenceAssetIds).toEqual(
-      uploaded.map((asset) => asset.metadata.id),
-    );
-    expect(session?.selectedReferenceAssetIds).toEqual(
-      uploaded.map((asset) => asset.metadata.id),
-    );
+    expect(session?.sourceInput.taobaoProduct?.selectedReferenceAssetIds).toHaveLength(uploaded.length);
+    expect(session?.selectedReferenceAssetIds).toHaveLength(uploaded.length);
+    expect(session?.selectedReferenceAssetIds).not.toEqual(uploaded.map((asset) => asset.metadata.id));
     expect(session?.taobaoAnalysis).toBeUndefined();
     expect(session?.plan).toBeUndefined();
   });
 
-  it("restores an existing draft without overwriting it, then supports an explicit force reset", async () => {
-    const deps = createDependencies(() => "project_confirm");
+  it("creates a new task copy without overwriting an earlier platform draft", async () => {
+    const deps = createDependencies(["project_confirm", "task_first", "task_second"]);
     const store = createWorkbenchStore(deps);
     await store.getState().initialize();
     const project = await store.getState().createProject({
@@ -124,9 +124,10 @@ describe("seedPlatformIntakeFromProject", () => {
       .getState()
       .seedPlatformIntakeFromProject(project!.id, "amazon");
     expect(first).toBe("seeded");
+    const firstTaskId = store.getState().activeProject!.id;
 
     // Simulate user edits on the session draft.
-    const workspace = await deps.workspaceRepository.load(project!.id);
+    const workspace = await deps.workspaceRepository.load(firstTaskId);
     const existing = workspace.sessions[0]!;
     const edited = {
       ...existing,
@@ -145,18 +146,10 @@ describe("seedPlatformIntakeFromProject", () => {
     const restored = await store
       .getState()
       .seedPlatformIntakeFromProject(project!.id, "amazon");
-    expect(restored).toBe("skipped");
-    expect(
-      store.getState().sessions.find((session) => session.id === edited.id)?.sourceInput
-        .listingText,
-    ).toContain("Manual draft");
-
-    const forced = await store
-      .getState()
-      .seedPlatformIntakeFromProject(project!.id, "amazon", { force: true });
-    expect(forced).toBe("seeded");
-    const session = store.getState().sessions.find((candidate) => candidate.id === edited.id);
-    expect(session?.sourceInput.listingText).toContain("Title: 云感旅行颈枕");
-    expect(session?.sourceInput.listingText).not.toContain("Manual draft");
+    expect(restored).toBe("seeded");
+    expect(store.getState().activeProject?.id).toBe("task_second");
+    expect(store.getState().activeProject?.id).not.toBe(firstTaskId);
+    expect((await deps.workspaceRepository.load(firstTaskId)).sessions[0]?.sourceInput.listingText)
+      .toContain("Manual draft");
   });
 });

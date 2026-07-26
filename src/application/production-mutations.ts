@@ -21,6 +21,7 @@ export interface PlanCommitInput {
   planningInput?: PlatformSession["planningInput"];
   selectedStyleReferenceId?: string;
   taobaoAnalysis?: PlatformSession["taobaoAnalysis"];
+  localizedFactsDraft?: PlatformSession["localizedFactsDraft"];
   plan: PlatformPlan;
   planInputSignature?: string;
   selectedSlotKey?: string;
@@ -86,6 +87,9 @@ export function commitPlan(input: PlanCommitInput): {
       ? { selectedStyleReferenceId: input.selectedStyleReferenceId }
       : {}),
     ...(input.taobaoAnalysis ? { taobaoAnalysis: structuredClone(input.taobaoAnalysis) } : {}),
+    ...(input.localizedFactsDraft
+      ? { localizedFactsDraft: structuredClone(input.localizedFactsDraft) }
+      : {}),
     plan: structuredClone(input.plan),
     ...(input.planInputSignature ? { planInputSignature: input.planInputSignature } : {}),
     ...(input.selectedSlotKey ? { selectedSlotKey: input.selectedSlotKey } : {}),
@@ -111,6 +115,9 @@ export function commitPlan(input: PlanCommitInput): {
         ? { selectedStyleReferenceId: input.selectedStyleReferenceId }
         : {}),
       ...(input.taobaoAnalysis ? { taobaoAnalysis: structuredClone(input.taobaoAnalysis) } : {}),
+      ...(input.localizedFactsDraft
+        ? { localizedFactsDraft: structuredClone(input.localizedFactsDraft) }
+        : {}),
     },
     planSnapshot: structuredClone(input.plan),
     ...(input.planInputSignature
@@ -280,6 +287,9 @@ export function forkRun(
       : {}),
     ...(sourceRun.contextSnapshot.taobaoAnalysis
       ? { taobaoAnalysis: structuredClone(sourceRun.contextSnapshot.taobaoAnalysis) }
+      : {}),
+    ...(sourceRun.contextSnapshot.localizedFactsDraft
+      ? { localizedFactsDraft: structuredClone(sourceRun.contextSnapshot.localizedFactsDraft) }
       : {}),
     plan,
     planInputSignature: input.planInputSignature,

@@ -26,9 +26,10 @@ import {
   controlsFromPlan,
   type AmazonSessionControlsState,
 } from "./AmazonSessionControls";
-import { Button, Field, Panel, SegmentedControl, StatusChip, StatusMessage } from "./ui";
+import { ProductContextBar } from "./ProductContextBar";
+import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
+import { Button, Field, Panel, StatusMessage } from "./ui";
 import { StyleReferencePicker } from "./StyleReferencePicker";
-import { WorkflowStepper } from "./WorkflowStepper";
 
 function controlsFromSession(
   session?: PlatformSession,
@@ -77,6 +78,7 @@ export function AmazonIntake({
   onSubmit,
   onSyncListingFacts,
   onChooseLibrary,
+  onOpenLibrary,
   onDirtyChange,
   onCreateStyleReference = async () => null,
   onRemoveAsset = async () => undefined,
@@ -91,6 +93,7 @@ export function AmazonIntake({
   onSubmit: (input: StartAmazonSessionInput) => Promise<PlatformSession | null>;
   onSyncListingFacts: (listingText: string) => Promise<boolean>;
   onChooseLibrary?: () => void;
+  onOpenLibrary?: () => void;
   onDirtyChange?: (reason: string | null) => void;
   onCreateStyleReference?: (presetId: string, draft: Partial<StyleReferenceDraft>) => Promise<WorkbenchAsset | null>;
   onRemoveAsset?: (id: string) => Promise<void>;
@@ -173,11 +176,6 @@ export function AmazonIntake({
   );
   const assessmentLabel = planningInputQualityLabel(assessment.quality);
   const assessmentMessage = planningInputQualityMessage(assessment);
-  const assessmentTone = assessment.quality === "standard"
-    ? "success"
-    : assessment.quality === "empty"
-      ? "neutral"
-      : "warning";
 
   const applyLibrarySource = () => {
     if (!activeProject) return;
@@ -232,58 +230,21 @@ export function AmazonIntake({
   };
 
   return (
-    <div className="amazon-intake">
-      <div className="workbench-toolbar">
-        <div className="workbench-toolbar__title">
-          <h1>Amazon</h1>
-          <StatusChip tone="neutral">图片策划</StatusChip>
-        </div>
-        <div className="workbench-toolbar__actions planning-intake-actions">
-          <StatusChip tone={assessmentTone}>{assessmentLabel}</StatusChip>
-          <Button
-            type="button"
-            className="planning-primary-action"
-            disabled={disabled || assessment.quality === "empty"}
-            loading={planning}
-            loadingLabel="生成图片策划中..."
-            title={assessment.quality === "empty" ? assessmentMessage : undefined}
-            onClick={() => void submit()}
-          >
-            <Sparkles size={16} />
-            生成图片策划
-          </Button>
-        </div>
-      </div>
-      <StatusMessage tone={assessmentTone} className="planning-input-quality">
-        {assessmentMessage}
-        {assessment.missingFacts.length > 0 && assessment.quality !== "empty"
-          ? ` 待补：${assessment.missingFacts.join("、")}。`
-          : null}
-      </StatusMessage>
-
-      <WorkflowStepper
-        platform="amazon"
-        stage="prepare"
-        completedSlots={0}
-        totalSlots={0}
-      />
-
-      <div className="intake-source-bar" role="region" aria-label="商品资料来源">
-        <div className="intake-source-bar__copy">
-          <strong>任务输入来源</strong>
-          <span>
-            {sourceMode === "library"
-              ? activeProject
-                ? "已从资料库生成 Listing 草稿并勾选参考图，可继续改；不会自动写回资料库。"
-                : "请先在资料库选择商品，或下方手动粘贴 Listing。"
-              : "手动粘贴 Listing / 手填；有资料库商品时可一键载入。"}
-          </span>
-        </div>
-        <SegmentedControl
-          ariaLabel="商品资料来源"
-          value={sourceMode}
+    <PlatformWorkflowShell
+      platform="amazon"
+      title="Amazon"
+      stage="prepare"
+      completedSlots={0}
+      totalSlots={0}
+      contextBar={
+        <ProductContextBar
+          platformLabel="Amazon"
+          project={activeProject}
+          statusLabel={session?.planningInput ? assessmentLabel : "准备"}
+          statusTone="neutral"
           disabled={disabled}
-          onChange={(mode) => {
+          sourceMode={sourceMode}
+          onSourceModeChange={(mode) => {
             if (mode === "library") chooseLibrarySource();
             else {
               setSourceMode("manual");
@@ -293,27 +254,27 @@ export function AmazonIntake({
               setDirty(true);
             }
           }}
-          options={[
-            {
-              value: "library",
-              label: "从资料库选择",
-            },
-            { value: "manual", label: "手动填写" },
-          ]}
+          onReloadSource={activeProject ? applyLibrarySource : undefined}
+          reloadSourceDisabled={!hasLibraryFacts && referenceAssets.length === 0}
+          onOpenLibrary={onOpenLibrary}
         />
-        {sourceMode === "library" && activeProject ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="compact"
-            disabled={disabled || (!hasLibraryFacts && referenceAssets.length === 0)}
-            onClick={applyLibrarySource}
-          >
-            重新载入
-          </Button>
-        ) : null}
-      </div>
-
+      }
+      actions={
+        <Button
+          type="button"
+          className="planning-primary-action"
+          disabled={disabled || assessment.quality === "empty"}
+          loading={planning}
+          loadingLabel="生成图片策划中..."
+          title={assessment.quality === "empty" ? assessmentMessage : undefined}
+          onClick={() => void submit()}
+        >
+          <Sparkles size={16} />
+          生成图片策划
+        </Button>
+      }
+    >
+      <div className="amazon-intake">
       <AmazonSessionControls
         value={controls}
         disabled={disabled}
@@ -474,6 +435,7 @@ export function AmazonIntake({
       </div>
 
       {error ? <StatusMessage tone="danger">{error}</StatusMessage> : null}
-    </div>
+      </div>
+    </PlatformWorkflowShell>
   );
 }

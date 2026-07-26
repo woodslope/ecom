@@ -46,6 +46,8 @@ describe("project repositories", () => {
     expect(created).toEqual({
       id: "project_01",
       name: "保温杯夏季上新",
+      scope: "library",
+      factsLocale: "zh-CN",
       facts: productFacts,
       createdAt: "2026-07-16T08:00:00.000Z",
       updatedAt: "2026-07-16T08:00:00.000Z",
@@ -229,6 +231,8 @@ describe("project repositories", () => {
       {
         id: "project_valid",
         name: "完整项目",
+        scope: "library",
+        factsLocale: "zh-CN",
         facts: productFacts,
         createdAt: "2026-07-16T08:00:00.000Z",
         updatedAt: "2026-07-16T09:00:00.000Z",
@@ -236,6 +240,8 @@ describe("project repositories", () => {
       {
         id: "project_legacy",
         name: "旧版项目",
+        scope: "library",
+        factsLocale: "zh-CN",
         facts: {
           productName: "折叠伞",
           category: "",

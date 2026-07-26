@@ -17,6 +17,7 @@ export interface ProductionRunFilters {
 
 export interface ProductionRunRecord {
   project: ProductProject;
+  sourceProject?: ProductProject;
   run: ProductionRun;
 }
 

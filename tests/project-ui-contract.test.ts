@@ -112,4 +112,20 @@ describe("project and asset UI contract", () => {
     expect(savingSourceMarkup).toContain("保存中");
     expect((savingSourceMarkup.match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(11);
   });
+
+  it("does not present a locked asset library as an active loading task", () => {
+    const markup = renderToStaticMarkup(
+      createElement(AssetLibrary, {
+        assets: [],
+        loading: false,
+        disabled: true,
+        onUpload: async () => undefined,
+        onRemove: async () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("上传图片");
+    expect(markup).toContain('disabled=""');
+    expect(markup).not.toContain("处理中");
+  });
 });

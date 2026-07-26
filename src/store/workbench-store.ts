@@ -100,7 +100,10 @@ import {
   DEFAULT_SIZE_TIER,
   resolveAmazonPlanningSession,
 } from "../domain/platforms/amazon-catalog";
-import { DEFAULT_AMAZON_MARKETPLACE_ID } from "../domain/platforms/amazon-marketplaces";
+import {
+  DEFAULT_AMAZON_MARKETPLACE_ID,
+  getAmazonMarketplace,
+} from "../domain/platforms/amazon-marketplaces";
 import {
   appendStyleGuidanceToPrompt,
   appendStyleReferenceGuidance,
@@ -113,15 +116,22 @@ import {
   productFactsToAmazonListingText,
   productFactsToTaobaoText,
 } from "../domain/projects/product-source-text";
-import {
-  hasUsablePlatformIntakeDraft,
-  resolvePlatformIntakeSeedAction,
-} from "../domain/workspace/platform-product-picker";
 import type {
   CreateProductProjectInput,
+  ProductFacts,
   ProductProject,
   UpdateProductProjectInput,
 } from "../domain/projects/types";
+import { extractSharedFactsFromRun, mergeProductFacts } from "../domain/projects/deposition";
+import {
+  DEFAULT_LOCALIZATION_RULES,
+  cloneProductFacts,
+  demoProductLocalizer,
+  enforceLocalizationRules,
+  productFactsEqual,
+  type PlatformFactsDraft,
+  type ProductLocalizer,
+} from "../domain/localization/product-localizer";
 import {
   createLocalStorageProjectRepository,
   createMemoryProjectRepository,
@@ -175,6 +185,7 @@ import {
 import { OpenAICopilot } from "../services/openai-copilot";
 import { OpenAIPlanner } from "../services/openai-planner";
 import { OpenAIImageGenerator } from "../services/openai-image-generator";
+import { OpenAIProductLocalizer } from "../services/openai-product-localizer";
 import {
   createFailOnceImageGenerator,
   demoImageGenerator,
@@ -213,6 +224,16 @@ export interface AnalyzeTaobaoProductInput {
   selectedReferenceAssetIds: string[];
 }
 
+export interface DepositRunInput {
+  runId: string;
+  mode: "create" | "merge";
+  name?: string;
+  targetProjectId?: string;
+  facts: ProductFacts;
+  selectedAssetIds: string[];
+  overwriteFields?: Array<keyof ProductFacts>;
+}
+
 export interface WorkbenchStoreDependencies {
   projectRepository: ProjectRepository;
   assetRepository: AssetRepository;
@@ -223,6 +244,8 @@ export interface WorkbenchStoreDependencies {
   settingsRepository?: SettingsRepository;
   plannerEngine?: PlannerEngine;
   createPlannerEngine?: (settings: RuntimeSettings) => PlannerEngine;
+  productLocalizer?: ProductLocalizer;
+  createProductLocalizer?: (settings: RuntimeSettings) => ProductLocalizer;
   planningTimeoutMs?: number;
   imageGenerator?: ImageGenerator;
   createImageGenerator?: (settings: RuntimeSettings) => ImageGenerator;
@@ -247,6 +270,7 @@ export interface WorkbenchState {
   error: string | null;
   warning: string | null;
   projects: ProductProject[];
+  allProjects: ProductProject[];
   activeProject: ProductProject | null;
   assets: WorkbenchAsset[];
   sessions: PlatformSession[];
@@ -301,6 +325,7 @@ export interface WorkbenchState {
   ): Promise<"seeded" | "needs-confirm" | "skipped" | "failed">;
   syncAmazonListingFacts(listingText: string): Promise<boolean>;
   syncAmazonSessionFacts(sessionId: string): Promise<boolean>;
+  confirmLocalizedFacts(sessionId: string, facts: ProductFacts): Promise<boolean>;
   createProject(input: CreateProductProjectInput): Promise<ProductProject | null>;
   updateActiveProject(input: UpdateProductProjectInput): Promise<ProductProject | null>;
   removeProject(id: string): Promise<boolean>;
@@ -351,6 +376,8 @@ export interface WorkbenchState {
   refreshExecutionJobs(): Promise<void>;
   resumeRun(runId: string): Promise<boolean>;
   forkRun(runId: string): Promise<PlatformSession | null>;
+  depositRunToLibrary(input: DepositRunInput): Promise<ProductProject | null>;
+  prepareRunDepositFacts(runId: string): Promise<ProductFacts | null>;
   reuseRunImageAsReference(runId: string, eventId: string): Promise<WorkbenchAsset | null>;
   reuseGeneratedImageAsReference(assetId: string): Promise<WorkbenchAsset | null>;
   clearExportError(): void;
@@ -605,6 +632,7 @@ export function createWorkbenchStore(
       : null
   );
   const plannerEngine = dependencies.plannerEngine ?? demoPlanner;
+  const productLocalizer = dependencies.productLocalizer ?? demoProductLocalizer;
   // Keep the operation guard slightly longer than the API planner's own request timeout.
   const planningTimeoutMs = dependencies.planningTimeoutMs ?? 135_000;
   const imageGenerator = dependencies.imageGenerator ?? demoImageGenerator;
@@ -652,9 +680,10 @@ export function createWorkbenchStore(
     run: ProductionRun;
   } | null> => {
     const active = readState().activeProject;
+    const storedProjects = await dependencies.projectRepository.list();
     const projects = active
-      ? [active, ...readState().projects.filter((project) => project.id !== active.id)]
-      : readState().projects;
+      ? [active, ...storedProjects.filter((project) => project.id !== active.id)]
+      : storedProjects;
     for (const project of projects) {
       const workspace = await workspaceRepository.load(project.id);
       const run = workspace.runs.find((candidate) => candidate.id === runId);
@@ -747,6 +776,7 @@ export function createWorkbenchStore(
     error: null,
     warning: dependencies.warning ?? null,
     projects: [],
+    allProjects: [],
     activeProject: null,
     assets: [],
     sessions: [],
@@ -789,10 +819,11 @@ export function createWorkbenchStore(
       const operationLifecycle = lifecycleVersion;
       set({ loading: true, error: null, resourceRestoreError: null });
       try {
-        const [projects, activeProject] = await Promise.all([
+        const [storedProjects, activeProject] = await Promise.all([
           dependencies.projectRepository.list(),
           dependencies.projectRepository.restoreActive(),
         ]);
+        const projects = storedProjects.filter((project) => project.scope === "library");
         let runtimeSettings = { ...defaultRuntimeSettings };
         let settingsRestoreError: string | null = null;
         let jobs: ExecutionJob[] = [];
@@ -815,6 +846,7 @@ export function createWorkbenchStore(
         }
         set({
           projects,
+          allProjects: storedProjects,
           activeProject,
           jobs,
           warning: [dependencies.warning, jobsRestoreError].filter(Boolean).join(" ") || null,
@@ -928,14 +960,67 @@ export function createWorkbenchStore(
         if (project && get().activeProject?.id !== project.id) {
           await get().selectProject(project.id);
         }
+        let selectedReferenceIds = [...input.selectedReferenceAssetIds];
+        let selectedStyleReferenceIdInput = input.selectedStyleReferenceId;
+        let librarySourceProject: ProductProject | null = null;
+        if (sourceMode === "library" && project?.scope === "library") {
+          librarySourceProject = project;
+          const selectedSources = await Promise.all(
+            selectedReferenceIds.map((id) => dependencies.assetRepository.get(id)),
+          );
+          const styleSource = selectedStyleReferenceIdInput && !selectedStyleReferenceIdInput.startsWith("preset:")
+            ? await dependencies.assetRepository.get(selectedStyleReferenceIdInput)
+            : null;
+          const draft = await get().createProject({
+            name: `${project.name} · Amazon任务`,
+            scope: "task-draft",
+            facts: project.facts,
+          });
+          if (!draft) throw new Error("任务草稿创建失败");
+          project = draft;
+          selectedReferenceIds = [];
+          for (const source of selectedSources) {
+            if (!source || source.metadata.kind !== "reference") continue;
+            const copied = await dependencies.assetRepository.put({
+              projectId: draft.id,
+              blob: source.blob,
+              metadata: {
+                name: source.metadata.name,
+                kind: "reference",
+                role: source.metadata.role,
+                tags: [...source.metadata.tags, `source-project:${librarySourceProject.id}`, `source-asset:${source.metadata.id}`],
+                width: source.metadata.width,
+                height: source.metadata.height,
+              },
+            });
+            selectedReferenceIds.push(copied.metadata.id);
+          }
+          if (styleSource?.metadata.kind === "style-reference") {
+            const copied = await dependencies.assetRepository.put({
+              projectId: draft.id,
+              blob: styleSource.blob,
+              metadata: {
+                name: styleSource.metadata.name,
+                kind: "style-reference",
+                role: styleSource.metadata.role,
+                tags: [...styleSource.metadata.tags, `source-project:${librarySourceProject.id}`, `source-asset:${styleSource.metadata.id}`],
+                width: styleSource.metadata.width,
+                height: styleSource.metadata.height,
+                styleReference: styleSource.metadata.styleReference,
+              },
+            });
+            selectedStyleReferenceIdInput = copied.metadata.id;
+          }
+          await get().refreshAssets();
+        }
         const selectedMetadata = get().assets
           .filter(
             (asset) =>
               asset.metadata.kind === "reference" &&
-              input.selectedReferenceAssetIds.includes(asset.metadata.id),
+              selectedReferenceIds.includes(asset.metadata.id),
           )
           .map((asset) => asset.metadata);
-        const referenceCount = selectedMetadata.length + input.files.length + (input.selectedStyleReferenceId ? 1 : 0);
+        const referenceCount = selectedMetadata.length + input.files.length + (selectedStyleReferenceIdInput ? 1 : 0);
         const referenceBytes =
           selectedMetadata.reduce((sum, asset) => sum + asset.size, 0) +
           input.files.reduce((sum, file) => sum + file.size, 0);
@@ -965,6 +1050,7 @@ export function createWorkbenchStore(
           const facts = emptyFactsFromAmazonListing(input.listingText);
           project = await get().createProject({
             name: facts.productName || "Amazon 草稿商品",
+            scope: "task-draft",
             facts,
           });
           if (!project) throw new Error("草稿商品创建失败");
@@ -988,8 +1074,8 @@ export function createWorkbenchStore(
           ]),
         ];
         let selectedStyleReferenceId: string | undefined;
-        if (input.selectedStyleReferenceId?.startsWith("preset:")) {
-          const presetId = input.selectedStyleReferenceId.slice("preset:".length);
+        if (selectedStyleReferenceIdInput?.startsWith("preset:")) {
+          const presetId = selectedStyleReferenceIdInput.slice("preset:".length);
           const existingStyle = get().assets.find(
             (asset) => asset.metadata.kind === "style-reference" &&
               asset.metadata.styleReference?.sourcePresetId === presetId &&
@@ -1018,8 +1104,8 @@ export function createWorkbenchStore(
               await get().refreshAssets();
             }
           }
-        } else if (input.selectedStyleReferenceId) {
-          const selected = await dependencies.assetRepository.get(input.selectedStyleReferenceId);
+        } else if (selectedStyleReferenceIdInput) {
+          const selected = await dependencies.assetRepository.get(selectedStyleReferenceIdInput);
           if (selected?.metadata.kind === "style-reference" && selected.metadata.projectId === project.id) {
             selectedStyleReferenceId = selected.metadata.id;
           }
@@ -1051,6 +1137,9 @@ export function createWorkbenchStore(
           facts: planningFacts,
           productImageCount: selectedReferenceAssetIds.length,
         });
+        const sourcePlanningInput = get().sessions.find(
+          (session) => session.projectId === project!.id && session.workflowId === input.workflowId,
+        )?.planningInput;
         const planningInput: PlanningInputSnapshot = {
           sourceMode,
           quality: assessment.quality,
@@ -1058,7 +1147,11 @@ export function createWorkbenchStore(
           productText: input.listingText,
           selectedReferenceAssetIds,
           ...(sourceMode === "library"
-            ? { sourceProjectId: project.id, sourceProjectUpdatedAt: project.updatedAt }
+            ? {
+                sourceProjectId: sourcePlanningInput?.sourceProjectId ?? librarySourceProject?.id ?? project.id,
+                sourceProjectUpdatedAt:
+                  sourcePlanningInput?.sourceProjectUpdatedAt ?? librarySourceProject?.updatedAt ?? project.updatedAt,
+              }
             : {}),
         };
         const timestamp = now();
@@ -1077,6 +1170,9 @@ export function createWorkbenchStore(
             options,
             selectedReferenceAssetIds,
             planningInput,
+            ...(existing?.localizedFactsDraft
+              ? { localizedFactsDraft: existing.localizedFactsDraft }
+              : {}),
             ...(selectedStyleReferenceId ? { selectedStyleReferenceId } : {}),
             ...(existing?.styleReferenceNotice
               ? { styleReferenceNotice: existing.styleReferenceNotice }
@@ -1095,11 +1191,17 @@ export function createWorkbenchStore(
             ...workspace.sessions.filter((session) => session.id !== draftSession.id),
             draftSession,
           ];
-          await workspaceRepository.save({ ...workspace, sessions, updatedAt: timestamp });
+          await workspaceRepository.save({
+            ...workspace,
+            sessions,
+            amazonPlannerMode: plannerMode,
+            updatedAt: timestamp,
+          });
         });
         if (get().activeProject?.id !== project.id) return null;
         set((state) => ({
           sessions: [...state.sessions.filter((session) => session.id !== draftSession.id), draftSession],
+          amazonPlannerMode: plannerMode,
           planningError: null,
         }));
         await get().planPlatform("amazon", planningOptions);
@@ -1118,6 +1220,39 @@ export function createWorkbenchStore(
           ? get().activeProject
           : null;
       try {
+        let selectedReferenceIds = [...input.selectedReferenceAssetIds];
+        let librarySourceProject: ProductProject | null = null;
+        if (sourceMode === "library" && activeProject?.scope === "library") {
+          librarySourceProject = activeProject;
+          const selectedSources = await Promise.all(
+            selectedReferenceIds.map((id) => dependencies.assetRepository.get(id)),
+          );
+          const draft = await get().createProject({
+            name: `${activeProject.name} · 淘宝任务`,
+            scope: "task-draft",
+            facts: activeProject.facts,
+          });
+          if (!draft) throw new Error("任务草稿创建失败");
+          activeProject = draft;
+          selectedReferenceIds = [];
+          for (const source of selectedSources) {
+            if (!source || source.metadata.kind !== "reference") continue;
+            const copied = await dependencies.assetRepository.put({
+              projectId: draft.id,
+              blob: source.blob,
+              metadata: {
+                name: source.metadata.name,
+                kind: "reference",
+                role: source.metadata.role,
+                tags: [...source.metadata.tags, `source-project:${librarySourceProject.id}`, `source-asset:${source.metadata.id}`],
+                width: source.metadata.width,
+                height: source.metadata.height,
+              },
+            });
+            selectedReferenceIds.push(copied.metadata.id);
+          }
+          await get().refreshAssets();
+        }
         if (!activeProject) {
           const baseFacts = createEmptyProductFacts();
           const seededAnalysis = analyzeTaobaoProduct({
@@ -1128,6 +1263,7 @@ export function createWorkbenchStore(
           const facts = applyTaobaoAnalysisToFacts(baseFacts, seededAnalysis);
           activeProject = await get().createProject({
             name: facts.productName || "淘宝草稿商品",
+            scope: "task-draft",
             facts,
           });
           if (!activeProject) throw new Error("草稿商品创建失败");
@@ -1135,7 +1271,7 @@ export function createWorkbenchStore(
           await get().selectProject(activeProject.id);
         }
 
-        const referenceIds = [...new Set(input.selectedReferenceAssetIds)].filter((id) =>
+        const referenceIds = [...new Set(selectedReferenceIds)].filter((id) =>
           get().assets.some(
             (asset) => asset.metadata.id === id && asset.metadata.kind === "reference",
           ),
@@ -1158,6 +1294,7 @@ export function createWorkbenchStore(
             facts: effectiveFacts,
             productImageCount: referenceIds.length,
           });
+          const sourcePlanningInput = existing?.planningInput;
           const planningInput = input.planningInput ?? {
             sourceMode,
             quality: assessment.quality,
@@ -1165,11 +1302,26 @@ export function createWorkbenchStore(
             productText,
             selectedReferenceAssetIds: referenceIds,
             ...(sourceMode === "library"
-              ? {
-                  sourceProjectId: activeProject!.id,
-                  sourceProjectUpdatedAt: activeProject!.updatedAt,
+                ? {
+                  sourceProjectId: sourcePlanningInput?.sourceProjectId ?? librarySourceProject?.id ?? activeProject!.id,
+                  sourceProjectUpdatedAt:
+                    sourcePlanningInput?.sourceProjectUpdatedAt ?? librarySourceProject?.updatedAt ?? activeProject!.updatedAt,
                 }
               : {}),
+          };
+          const localizedFactsDraft: PlatformFactsDraft = {
+            ...(planningInput.sourceProjectId
+              ? { sourceProjectId: planningInput.sourceProjectId }
+              : {}),
+            ...(planningInput.sourceProjectUpdatedAt
+              ? { sourceProjectUpdatedAt: planningInput.sourceProjectUpdatedAt }
+              : {}),
+            sourceFactsSnapshot: cloneProductFacts(effectiveFacts),
+            targetLocale: "zh-CN",
+            localizedFacts: cloneProductFacts(effectiveFacts),
+            status: "confirmed",
+            generatedAt: timestamp,
+            updatedAt: timestamp,
           };
           const draft = startSession({
             id: existing?.id ?? createStableId("session"),
@@ -1183,6 +1335,7 @@ export function createWorkbenchStore(
             options: { platformId: "taobao" },
             selectedReferenceAssetIds: referenceIds,
             planningInput,
+            localizedFactsDraft,
             ...(existing?.selectedStyleReferenceId
               ? { selectedStyleReferenceId: existing.selectedStyleReferenceId }
               : {}),
@@ -1297,6 +1450,7 @@ export function createWorkbenchStore(
           facts: planningFacts,
           productImageCount: selectedReferenceAssetIds.length,
         });
+        const sourcePlanningInput = draft.planningInput;
         const planningInput: PlanningInputSnapshot = {
           sourceMode,
           quality: assessment.quality,
@@ -1304,7 +1458,11 @@ export function createWorkbenchStore(
           productText: input.productText,
           selectedReferenceAssetIds,
           ...(sourceMode === "library"
-            ? { sourceProjectId: project.id, sourceProjectUpdatedAt: project.updatedAt }
+            ? {
+                sourceProjectId: sourcePlanningInput?.sourceProjectId ?? project.id,
+                sourceProjectUpdatedAt:
+                  sourcePlanningInput?.sourceProjectUpdatedAt ?? project.updatedAt,
+              }
             : {}),
         };
         const sourceInput = {
@@ -1397,7 +1555,7 @@ export function createWorkbenchStore(
       }
     },
 
-    async seedPlatformIntakeFromProject(projectId, platform, options) {
+    async seedPlatformIntakeFromProject(projectId, platform, _options) {
       if (platform !== "amazon" && platform !== "taobao") {
         set({ planningError: "仅支持 Amazon 与淘宝任务载入。" });
         return "failed";
@@ -1408,14 +1566,8 @@ export function createWorkbenchStore(
       }
 
       try {
-        if (get().activeProject?.id !== projectId) {
-          await get().selectProject(projectId);
-        }
-        const project =
-          get().activeProject?.id === projectId
-            ? get().activeProject
-            : await dependencies.projectRepository.get(projectId);
-        if (!project) {
+        const sourceProject = await dependencies.projectRepository.get(projectId);
+        if (!sourceProject || sourceProject.scope !== "library") {
           set({ planningError: "找不到要载入的商品档案。" });
           return "failed";
         }
@@ -1424,45 +1576,40 @@ export function createWorkbenchStore(
           get().amazonPlannerMode === "aplus" ? "amazon-aplus" : "amazon-listing";
         const workflowId =
           platform === "taobao" ? "taobao-product" : amazonWorkflowId;
-
-        const existing = [...get().sessions]
-          .filter(
-            (candidate) =>
-              candidate.projectId === project.id && candidate.workflowId === workflowId,
-          )
-          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-        if (existing && !options?.force) {
-          return "skipped";
-        }
-
-        const hasPlan = Boolean(
-          existing?.plan ||
-            (platform === "amazon"
-              ? get().plans.amazon
-              : get().plans.taobao),
-        );
-        const hasUsableDraft = hasUsablePlatformIntakeDraft(platform, existing);
-        const action = resolvePlatformIntakeSeedAction({
-          hasPlan,
-          hasUsableDraft,
-          force: options?.force,
+        const taskProject = await get().createProject({
+          name: `${sourceProject.name} · ${platform === "amazon" ? "Amazon" : "淘宝"}任务`,
+          scope: "task-draft",
+          facts: sourceProject.facts,
         });
-        if (action === "needs-confirm") {
-          return "needs-confirm";
-        }
+        if (!taskProject) throw new Error("任务草稿创建失败");
 
-        const referenceAssetIds = get()
-          .assets.filter(
-            (asset) =>
-              asset.metadata.kind === "reference" &&
-              asset.metadata.projectId === project.id,
-          )
-          .map((asset) => asset.metadata.id);
+        const sourceAssets = await dependencies.assetRepository.list(sourceProject.id);
+        const copiedReferenceIds: string[] = [];
+        for (const metadata of sourceAssets) {
+          if (metadata.kind !== "reference") continue;
+          const source = await dependencies.assetRepository.get(metadata.id);
+          if (!source) continue;
+          const copied = await dependencies.assetRepository.put({
+            projectId: taskProject.id,
+            blob: source.blob,
+            metadata: {
+              name: metadata.name,
+              kind: "reference",
+              role: metadata.role,
+              tags: [...metadata.tags, `source-project:${sourceProject.id}`, `source-asset:${metadata.id}`],
+              width: metadata.width,
+              height: metadata.height,
+            },
+          });
+          copiedReferenceIds.push(copied.metadata.id);
+        }
+        await get().refreshAssets();
+        const referenceAssetIds = copiedReferenceIds;
         const productText = platform === "amazon"
-          ? productFactsToAmazonListingText(project.facts)
-          : productFactsToTaobaoText(project.facts);
+          ? productFactsToAmazonListingText(sourceProject.facts)
+          : productFactsToTaobaoText(sourceProject.facts);
         const assessment = assessPlanningInput({
-          facts: project.facts,
+          facts: sourceProject.facts,
           productImageCount: referenceAssetIds.length,
         });
         const planningInput: PlanningInputSnapshot = {
@@ -1471,13 +1618,13 @@ export function createWorkbenchStore(
           missingFacts: assessment.missingFacts,
           productText,
           selectedReferenceAssetIds: referenceAssetIds,
-          sourceProjectId: project.id,
-          sourceProjectUpdatedAt: project.updatedAt,
+          sourceProjectId: sourceProject.id,
+          sourceProjectUpdatedAt: sourceProject.updatedAt,
         };
 
         const timestamp = now();
         const nextSession = await enqueueWorkspaceMutation(async () => {
-          const workspace = await workspaceRepository.load(project.id);
+          const workspace = await workspaceRepository.load(taskProject.id);
           const workspaceExisting = [...workspace.sessions]
             .filter((candidate) => candidate.workflowId === workflowId)
             .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
@@ -1511,7 +1658,7 @@ export function createWorkbenchStore(
             };
             const draft = startSession({
               id: workspaceExisting?.id ?? createStableId("session"),
-              projectId: project.id,
+              projectId: taskProject.id,
               platformId: "amazon",
               workflowId,
               sourceInput: {
@@ -1567,7 +1714,7 @@ export function createWorkbenchStore(
 
           const draft = startSession({
             id: workspaceExisting?.id ?? createStableId("session"),
-            projectId: project.id,
+            projectId: taskProject.id,
             platformId: "taobao",
             workflowId: "taobao-product",
             sourceInput: {
@@ -1610,7 +1757,7 @@ export function createWorkbenchStore(
           return { session: draft, platform: "taobao" as const };
         });
 
-        if (get().activeProject?.id !== project.id) return "skipped";
+        if (get().activeProject?.id !== taskProject.id) return "skipped";
 
         set((state) => {
           const sessions = [
@@ -1674,6 +1821,52 @@ export function createWorkbenchStore(
       return Boolean(await get().updateActiveProject({ facts: patch }));
     },
 
+    async confirmLocalizedFacts(sessionId, facts) {
+      const activeProject = get().activeProject;
+      const session = get().sessions.find((candidate) => candidate.id === sessionId);
+      if (!activeProject || !session || session.projectId !== activeProject.id) return false;
+      if (!session.localizedFactsDraft) {
+        set({ planningError: "当前任务还没有可确认的站点语言草稿。" });
+        return false;
+      }
+      const timestamp = now();
+      const localizedFactsDraft: PlatformFactsDraft = {
+        ...structuredClone(session.localizedFactsDraft),
+        localizedFacts: enforceLocalizationRules(
+          session.localizedFactsDraft.sourceFactsSnapshot,
+          facts,
+        ),
+        status: "confirmed",
+        updatedAt: timestamp,
+      };
+      try {
+        const updatedSession = await enqueueWorkspaceMutation(async () => {
+          const workspace = await workspaceRepository.load(activeProject.id);
+          const stored = workspace.sessions.find((candidate) => candidate.id === sessionId);
+          if (!stored) throw new Error("当前平台任务不存在或已被删除。");
+          const updated = { ...stored, localizedFactsDraft, updatedAt: timestamp };
+          await workspaceRepository.save({
+            ...workspace,
+            sessions: workspace.sessions.map((candidate) =>
+              candidate.id === sessionId ? updated : candidate,
+            ),
+            updatedAt: timestamp,
+          });
+          return updated;
+        });
+        set((state) => ({
+          sessions: state.sessions.map((candidate) =>
+            candidate.id === sessionId ? updatedSession : candidate,
+          ),
+          planningError: null,
+        }));
+        return true;
+      } catch (error) {
+        set({ planningError: `站点语言草稿保存失败：${errorMessage(error)}` });
+        return false;
+      }
+    },
+
     async createProject(input) {
       const operationLifecycle = lifecycleVersion;
       invalidatePlanning();
@@ -1699,12 +1892,15 @@ export function createWorkbenchStore(
       });
       try {
         const project = await dependencies.projectRepository.create(input);
-        const projects = await dependencies.projectRepository.list();
+        const projects = (await dependencies.projectRepository.list()).filter(
+          (candidate) => candidate.scope === "library",
+        );
         if (!isCurrentLifecycle(operationLifecycle)) return project;
         revokeAssets(get().assets, dependencies);
         set({
           loading: false,
           projects,
+          allProjects: await dependencies.projectRepository.list(),
           activeProject: project,
           assets: [],
           sessions: [],
@@ -1769,6 +1965,9 @@ export function createWorkbenchStore(
         set((state) => ({
           loading: false,
           activeProject: updated,
+          allProjects: state.allProjects.map((project) =>
+            project.id === updated.id ? updated : project,
+          ),
           projects: state.projects.map((project) =>
             project.id === updated.id ? updated : project,
           ),
@@ -1810,7 +2009,9 @@ export function createWorkbenchStore(
         await dependencies.assetRepository.clearProject(id);
         await workspaceRepository.remove?.(id);
         await dependencies.projectRepository.remove(id);
-        const projects = await dependencies.projectRepository.list();
+        const projects = (await dependencies.projectRepository.list()).filter(
+          (candidate) => candidate.scope === "library",
+        );
         revokeAssets(get().assets, dependencies);
         const nextProject = projects
           .filter((candidate) => candidate.id !== id)
@@ -1818,6 +2019,7 @@ export function createWorkbenchStore(
         set({
           loading: false,
           projects,
+          allProjects: await dependencies.projectRepository.list(),
           activeProject: null,
           assets: [],
           sessions: [],
@@ -1914,7 +2116,7 @@ export function createWorkbenchStore(
             loadedAssets.cleanupWarnings.length > 0
               ? `项目已恢复，但临时生成图片仍未清理：${loadedAssets.cleanupWarnings.join("；")}。可再次重试恢复。`
               : null,
-          projects: state.projects.some((candidate) => candidate.id === project.id)
+          projects: project.scope !== "library" || state.projects.some((candidate) => candidate.id === project.id)
             ? state.projects
             : [...state.projects, project],
         }));
@@ -2243,7 +2445,10 @@ export function createWorkbenchStore(
       const planningSession = [...get().sessions]
         .filter((session) => session.workflowId === planningWorkflowId)
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-      const planningFacts = resolveSessionEffectiveFacts(activeProject, planningSession);
+      const sourceSession = planningSession
+        ? { ...planningSession, localizedFactsDraft: undefined }
+        : undefined;
+      const sourcePlanningFacts = resolveSessionEffectiveFacts(activeProject, sourceSession);
       const requestedReferenceAssetIds = planningSession?.selectedReferenceAssetIds ??
         get().assets
           .filter((asset) => asset.metadata.kind === "reference")
@@ -2258,7 +2463,7 @@ export function createWorkbenchStore(
       const selectedReferenceMetadata = selectedReferenceAssetIds
         .map((id) => availableReferenceMetadata.get(id)!);
       const inputAssessment = assessPlanningInput({
-        facts: planningFacts,
+        facts: sourcePlanningFacts,
         productImageCount: selectedReferenceMetadata.length,
       });
       if (inputAssessment.quality === "empty") {
@@ -2298,6 +2503,13 @@ export function createWorkbenchStore(
       const baseRulePack = effectiveAmazonOptions
         ? resolvePlanningRulePack("amazon", effectiveAmazonOptions).rulePack
         : getPlatformRulePack(platformId);
+      const targetLocale = platformId === "amazon"
+        ? getAmazonMarketplace(
+            effectiveAmazonOptions && "marketplaceId" in effectiveAmazonOptions
+              ? effectiveAmazonOptions.marketplaceId
+              : storedAmazonOptions?.marketplaceId,
+          ).locale
+        : "zh-CN";
       const planningInput: PlanningInputSnapshot = {
         sourceMode: planningSession?.planningInput?.sourceMode ?? "library",
         quality: inputAssessment.quality,
@@ -2314,11 +2526,6 @@ export function createWorkbenchStore(
             }
           : {}),
       };
-      const inputSignature = createPlanningInputSignature(
-        planningFacts,
-        get().assets.map((asset) => asset.metadata),
-        selectedReferenceAssetIds,
-      );
       const operationLifecycle = lifecycleVersion;
       const requestId = ++planningRequestId;
       activePlanningController?.abort(new DOMException("已开始新的策划请求", "AbortError"));
@@ -2361,6 +2568,124 @@ export function createWorkbenchStore(
           )
         ).filter((image): image is PlanningReferenceImage => image !== null);
         ensureCurrentPlanning();
+        let localizedFactsDraft = planningSession?.localizedFactsDraft;
+        if (!localizedFactsDraft && (!planningSession || planningSession.plan)) {
+          const timestamp = now();
+          localizedFactsDraft = {
+            ...(planningInput.sourceProjectId
+              ? { sourceProjectId: planningInput.sourceProjectId }
+              : {}),
+            ...(planningInput.sourceProjectUpdatedAt
+              ? { sourceProjectUpdatedAt: planningInput.sourceProjectUpdatedAt }
+              : {}),
+            sourceFactsSnapshot: cloneProductFacts(sourcePlanningFacts),
+            targetLocale,
+            localizedFacts: cloneProductFacts(sourcePlanningFacts),
+            status: "confirmed",
+            generatedAt: timestamp,
+            updatedAt: timestamp,
+          };
+        }
+        const canReuseLocalizedDraft = Boolean(
+          localizedFactsDraft &&
+          localizedFactsDraft.targetLocale === targetLocale &&
+          productFactsEqual(localizedFactsDraft.sourceFactsSnapshot, sourcePlanningFacts),
+        );
+        if (!canReuseLocalizedDraft && planningSession) {
+          const timestamp = now();
+          let localizedFacts = cloneProductFacts(sourcePlanningFacts);
+          let status: PlatformFactsDraft["status"] = targetLocale === "zh-CN"
+            ? "confirmed"
+            : get().runtimeSettings.mode === "demo" && !dependencies.productLocalizer
+              ? "pending"
+              : "generated";
+          let localizationFailure: unknown = null;
+          if (targetLocale !== "zh-CN") {
+            try {
+              const activeLocalizer =
+                get().runtimeSettings.mode === "api" && dependencies.createProductLocalizer
+                  ? dependencies.createProductLocalizer(get().runtimeSettings)
+                  : productLocalizer;
+              localizedFacts = await activeLocalizer.localize(
+                sourcePlanningFacts,
+                targetLocale,
+                DEFAULT_LOCALIZATION_RULES,
+                controller.signal,
+              );
+            } catch (error) {
+              localizationFailure = error;
+              status = "pending";
+            }
+          }
+          localizedFactsDraft = {
+            ...(planningInput.sourceProjectId
+              ? { sourceProjectId: planningInput.sourceProjectId }
+              : {}),
+            ...(planningInput.sourceProjectUpdatedAt
+              ? { sourceProjectUpdatedAt: planningInput.sourceProjectUpdatedAt }
+              : {}),
+            sourceFactsSnapshot: cloneProductFacts(sourcePlanningFacts),
+            targetLocale,
+            localizedFacts,
+            status,
+            ...(status !== "pending" ? { generatedAt: timestamp } : {}),
+            updatedAt: timestamp,
+          };
+          const updatedSession = await enqueueWorkspaceMutation(async () => {
+            ensureCurrentPlanning();
+            const workspace = await workspaceRepository.load(projectId);
+            const stored = workspace.sessions.find((session) => session.id === planningSession.id);
+            if (!stored) throw new Error("当前平台任务不存在或已被删除。");
+            const updated: PlatformSession = {
+              ...stored,
+              ...(platformId === "amazon" && effectiveAmazonOptions
+                ? { options: optionsForPlan("amazon", {
+                    platformId: "amazon",
+                    source: "demo",
+                    slots: [],
+                    amazonSession: resolvePlanningRulePack("amazon", effectiveAmazonOptions).amazonSession,
+                  }) }
+                : {}),
+              localizedFactsDraft: localizedFactsDraft!,
+              updatedAt: timestamp,
+            };
+            await workspaceRepository.save({
+              ...workspace,
+              sessions: workspace.sessions.map((session) =>
+                session.id === updated.id ? updated : session,
+              ),
+              updatedAt: timestamp,
+            });
+            return updated;
+          });
+          set((state) => ({
+            sessions: state.sessions.map((session) =>
+              session.id === updatedSession.id ? updatedSession : session,
+            ),
+          }));
+          if (targetLocale !== "zh-CN") {
+            set({
+              planningPlatformId: null,
+              planningError: localizationFailure
+                ? `站点语言草稿生成失败：${errorMessage(localizationFailure)}。可检查并手动补充后确认。`
+                : "站点语言草稿已生成，请检查并确认后再生成图片策划。",
+            });
+            return null;
+          }
+        }
+        if (localizedFactsDraft && localizedFactsDraft.status !== "confirmed") {
+          set({
+            planningPlatformId: null,
+            planningError: "请先检查并确认站点语言草稿，再生成图片策划。",
+          });
+          return null;
+        }
+        const planningFacts = localizedFactsDraft?.localizedFacts ?? sourcePlanningFacts;
+        const inputSignature = createPlanningInputSignature(
+          planningFacts,
+          get().assets.map((asset) => asset.metadata),
+          selectedReferenceAssetIds,
+        );
         const activePlannerEngine =
           get().runtimeSettings.mode === "api" && dependencies.createPlannerEngine
             ? dependencies.createPlannerEngine(get().runtimeSettings)
@@ -2411,6 +2736,11 @@ export function createWorkbenchStore(
             ...(existingSession?.taobaoAnalysis
               ? { taobaoAnalysis: existingSession.taobaoAnalysis }
               : {}),
+            ...(existingSession?.localizedFactsDraft
+              ? { localizedFactsDraft: existingSession.localizedFactsDraft }
+              : localizedFactsDraft
+                ? { localizedFactsDraft }
+                : {}),
             plan,
             planInputSignature: inputSignature,
             selectedSlotKey,
@@ -3860,6 +4190,140 @@ export function createWorkbenchStore(
       return session;
     },
 
+    async prepareRunDepositFacts(runId) {
+      const located = await locateRun(runId, get);
+      if (!located) return null;
+      const candidate = extractSharedFactsFromRun(located.run, located.project.facts);
+      if (located.run.platformId !== "amazon") return candidate;
+      const candidateText = [
+        candidate.productName,
+        candidate.category,
+        candidate.targetAudience,
+        candidate.description,
+        ...candidate.sellingPoints,
+        ...Object.keys(candidate.specifications),
+      ].join(" ");
+      if (/[\u3400-\u9fff]/u.test(candidateText)) return candidate;
+      try {
+        const activeLocalizer =
+          get().runtimeSettings.mode === "api" && dependencies.createProductLocalizer
+            ? dependencies.createProductLocalizer(get().runtimeSettings)
+            : productLocalizer;
+        return await activeLocalizer.localize(
+          candidate,
+          "zh-CN",
+          DEFAULT_LOCALIZATION_RULES,
+          new AbortController().signal,
+        );
+      } catch (error) {
+        set({ error: `历史事实中文化失败：${errorMessage(error)}。可在沉淀弹窗中手动检查。` });
+        return candidate;
+      }
+    },
+
+    async depositRunToLibrary(input) {
+      const located = await locateRun(input.runId, get);
+      if (
+        !located ||
+        located.project.scope !== "task-draft" ||
+        located.run.contextSnapshot.planningInput?.sourceMode === "library"
+      ) {
+        set({ error: "只有手动任务草稿可以沉淀到资料库。" });
+        return null;
+      }
+
+      const previousActiveId = get().activeProject?.id ?? null;
+      const copiedAssetIds: string[] = [];
+      let createdProjectId: string | null = null;
+      try {
+        let target: ProductProject;
+        let mergedFacts: ProductFacts | null = null;
+        if (input.mode === "create") {
+          target = await dependencies.projectRepository.create({
+            name: input.name?.trim() || input.facts.productName.trim() || "未命名商品档案",
+            scope: "library",
+            facts: input.facts,
+          });
+          createdProjectId = target.id;
+          await dependencies.projectRepository.setActiveId(previousActiveId);
+        } else {
+          if (!input.targetProjectId) throw new Error("请选择要合并的商品档案");
+          const current = await dependencies.projectRepository.get(input.targetProjectId);
+          if (!current || current.scope !== "library") throw new Error("目标商品档案不存在");
+          const merged = mergeProductFacts(
+            current.facts,
+            input.facts,
+            new Set(input.overwriteFields ?? []),
+          );
+          mergedFacts = merged.facts;
+          target = current;
+        }
+
+        const existingAssets = await dependencies.assetRepository.list(target.id);
+        for (const sourceId of [...new Set(input.selectedAssetIds)]) {
+          const marker = `deposit-source:${located.run.id}:${sourceId}`;
+          if (existingAssets.some((asset) => asset.tags.includes(marker))) continue;
+          const source = await dependencies.assetRepository.get(sourceId);
+          if (!source || source.metadata.projectId !== located.project.id) continue;
+          if (source.metadata.kind !== "reference" && source.metadata.kind !== "generated") continue;
+          const copied = await dependencies.assetRepository.put({
+            projectId: target.id,
+            blob: source.blob,
+            metadata: {
+              name: source.metadata.name,
+              kind: "reference",
+              role: source.metadata.role,
+              tags: [...source.metadata.tags, "history-deposit", `deposit-run:${located.run.id}`, marker],
+              width: source.metadata.width,
+              height: source.metadata.height,
+            },
+          });
+          copiedAssetIds.push(copied.metadata.id);
+          existingAssets.push(copied.metadata);
+        }
+
+        if (mergedFacts) {
+          const updated = await dependencies.projectRepository.update(target.id, { facts: mergedFacts });
+          if (!updated) throw new Error("目标商品档案保存失败");
+          target = updated;
+        }
+
+        const timestamp = now();
+        const depositedRun: ProductionRun = {
+          ...located.run,
+          deposit: { targetProjectId: target.id, depositedAt: timestamp },
+        };
+        const nextRuns = located.workspace.runs.map((run) =>
+          run.id === depositedRun.id ? depositedRun : run,
+        );
+        await workspaceRepository.save({
+          ...located.workspace,
+          runs: nextRuns,
+          updatedAt: timestamp,
+        });
+        await dependencies.runRepository?.put(depositedRun);
+        const projects = (await dependencies.projectRepository.list()).filter(
+          (project) => project.scope === "library",
+        );
+        set((state) => ({
+          projects,
+          allProjects: [...state.allProjects.filter((candidate) => candidate.id !== target.id), target],
+          ...(state.activeProject?.id === located.project.id ? { runs: nextRuns } : {}),
+          error: null,
+        }));
+        return target;
+      } catch (error) {
+        await Promise.all(copiedAssetIds.map((id) => dependencies.assetRepository.remove(id)));
+        if (createdProjectId) {
+          await dependencies.assetRepository.clearProject(createdProjectId);
+          await dependencies.projectRepository.remove(createdProjectId);
+          await dependencies.projectRepository.setActiveId(previousActiveId);
+        }
+        set({ error: `沉淀失败：${errorMessage(error)}` });
+        return null;
+      }
+    },
+
     async reuseRunImageAsReference(runId, eventId) {
       const located = await locateRun(runId, get);
       const event = located?.run.events.find(
@@ -4696,6 +5160,13 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
         apiKey: runtimeTextApiKey(settings),
         model: settings.planningModel,
         plannerReferenceImages: capabilities.plannerReferenceImages,
+      });
+    },
+    createProductLocalizer(settings) {
+      return new OpenAIProductLocalizer({
+        endpoint: `${runtimeTextBaseUrl(settings)}/chat/completions`,
+        apiKey: runtimeTextApiKey(settings),
+        model: settings.planningModel,
       });
     },
     createImageGenerator(settings) {

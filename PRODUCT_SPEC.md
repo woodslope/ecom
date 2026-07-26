@@ -213,4 +213,4 @@ External provider availability, CORS, quotas, model quality, generated-image fac
 - `pnpm build`
 - `pnpm test:browser`
 
-The latest full run is 74 test files and 387 passing tests. The GitHub Pages contract also passes with `VITE_BASE_PATH=/Ecom/ pnpm build`. A non-blocking bundle-size warning and one filtered 404 resource note from the browser smoke fixture remain documented risks. External Provider behavior, marketplace back-office acceptance, and large-history performance remain outside deterministic local verification.
+The latest full run is 74 test files and 387 passing tests. The GitHub Pages contract also passes with `VITE_BASE_PATH=/ecom/ pnpm build`. A non-blocking bundle-size warning and one filtered 404 resource note from the browser smoke fixture remain documented risks. External Provider behavior, marketplace back-office acceptance, and large-history performance remain outside deterministic local verification.

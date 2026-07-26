@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileText, ImagePlus, LoaderCircle, Sparkles, Square, Upload } from "lucide-react";
 
 import type { ProductProject } from "../domain/projects/types";
@@ -21,8 +21,9 @@ import {
 } from "../domain/platforms/taobao-analysis";
 import type { PlatformSession } from "../domain/workspace/project-workspace";
 import type { AnalyzeTaobaoProductInput, WorkbenchAsset } from "../store/workbench-store";
-import { Button, Dialog, EmptyState, Field, Panel, SegmentedControl, StatusChip, StatusMessage } from "./ui";
-import { WorkflowStepper } from "./WorkflowStepper";
+import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
+import { ProductContextBar } from "./ProductContextBar";
+import { Button, Dialog, EmptyState, Field, Panel, StatusChip, StatusMessage } from "./ui";
 
 export function taobaoAnalysisHasReference(input: {
   selectedReferenceCount: number;
@@ -152,6 +153,7 @@ export function TaobaoIntake({
   onDirtyChange,
   onOpenLibrary,
   onOpenProductPicker,
+  onOpenAnalysisDetails,
 }: {
   activeProject: ProductProject | null;
   assets: WorkbenchAsset[];
@@ -164,6 +166,7 @@ export function TaobaoIntake({
   onDirtyChange?: (reason: string | null) => void;
   onOpenLibrary?: () => void;
   onOpenProductPicker?: () => void;
+  onOpenAnalysisDetails?: () => void;
 }) {
   const referenceAssets = useMemo(
     () => assets.filter((asset) => asset.metadata.kind === "reference"),
@@ -247,11 +250,6 @@ export function TaobaoIntake({
   );
   const assessmentLabel = planningInputQualityLabel(assessment.quality);
   const assessmentMessage = planningInputQualityMessage(assessment);
-  const assessmentTone = assessment.quality === "standard"
-    ? "success"
-    : assessment.quality === "empty"
-      ? "neutral"
-      : "warning";
   const analyzeDisabledReason = lockedReason ??
     (assessment.quality === "empty" ? assessmentMessage : undefined);
 
@@ -259,8 +257,7 @@ export function TaobaoIntake({
     setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
     setDirty(true);
   };
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const submit = async () => {
     if (assessment.quality === "empty") return;
     const result = await onAnalyze({
       ...(activeProject && (sourceMode === "library" || session?.planningInput?.sourceMode === "manual")
@@ -278,39 +275,52 @@ export function TaobaoIntake({
   };
 
   return (
-    <form className="taobao-intake" onSubmit={(event) => void submit(event)}>
-      <div className="workbench-toolbar">
-        <div className="workbench-toolbar__title">
-          <h1>淘宝 / 天猫</h1>
-          <StatusChip tone="neutral">图片策划</StatusChip>
-        </div>
-        <div className="workbench-toolbar__actions planning-intake-actions">
-          <StatusChip tone={assessmentTone}>{assessmentLabel}</StatusChip>
-          <Button
-            type="submit"
-            className="planning-primary-action"
-            disabled={loading || Boolean(lockedReason) || assessment.quality === "empty"}
-            loading={loading}
-            loadingLabel="生成图片策划中..."
-            title={analyzeDisabledReason}
-          >
-            <Sparkles size={16} />
-            生成图片策划
-          </Button>
-        </div>
-      </div>
-      <StatusMessage tone={assessmentTone} className="planning-input-quality">
-        {assessmentMessage}
-        {assessment.missingFacts.length > 0 && assessment.quality !== "empty"
-          ? ` 待补：${assessment.missingFacts.join("、")}。`
-          : null}
-      </StatusMessage>
-      <WorkflowStepper
-        platform="taobao"
-        stage="prepare"
-        completedSlots={0}
-        totalSlots={0}
-      />
+    <PlatformWorkflowShell
+      platform="taobao"
+      title="淘宝 / 天猫"
+      stage="prepare"
+      completedSlots={0}
+      totalSlots={0}
+      contextBar={
+        <ProductContextBar
+          platformLabel="淘宝 / 天猫"
+          project={activeProject}
+          statusLabel={session?.planningInput ? assessmentLabel : "准备"}
+          statusTone="neutral"
+          detailLabel={session?.taobaoAnalysis ? "分析详情" : undefined}
+          disabled={loading}
+          sourceMode={sourceMode}
+          onSourceModeChange={(mode) => {
+            if (mode === "library") {
+              if (onOpenProductPicker) onOpenProductPicker();
+              else applyLibrarySource();
+            } else applyManualSource();
+          }}
+          onReloadSource={activeProject ? applyLibrarySource : undefined}
+          reloadSourceDisabled={!hasLibraryFacts && referenceAssets.length === 0}
+          onOpenDetails={session?.taobaoAnalysis ? onOpenAnalysisDetails : undefined}
+          onOpenLibrary={onOpenLibrary}
+        />
+      }
+      actions={
+        <Button
+          type="button"
+          className="planning-primary-action"
+          disabled={loading || Boolean(lockedReason) || assessment.quality === "empty"}
+          loading={loading}
+          loadingLabel="生成图片策划中..."
+          title={analyzeDisabledReason}
+          onClick={() => void submit()}
+        >
+          <Sparkles size={16} />
+          生成图片策划
+        </Button>
+      }
+    >
+      <form className="taobao-intake" onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}>
       {lockedReason ? (
         <StatusMessage className="planning-task-status">
           <span className="generation-task-status__copy">
@@ -327,51 +337,6 @@ export function TaobaoIntake({
       ) : null}
       {error ? <StatusMessage tone="danger">{error}</StatusMessage> : null}
 
-      <div className="intake-source-bar" role="region" aria-label="商品资料来源">
-        <div className="intake-source-bar__copy">
-          <strong>任务输入来源</strong>
-          <span>
-            {sourceMode === "library"
-              ? "已载入资料库商品资料与参考图，可在下方继续修改；不会自动写回资料库。"
-              : "手动填写本次任务文案与参考图；需要时可一键载入资料库。"}
-          </span>
-        </div>
-        <SegmentedControl
-          ariaLabel="商品资料来源"
-          value={sourceMode}
-          onChange={(mode) => {
-            if (mode === "library") {
-              if (onOpenProductPicker) onOpenProductPicker();
-              else applyLibrarySource();
-            }
-            else applyManualSource();
-          }}
-          options={[
-            {
-              value: "library",
-              label: "从资料库选择",
-            },
-            { value: "manual", label: "手动填写" },
-          ]}
-        />
-        {sourceMode === "library" ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="compact"
-            disabled={!hasLibraryFacts && referenceAssets.length === 0}
-            onClick={applyLibrarySource}
-          >
-            重新载入
-          </Button>
-        ) : null}
-      </div>
-
-      {!activeProject && sourceMode === "manual" ? (
-        <StatusMessage>
-          可直接填写本次商品资料或只上传商品图，提交时会自动创建本地草稿。
-        </StatusMessage>
-      ) : null}
       <div className="taobao-intake__grid">
         <Panel title="商品资料" className="taobao-intake__copy-panel">
           <Field
@@ -393,7 +358,6 @@ export function TaobaoIntake({
               placeholder="可粘贴商品名称、卖点、规格和禁用声明"
             />
           </Field>
-          <StatusMessage>分析结果只保存到本次淘宝商品 session，不会自动修改资料库。</StatusMessage>
         </Panel>
         <Panel title="商品参考图" className="taobao-intake__asset-panel">
           <label className="taobao-intake__upload">
@@ -442,6 +406,7 @@ export function TaobaoIntake({
           ) : null}
         </Panel>
       </div>
-    </form>
+      </form>
+    </PlatformWorkflowShell>
   );
 }

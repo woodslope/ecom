@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Archive, CheckCircle2, CircleAlert, Sparkles } from "lucide-react";
 
 import { getPlatformRulePack } from "../domain/platforms/registry";
-import type { ProductProject } from "../domain/projects/types";
+import type { ProductFacts, ProductProject } from "../domain/projects/types";
 import type { TaskRecord } from "../domain/tasks";
 import { queryProductionRuns, type ProductionRunFilters, type ProductionRunRecord } from "../domain/tasks";
 import {
@@ -14,11 +14,14 @@ import {
   releaseHistoryAssetUrls,
 } from "../domain/history/asset-urls";
 import { createIndexedDbAssetRepository, type AssetRepository } from "../domain/assets/repository";
+import type { AssetMetadata } from "../domain/assets/types";
+import type { DepositRunInput } from "../store/workbench-store";
 import {
   createLocalStorageWorkspaceRepository,
   type ProjectWorkspaceRepository,
 } from "../domain/workspace/project-workspace";
-import { Button, EmptyState, StatusChip } from "./ui";
+import { Button, EmptyState, StatusChip, StatusMessage } from "./ui";
+import { DepositToLibraryDialog } from "./DepositToLibraryDialog";
 import { ProductionHistoryFilters } from "./ProductionHistoryFilters";
 import { ProductionRunCard } from "./ProductionRunCard";
 
@@ -78,6 +81,7 @@ export function TaskHistory({ tasks }: { tasks: TaskRecord[] }) {
 
 export function TaskHistoryArchive({
   projects,
+  historyProjects,
   activeProjectId = null,
   workspaceRepository,
   assetRepository,
@@ -88,9 +92,12 @@ export function TaskHistoryArchive({
   onForkRun,
   onReuseImage,
   onExportRun,
+  onDepositRun,
+  onPrepareDepositFacts,
   historyQueryService,
 }: {
   projects: ProductProject[];
+  historyProjects?: ProductProject[];
   activeProjectId?: string | null;
   workspaceRepository?: ProjectWorkspaceRepository;
   assetRepository?: AssetRepository;
@@ -101,6 +108,8 @@ export function TaskHistoryArchive({
   onForkRun?: (record: ProductionRunRecord) => void;
   onReuseImage?: (record: ProductionRunRecord, eventId: string) => void;
   onExportRun?: (record: ProductionRunRecord) => void;
+  onDepositRun?: (input: DepositRunInput) => Promise<ProductProject | null>;
+  onPrepareDepositFacts?: (runId: string) => Promise<ProductFacts | null>;
   historyQueryService?: HistoryQueryService | null;
 }) {
   const [records, setRecords] = useState<ProductionRunRecord[]>([]);
@@ -108,6 +117,32 @@ export function TaskHistoryArchive({
   const [filters, setFilters] = useState<ProductionRunFilters>({});
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [depositRecord, setDepositRecord] = useState<ProductionRunRecord | null>(null);
+  const [depositAssets, setDepositAssets] = useState<AssetMetadata[]>([]);
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [depositMessage, setDepositMessage] = useState<string | null>(null);
+  const [depositFacts, setDepositFacts] = useState<ProductFacts | null>(null);
+
+  const resolveAssetRepository = () => assetRepository ?? (() => {
+    try {
+      return createIndexedDbAssetRepository();
+    } catch {
+      return null;
+    }
+  })();
+
+  const openDeposit = async (record: ProductionRunRecord) => {
+    setDepositLoading(true);
+    setDepositRecord(record);
+    setDepositFacts(null);
+    setDepositAssets([]);
+    if (onPrepareDepositFacts) {
+      setDepositFacts(await onPrepareDepositFacts(record.run.id));
+    }
+    const repository = resolveAssetRepository();
+    if (repository) setDepositAssets(await repository.list(record.project.id));
+    setDepositLoading(false);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -125,7 +160,7 @@ export function TaskHistoryArchive({
               storage: window.localStorage,
             });
           const loaded = await Promise.all(
-            projects.map(async (project) => {
+            (historyProjects ?? projects).map(async (project) => {
               const workspace = await repository.load(project.id);
               return workspace.runs.map((run) => ({ project, run }));
             }),
@@ -143,7 +178,7 @@ export function TaskHistoryArchive({
     return () => {
       cancelled = true;
     };
-  }, [projects, workspaceRepository, historyQueryService, filters]);
+  }, [projects, historyProjects, workspaceRepository, historyQueryService, filters]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,13 +188,7 @@ export function TaskHistoryArchive({
     });
     const record = records.find(({ run }) => run.id === expandedRunId);
     if (!record) return () => undefined;
-    const resolvedAssetRepository = assetRepository ?? (() => {
-      try {
-        return createIndexedDbAssetRepository();
-      } catch {
-        return null;
-      }
-    })();
+    const resolvedAssetRepository = resolveAssetRepository();
     if (!resolvedAssetRepository || typeof URL.createObjectURL !== "function") return () => undefined;
     const ids = record.run.events.flatMap((event) => event.assetId ? [event.assetId] : []);
     void loadHistoryAssetUrls(
@@ -194,7 +223,7 @@ export function TaskHistoryArchive({
     return <EmptyState variant="loading" eyebrow="正在同步" icon={<Archive size={24} />} title="正在读取任务历史" description="按商品档案汇总本地记录。" />;
   }
 
-  if (projects.length === 0) {
+  if (projects.length === 0 && records.length === 0) {
     return (
       <EmptyState
         variant="dependency"
@@ -209,6 +238,7 @@ export function TaskHistoryArchive({
 
   return (
     <div className="production-history">
+      {depositMessage ? <StatusMessage tone="success">{depositMessage}</StatusMessage> : null}
       <ProductionHistoryFilters value={filters} onChange={setFilters} onClear={() => setFilters({})} />
       {records.length === 0 && !hasActiveFilters ? (
         <EmptyState
@@ -219,8 +249,30 @@ export function TaskHistoryArchive({
           description="完成一次策划后会建立 Run，后续生成、编辑和导出都归入该 Run。"
         />
       ) : filtered.length === 0 ? <EmptyState variant="result" eyebrow="没有匹配记录" icon={<Archive size={24} />} title="筛选条件没有结果" description="调整筛选条件，或清除全部筛选查看现有 Run。" action={<Button onClick={() => setFilters({})}>清除筛选</Button>} /> : <div className="production-history__list">
-        {filtered.map((record) => <ProductionRunCard key={record.run.id} record={record} expanded={expandedRunId === record.run.id} current={activeProjectId === record.project.id && activeRunIds.includes(record.run.id)} assetUrls={assetUrls} onToggle={() => setExpandedRunId((current) => current === record.run.id ? null : record.run.id)} onResume={() => onResumeRun?.(record)} onFork={() => onForkRun?.(record)} onReuse={(eventId) => onReuseImage?.(record, eventId)} onExport={onExportRun ? () => onExportRun(record) : undefined} />)}
+        {filtered.map((record) => <ProductionRunCard key={record.run.id} record={record} expanded={expandedRunId === record.run.id} current={activeProjectId === record.project.id && activeRunIds.includes(record.run.id)} assetUrls={assetUrls} onToggle={() => setExpandedRunId((current) => current === record.run.id ? null : record.run.id)} onResume={() => onResumeRun?.(record)} onFork={() => onForkRun?.(record)} onReuse={(eventId) => onReuseImage?.(record, eventId)} onExport={onExportRun ? () => onExportRun(record) : undefined} onDeposit={onDepositRun ? () => void openDeposit(record) : undefined} />)}
       </div>}
+      <DepositToLibraryDialog
+        record={depositRecord}
+        projects={projects}
+        assets={depositAssets}
+        loading={depositLoading}
+        initialFacts={depositFacts}
+        onClose={() => setDepositRecord(null)}
+        onSubmit={async (input) => {
+          if (!onDepositRun) return null;
+          setDepositLoading(true);
+          try {
+            const target = await onDepositRun(input);
+            if (target) {
+              setDepositMessage(`已沉淀到“${target.name}”，当前任务保持不变。`);
+              setRecords((current) => current.map((item) => item.run.id === input.runId ? { ...item, run: { ...item.run, deposit: { targetProjectId: target.id, depositedAt: new Date().toISOString() } } } : item));
+            }
+            return target;
+          } finally {
+            setDepositLoading(false);
+          }
+        }}
+      />
     </div>
   );
 }

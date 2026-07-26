@@ -46,6 +46,8 @@ function emptyState(): ProjectRepositoryState {
 function cloneProject(project: ProductProject): ProductProject {
   return {
     ...project,
+    scope: project.scope,
+    factsLocale: project.factsLocale ?? "zh-CN",
     facts: {
       ...project.facts,
       sellingPoints: [...project.facts.sellingPoints],
@@ -101,6 +103,8 @@ function normalizeStoredProject(value: unknown): ProductProject | null {
   return {
     id: value.id,
     name: normalizeString(value.name) || productName || "未命名项目",
+    scope: value.scope === "task-draft" ? "task-draft" : "library",
+    factsLocale: "zh-CN",
     facts: {
       productName,
       category: normalizeString(facts.category),
@@ -132,6 +136,8 @@ function createProjectRepository(
       const project: ProductProject = {
         id: createId(),
         name: input.name,
+        scope: input.scope ?? "library",
+        factsLocale: input.factsLocale ?? "zh-CN",
         facts: {
           ...input.facts,
           sellingPoints: [...input.facts.sellingPoints],

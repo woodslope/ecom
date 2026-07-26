@@ -174,8 +174,17 @@ describe("workbench planning state", () => {
       selectedReferenceAssetIds: [uploaded[0]!.metadata.id],
       options: { plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
     });
+    await store.getState().confirmLocalizedFacts(
+      session!.id,
+      session!.localizedFactsDraft!.localizedFacts,
+    );
+    await store.getState().planPlatform(
+      "amazon",
+      session!.options.platformId === "amazon" ? session!.options : undefined,
+    );
 
-    expect(session?.selectedReferenceAssetIds).toEqual([uploaded[0]!.metadata.id]);
+    expect(session?.selectedReferenceAssetIds).toHaveLength(1);
+    expect(session?.selectedReferenceAssetIds).not.toEqual([uploaded[0]!.metadata.id]);
     expect(receivedReferenceImages?.map((image) => image.name)).toEqual(["selected.png"]);
   });
 
@@ -641,13 +650,22 @@ describe("workbench planning state", () => {
       selectedReferenceAssetIds: [],
       options: { plannerMode: "aplus", aPlusType: "standard", marketplaceId: "jp" },
     });
+    await store.getState().confirmLocalizedFacts(
+      session!.id,
+      session!.localizedFactsDraft!.localizedFacts,
+    );
+    await store.getState().planPlatform(
+      "amazon",
+      session!.options.platformId === "amazon" ? session!.options : undefined,
+    );
+    const plannedSession = store.getState().sessions.find((item) => item.id === session!.id);
 
-    expect(session?.plan?.slots.find((slot) => slot.slotKey === "A+S05")?.externalText).toEqual(
+    expect(plannedSession?.plan?.slots.find((slot) => slot.slotKey === "A+S05")?.externalText).toEqual(
       expect.objectContaining({ title: expect.any(String), body: expect.any(String) }),
     );
     const saved = await store.getState().updatePlannedSlot("amazon", "A+S05", {
       visibleCopy: "",
-      prompt: session?.plan?.slots.find((slot) => slot.slotKey === "A+S05")?.prompt ?? "",
+      prompt: plannedSession?.plan?.slots.find((slot) => slot.slotKey === "A+S05")?.prompt ?? "",
       externalText: { title: "确认的利点", body: "洗濯できるカバー。" },
     });
     expect(saved).toBe(true);

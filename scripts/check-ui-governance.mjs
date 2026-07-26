@@ -212,10 +212,14 @@ function walkTsx(dir, out = []) {
     }
   }
 
+  const workflowShell = read(join(componentsDir, "PlatformWorkflowShell.tsx"));
+  if (!workflowShell.includes("<WorkflowStepper")) {
+    fail("PlatformWorkflowShell.tsx must own the shared WorkflowStepper for platform progress.");
+  }
   for (const fileName of ["AmazonIntake.tsx", "TaobaoIntake.tsx", "PlatformWorkspace.tsx"]) {
     const component = read(join(componentsDir, fileName));
-    if (!component.includes("<WorkflowStepper")) {
-      fail(`${fileName} must use the shared WorkflowStepper for platform progress.`);
+    if (!component.includes("PlatformWorkflowShell")) {
+      fail(`${fileName} must render through the shared PlatformWorkflowShell for platform progress.`);
     }
   }
 }

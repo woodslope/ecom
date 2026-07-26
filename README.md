@@ -25,10 +25,10 @@ pnpm build
 验证 GitHub Pages 子路径构建：
 
 ```bash
-VITE_BASE_PATH=/Ecom/ pnpm build
+VITE_BASE_PATH=/ecom/ pnpm build
 ```
 
-仓库名不是 `Ecom` 时，将环境变量改为实际仓库名。GitHub Actions 部署工作流会自动使用当前仓库名，不需要手工修改。
+仓库名不是 `ecom` 时，将环境变量改为实际仓库名。GitHub Actions 部署工作流会自动使用当前仓库名，不需要手工修改。
 
 ## GitHub Pages 部署
 

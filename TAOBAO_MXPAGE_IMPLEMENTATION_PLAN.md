@@ -411,7 +411,7 @@ pnpm test:browser
 - Amazon 回归：Listing/A+ 独立 session 恢复、站点/数量/模块、规划、生成/重生成、版本切换、遮罩、fork、历史复用和历史重导出继续通过；Amazon 页面结构、文案和视觉层级未改变。
 - 淘宝回归：导航、分析输入、来源记录、固定 12 槽、逐图生成/编辑/版本、手机预览、缺失槽位、单图/部分/完整导出和历史重导出继续通过。
 - 数据与历史回归：v2→v3 成功、失败重试和重复迁移通过；孤立 run 不依赖当前 session；RunRepository 分页/筛选、历史图片懒加载和 object URL 释放通过；新写入不产生 TaskRecord。
-- 最终工程验证：`pnpm check:ui`、`pnpm typecheck`、`pnpm test`（74 个测试文件、387 项通过）、`pnpm build`、`VITE_BASE_PATH=/Ecom/ pnpm build`、`pnpm test:browser` 通过；浏览器断点覆盖 `1600/1280/1100/900/899`。主 JS 体积警告为非阻断项，浏览器仍有一个既有 404 资源提示。
+- 最终工程验证：`pnpm check:ui`、`pnpm typecheck`、`pnpm test`（74 个测试文件、387 项通过）、`pnpm build`、`VITE_BASE_PATH=/ecom/ pnpm build`、`pnpm test:browser` 通过；浏览器断点覆盖 `1600/1280/1100/900/899`。主 JS 体积警告为非阻断项，浏览器仍有一个既有 404 资源提示。
 - review：项目无 Git 元数据，本轮为范围假设审查；需求来源为任务 22–23、产品规格、ADR 和 UI 合同，工程范围为统一生产壳/Token 契约、最终文档及迁移/Amazon/淘宝/历史/导出回归。需求与工程审查未发现未处理的严重或主要问题；修正文档中的项目删除范围、淘宝验收覆盖和阶段 C 章节顺序后结论通过。
 - 三条最终结论：用户体验通过；一致性治理通过；工程运行通过。外部 Provider、淘宝实际商家后台审核和大体量历史性能仍需真实环境验证。
 

@@ -12,7 +12,7 @@ describe("GitHub Pages runtime contract", () => {
   });
 
   it("builds and deploys a static artifact with the repository base path", () => {
-    expect(workflow).toContain("VITE_BASE_PATH: /${{ github.event.repository.name }}/");
+    expect(workflow).toContain("VITE_BASE_PATH: /ecom/");
     expect(workflow).toContain("pnpm build");
     expect(workflow).toContain("actions/upload-pages-artifact@v3");
     expect(workflow).toContain("actions/deploy-pages@v4");

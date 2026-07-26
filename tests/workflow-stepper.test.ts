@@ -38,4 +38,23 @@ describe("shared platform workflow stepper", () => {
     expect(markup.match(/is-complete/g)).toHaveLength(3);
     expect(markup).toContain("7/7 个槽位已完成");
   });
+
+  it("offers a compact intake variant without hints or duplicate summary", () => {
+    const markup = renderToStaticMarkup(
+      createElement(WorkflowStepper, {
+        platform: "amazon",
+        stage: "prepare",
+        completedSlots: 0,
+        totalSlots: 0,
+        compact: true,
+      }),
+    );
+
+    expect(markup).toContain("workbench-chrome__progress-row--compact");
+    expect(markup).toContain("策划");
+    expect(markup).toContain("生产");
+    expect(markup).toContain("交付");
+    expect(markup).not.toContain("商品事实与参考图");
+    expect(markup).not.toContain("等待策划");
+  });
 });

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { FileText, Images } from "lucide-react";
 
 import { planningInputQualityLabel } from "../domain/planning/input-assessment";
-import type { ProductProject } from "../domain/projects/types";
+import type { ProductFacts, ProductProject } from "../domain/projects/types";
 import { getAPlusContentTypeLabel } from "../domain/platforms/amazon-catalog";
 import { getAmazonMarketplaceLabel } from "../domain/platforms/amazon-marketplaces";
 import { AMAZON_STYLE_PRESETS } from "../domain/platforms/amazon-style-presets";
@@ -14,6 +14,8 @@ import type { StartAmazonSessionInput, WorkbenchAsset } from "../store/workbench
 import type { StyleReferenceDraft } from "../domain/assets/style-reference";
 import { AmazonIntake } from "./AmazonIntake";
 import { ProductContextBar } from "./ProductContextBar";
+import { LocalizedFactsReview } from "./LocalizedFactsReview";
+import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
 import { Dialog, StatusMessage } from "./ui";
 
 function sessionModeLabel(session: PlatformSession): string {
@@ -31,11 +33,13 @@ export function AmazonSessionSummary({
   session,
   assets,
   onClose,
+  onConfirmLocalizedFacts = async () => undefined,
 }: {
   open: boolean;
   session: PlatformSession;
   assets: WorkbenchAsset[];
   onClose: () => void;
+  onConfirmLocalizedFacts?: (facts: ProductFacts) => Promise<void> | void;
 }) {
   if (session.options.platformId !== "amazon") return null;
   const options = session.options;
@@ -87,6 +91,13 @@ export function AmazonSessionSummary({
           <p>{selectedNames.length > 0 ? selectedNames.join("、") : "本次任务未选择参考素材"}</p>
         </section>
       </div>
+      {session.localizedFactsDraft && onConfirmLocalizedFacts ? (
+        <LocalizedFactsReview
+          draft={session.localizedFactsDraft}
+          actionLabel="保存并重新生成策划"
+          onConfirm={onConfirmLocalizedFacts}
+        />
+      ) : null}
       {session.styleReferenceNotice ? (
         <StatusMessage tone="warning">{session.styleReferenceNotice}</StatusMessage>
       ) : null}
@@ -104,6 +115,7 @@ export function AmazonWorkspace({
   error,
   onStartSession,
   onSyncListingFacts,
+  onConfirmLocalizedFacts = async () => undefined,
   onOpenLibrary,
   onOpenProductPicker,
   onWorkspaceDirtyChange,
@@ -120,6 +132,7 @@ export function AmazonWorkspace({
   error: string | null;
   onStartSession: (input: StartAmazonSessionInput) => Promise<PlatformSession | null>;
   onSyncListingFacts: (listingText: string) => Promise<boolean>;
+  onConfirmLocalizedFacts?: (sessionId: string, facts: ProductFacts) => Promise<void> | void;
   onOpenLibrary?: () => void;
   onOpenProductPicker?: () => void;
   onWorkspaceDirtyChange?: (reason: string | null) => void;
@@ -137,19 +150,46 @@ export function AmazonWorkspace({
 
   return (
     <div className="amazon-workspace">
-      <ProductContextBar
-        platformLabel="Amazon"
-        project={activeProject}
-        statusLabel={statusLabel}
-        statusTone={session?.plan ? "success" : "neutral"}
-        detailLabel={session?.plan ? "任务输入" : undefined}
-        disabled={loading || planning}
-        onOpenDetails={session?.plan ? () => setSummaryOpen(true) : undefined}
-        onSwitchProduct={onOpenProductPicker}
-        onOpenLibrary={onOpenLibrary}
-      />
       {session?.plan ? (
-        children
+        <>
+          <ProductContextBar
+            platformLabel="Amazon"
+            project={activeProject}
+            statusLabel={statusLabel}
+            statusTone="success"
+            detailLabel="任务输入"
+            disabled={loading || planning}
+            onOpenDetails={() => setSummaryOpen(true)}
+            onSwitchProduct={onOpenProductPicker}
+            onOpenLibrary={onOpenLibrary}
+          />
+          {children}
+        </>
+      ) : session?.localizedFactsDraft ? (
+        <PlatformWorkflowShell
+          platform="amazon"
+          title="Amazon"
+          stage="review"
+          completedSlots={0}
+          totalSlots={0}
+          className="platform-workflow-shell--scroll-content"
+          contextBar={
+            <ProductContextBar
+              platformLabel="Amazon"
+              project={activeProject}
+              statusLabel="待确认"
+              statusTone="warning"
+              disabled={loading || planning}
+              onOpenLibrary={onOpenLibrary}
+            />
+          }
+        >
+          <LocalizedFactsReview
+            draft={session.localizedFactsDraft}
+            disabled={loading || planning}
+            onConfirm={(facts) => onConfirmLocalizedFacts(session.id, facts)}
+          />
+        </PlatformWorkflowShell>
       ) : (
         <AmazonIntake
           activeProject={activeProject}
@@ -162,6 +202,7 @@ export function AmazonWorkspace({
           onSubmit={onStartSession}
           onSyncListingFacts={onSyncListingFacts}
           onChooseLibrary={onOpenProductPicker}
+          onOpenLibrary={onOpenLibrary}
           onDirtyChange={onWorkspaceDirtyChange}
           onCreateStyleReference={onCreateStyleReference}
           onRemoveAsset={onRemoveAsset}
@@ -173,6 +214,7 @@ export function AmazonWorkspace({
           session={session}
           assets={assets}
           onClose={() => setSummaryOpen(false)}
+          onConfirmLocalizedFacts={(facts) => onConfirmLocalizedFacts(session.id, facts)}
         />
       ) : null}
     </div>

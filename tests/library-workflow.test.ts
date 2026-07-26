@@ -202,14 +202,14 @@ describe("library workflow", () => {
 
     for (const markup of [factsMarkup, assetsMarkup, progressMarkup]) {
       expect(markup).toContain('role="tablist"');
-      expect(markup).toContain("商品资料");
+      expect(markup).toContain("商品事实");
       expect(markup).toContain("参考素材");
       expect(markup).toContain("平台进度");
       expect(markup).toContain(`aria-label="档案详情：${projects[0]!.name}"`);
       expect(markup).toContain('aria-label="新建商品"');
       expect(markup).toContain(`aria-label="更多：${projects[0]!.name}"`);
     }
-    expect(factsMarkup).toContain('aria-selected="true">商品资料');
+    expect(factsMarkup).toContain('aria-selected="true">商品事实');
     expect(factsMarkup).toContain("保存商品资料");
     expect(assetsMarkup).toContain('aria-selected="true">参考素材');
     expect(assetsMarkup).toContain('type="file"');

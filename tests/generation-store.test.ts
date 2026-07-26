@@ -7,6 +7,7 @@ import { createMemoryProjectRepository } from "../src/domain/projects/repository
 import type { ProductFacts } from "../src/domain/projects/types";
 import {
   createMemoryWorkspaceRepository,
+  type PlatformSession,
   type ProjectWorkspaceRepository,
 } from "../src/domain/workspace/project-workspace";
 import { demoImageGenerator } from "../src/services/demo-image-generator";
@@ -60,6 +61,21 @@ function createDependencies(
   };
 }
 
+async function confirmAmazonSession(
+  store: ReturnType<typeof createWorkbenchStore>,
+  session: PlatformSession,
+): Promise<PlatformSession> {
+  await store.getState().confirmLocalizedFacts(
+    session.id,
+    session.localizedFactsDraft!.localizedFacts,
+  );
+  await store.getState().planPlatform(
+    "amazon",
+    session.options.platformId === "amazon" ? session.options : undefined,
+  );
+  return store.getState().sessions.find((item) => item.id === session.id)!;
+}
+
 describe("workbench generation versions", () => {
   it("excludes hidden style from MAIN and appends it with guard for PT", async () => {
     const requests: ImageGenerationRequest[] = [];
@@ -81,6 +97,7 @@ describe("workbench generation versions", () => {
       options: { plannerMode: "listing", listingImageCount: 7, marketplaceId: "us" },
     });
     if (!session) throw new Error("预期创建 session");
+    await confirmAmazonSession(store, session);
 
     await store.getState().generateSessionSlot(session.id, "MAIN");
     await store.getState().generateSessionSlot(session.id, "PT01");
@@ -100,8 +117,13 @@ describe("workbench generation versions", () => {
       selectedStyleReferenceId: styleId,
       options: { plannerMode: "aplus", marketplaceId: "us", aPlusType: "standard-large" },
     });
-    if (!aPlusSession?.plan?.slots[0]) throw new Error("预期创建 A+ session");
-    await store.getState().generateSessionSlot(aPlusSession.id, aPlusSession.plan.slots[0].slotKey);
+    if (!aPlusSession) throw new Error("预期创建 A+ session");
+    const plannedAPlusSession = await confirmAmazonSession(store, aPlusSession);
+    if (!plannedAPlusSession.plan?.slots[0]) throw new Error("预期创建 A+ 策划");
+    await store.getState().generateSessionSlot(
+      plannedAPlusSession.id,
+      plannedAPlusSession.plan.slots[0].slotKey,
+    );
     expect(requests[2]!.referenceImages.at(-1)?.kind).toBe("style");
     expect(requests[2]!.prompt).toContain("Style direction rule:");
 
@@ -128,6 +150,7 @@ describe("workbench generation versions", () => {
       options: { plannerMode: "listing", listingImageCount: 7, marketplaceId: "us" },
     });
     if (!session) throw new Error("预期创建 Amazon session");
+    await confirmAmazonSession(store, session);
 
     const version = await store.getState().generateSessionSlot(session.id, "MAIN");
     const currentSession = store.getState().sessions.find((item) => item.id === session.id)!;
@@ -227,6 +250,7 @@ describe("workbench generation versions", () => {
       options: { plannerMode: "listing", listingImageCount: 7, marketplaceId: "us" },
     });
     if (!session) throw new Error("预期创建 Amazon session");
+    await confirmAmazonSession(store, session);
     const first = await store.getState().generateSessionSlot(session.id, "PT01");
     await store.getState().updatePlannedSlot("amazon", "PT01", {
       visibleCopy: "Updated benefit",
@@ -677,6 +701,7 @@ describe("workbench generation versions", () => {
       options: { plannerMode: "listing", listingImageCount: 7, marketplaceId: "us" },
     });
     if (!session) throw new Error("预期创建 Amazon session");
+    await confirmAmazonSession(store, session);
     const first = await store.getState().generateSessionSlot(session.id, "PT01");
     if (!first) throw new Error("预期生成首个版本");
     const mask: MaskDraft = {
@@ -732,6 +757,7 @@ describe("workbench generation versions", () => {
       options: { plannerMode: "listing", listingImageCount: 7, marketplaceId: "us" },
     });
     if (!session) throw new Error("预期创建 Amazon session");
+    await confirmAmazonSession(store, session);
     const first = await store.getState().generateSessionSlot(session.id, "PT01");
     if (!first) throw new Error("预期生成首个版本");
 
@@ -797,6 +823,7 @@ describe("workbench generation versions", () => {
       options: { plannerMode: "listing", listingImageCount: 7, marketplaceId: "us" },
     });
     if (!session) throw new Error("预期创建 Amazon session");
+    await confirmAmazonSession(store, session);
     const version = await store.getState().generateSessionSlot(session.id, "PT01");
     if (!version) throw new Error("预期生成首个版本");
     await store.getState().saveRuntimeSettings({
@@ -841,6 +868,7 @@ describe("workbench generation versions", () => {
       options: { plannerMode: "listing", listingImageCount: 7, marketplaceId: "us" },
     });
     if (!session) throw new Error("预期创建 Amazon session");
+    await confirmAmazonSession(store, session);
     const first = await store.getState().generateSessionSlot(session.id, "PT01");
     if (!first) throw new Error("预期生成首个版本");
     const originalSave = dependencies.workspaceRepository.save.bind(

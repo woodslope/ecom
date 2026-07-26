@@ -88,6 +88,29 @@ describe("AmazonSessionControls", () => {
     expect(markup.includes("调整参数") || markup.includes("收起参数")).toBe(true);
   });
 
+  it("keeps the parameter band folded when a restored plan needs replanning", () => {
+    const markup = renderToStaticMarkup(
+      createElement(AmazonSessionControls, {
+        value: {
+          marketplaceId: "us",
+          plannerMode: "listing",
+          listingImageCount: 7,
+          aPlusType: "standard-large",
+          sizeTier: "2K",
+          stylePresetId: "clean-retail",
+          aPlusModuleSpecs: null,
+        },
+        hasPlan: true,
+        preferCollapsed: true,
+        collapseKey: "restored-amazon-task",
+        onChange: () => undefined,
+      }),
+    );
+    expect(markup).toContain("调整参数");
+    expect(markup).not.toContain('aria-label="目标站点"');
+    expect(markup).not.toContain('aria-label="Listing 张数"');
+  });
+
   it("passes custom A+ module specs into planner options and resolves slot count", () => {
     const defaults = getAPlusModuleSpecs("standard-large");
     const expanded = insertAPlusModuleSpecAfter("standard-large", defaults, 0);

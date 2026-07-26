@@ -55,9 +55,15 @@ describe("Taobao intake", () => {
       onOpenLibrary: () => undefined,
     }));
 
-    expect(markup).toContain("可直接填写本次商品资料或只上传商品图");
+    expect(markup).toContain("可粘贴商品名称、卖点、规格和禁用声明");
     expect(markup).toContain("从资料库选择");
     expect(markup).toContain("手动填写");
+    expect(markup).toContain('aria-label="淘宝 / 天猫 商品与任务来源"');
+    expect(markup).toContain("本次任务");
+    expect(markup).toContain("未绑定商品档案");
+    expect(markup).not.toContain("planning-input-quality");
+    expect(markup).not.toContain("任务输入来源");
+    expect(markup).not.toContain("intake-source-bar");
   });
 
   it("renders product text, image input, existing references, and a Taobao analysis action", () => {
@@ -87,8 +93,12 @@ describe("Taobao intake", () => {
     expect(markup).toContain('aria-label="淘宝分析图片"');
     expect(markup).toContain("正面图.png");
     expect(markup).toContain("生成图片策划");
-    expect(markup).toContain('class="workbench-toolbar"');
-    expect(markup).toContain("不会自动修改资料库");
+    expect(markup).toContain('class="platform-workflow-shell"');
+    expect(markup).toContain('class="workbench-chrome__progress-row"');
+    expect(markup).not.toContain("workbench-chrome__progress-row--compact");
+    expect(markup).toContain("策划检查");
+    expect(markup).toContain("交付检查");
+    expect(markup).not.toContain("不会自动修改资料库");
     expect(markup).toContain("从资料库选择");
     expect(markup).toContain("手动填写");
     expect(markup).not.toContain("Amazon Listing");
@@ -129,8 +139,8 @@ describe("Taobao intake", () => {
       onOpenLibrary: () => undefined,
     }));
 
-    expect(markup).toContain("缺少商品参考图，将生成策划草稿");
     expect(markup).toContain("策划草稿");
+    expect(markup).not.toContain("planning-input-quality");
     expect(markup).not.toMatch(/planning-primary-action[^>]*disabled/);
   });
 
@@ -188,6 +198,7 @@ describe("Taobao intake", () => {
     expect(markup).toContain("商品名：云感旅行颈枕");
     expect(markup).toContain("策划模型暂不可用");
     expect(markup).not.toContain("production-workspace-marker");
+    expect(markup.match(/<section class="product-context-bar/g)).toHaveLength(1);
   });
 
   it("shows explainable analysis fields, missing facts, and forbidden-claim warnings", () => {
