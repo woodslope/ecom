@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   defaultRuntimeSettings,
@@ -61,6 +61,8 @@ export function SettingsDialog({
   onTest = async () => ({ ok: true, message: "连接成功" }),
   onTestText,
   onTestImage,
+  onExportLocalBackup,
+  onImportLocalBackup,
 }: {
   open: boolean;
   settings?: RuntimeSettings;
@@ -78,7 +80,10 @@ export function SettingsDialog({
   onTest?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onTestText?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onTestImage?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
+  onExportLocalBackup?: () => Promise<string>;
+  onImportLocalBackup?: (file: File) => Promise<string>;
 }) {
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<RuntimeSettings>(settings);
   const [saving, setSaving] = useState(false);
   const [testingService, setTestingService] = useState<"text" | "image" | null>(null);
@@ -86,12 +91,15 @@ export function SettingsDialog({
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [textResult, setTextResult] = useState<ConnectionTestResult | null>(null);
   const [imageResult, setImageResult] = useState<ConnectionTestResult | null>(null);
+  const [backupOperation, setBackupOperation] = useState<"export" | "import" | null>(null);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [backupError, setBackupError] = useState<string | null>(null);
   const activeTesting =
     testingService !== null ||
     connectionStatus === "testing" ||
     textConnectionStatus === "testing" ||
     imageConnectionStatus === "testing";
-  const operationBusy = saving || activeTesting || loading;
+  const operationBusy = saving || activeTesting || loading || backupOperation !== null;
   const controlsDisabled = operationBusy || Boolean(lockReason);
 
   useEffect(() => {
@@ -101,6 +109,9 @@ export function SettingsDialog({
     setSaveMessage(null);
     setTextResult(null);
     setImageResult(null);
+    setBackupOperation(null);
+    setBackupMessage(null);
+    setBackupError(null);
   }, [open, settings]);
 
   const update = <Key extends keyof RuntimeSettings>(key: Key, value: RuntimeSettings[Key]) => {
@@ -145,6 +156,37 @@ export function SettingsDialog({
       else setImageResult(result);
     } finally {
       setTestingService(null);
+    }
+  };
+
+  const exportBackup = async () => {
+    if (!onExportLocalBackup) return;
+    setBackupOperation("export");
+    setBackupMessage(null);
+    setBackupError(null);
+    try {
+      setBackupMessage(await onExportLocalBackup());
+    } catch (backupFailure) {
+      setBackupError(backupFailure instanceof Error ? backupFailure.message : "导出本地备份失败，请重试。");
+    } finally {
+      setBackupOperation(null);
+    }
+  };
+
+  const importBackup = async (file: File) => {
+    if (!onImportLocalBackup) return;
+    if (!window.confirm("恢复备份会替换当前商品、素材、工作区、生产记录和本地任务。API 设置不会改变。确认继续？")) {
+      return;
+    }
+    setBackupOperation("import");
+    setBackupMessage(null);
+    setBackupError(null);
+    try {
+      setBackupMessage(await onImportLocalBackup(file));
+    } catch (backupFailure) {
+      setBackupError(backupFailure instanceof Error ? backupFailure.message : "恢复本地备份失败，请检查文件后重试。");
+    } finally {
+      setBackupOperation(null);
     }
   };
 
@@ -337,6 +379,45 @@ export function SettingsDialog({
             </section> : null}
           </>
         )}
+
+        <section className="settings-service-group" aria-labelledby="local-backup-title">
+          <div className="settings-service-group__heading">
+            <h3 id="local-backup-title">本地数据备份</h3>
+            <p>包含商品、素材、工作区、生产记录和本地任务；不包含 API Key 或 Provider 设置。</p>
+          </div>
+          <input
+            ref={backupInputRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            aria-label="选择本地备份文件"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void importBackup(file);
+            }}
+          />
+          <div className="settings-service-actions">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={controlsDisabled || !onExportLocalBackup}
+              onClick={() => void exportBackup()}
+            >
+              {backupOperation === "export" ? "正在导出..." : "导出本地备份"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={controlsDisabled || !onImportLocalBackup}
+              onClick={() => backupInputRef.current?.click()}
+            >
+              {backupOperation === "import" ? "正在恢复..." : "恢复本地备份"}
+            </Button>
+          </div>
+          {backupMessage ? <StatusMessage tone="success">{backupMessage}</StatusMessage> : null}
+          {backupError ? <StatusMessage tone="danger">{backupError}</StatusMessage> : null}
+        </section>
 
         {lockReason ? <StatusMessage tone="warning">{lockReason}</StatusMessage> : null}
         {error ? <StatusMessage tone="danger">{error}</StatusMessage> : null}

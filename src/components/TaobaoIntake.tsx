@@ -310,6 +310,7 @@ export function TaobaoIntake({
           loading={loading}
           loadingLabel="生成图片策划中..."
           title={analyzeDisabledReason}
+          aria-describedby={assessment.quality === "empty" ? "taobao-planning-requirement" : undefined}
           onClick={() => void submit()}
         >
           <Sparkles size={16} />
@@ -321,6 +322,11 @@ export function TaobaoIntake({
         event.preventDefault();
         void submit();
       }}>
+      {assessment.quality === "empty" ? (
+        <StatusMessage id="taobao-planning-requirement" className="planning-input-requirement">
+          {assessmentMessage}
+        </StatusMessage>
+      ) : null}
       {lockedReason ? (
         <StatusMessage className="planning-task-status">
           <span className="generation-task-status__copy">

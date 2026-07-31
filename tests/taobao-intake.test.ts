@@ -61,6 +61,9 @@ describe("Taobao intake", () => {
     expect(markup).toContain('aria-label="淘宝 / 天猫 商品与任务来源"');
     expect(markup).toContain("本次任务");
     expect(markup).toContain("未绑定商品档案");
+    expect(markup).toContain('aria-describedby="taobao-planning-requirement"');
+    expect(markup).toContain('id="taobao-planning-requirement"');
+    expect(markup).toContain("请填写商品资料或添加至少一张商品图。");
     expect(markup).not.toContain("planning-input-quality");
     expect(markup).not.toContain("任务输入来源");
     expect(markup).not.toContain("intake-source-bar");

@@ -267,6 +267,7 @@ export function AmazonIntake({
           loading={planning}
           loadingLabel="生成图片策划中..."
           title={assessment.quality === "empty" ? assessmentMessage : undefined}
+          aria-describedby={assessment.quality === "empty" ? "amazon-planning-requirement" : undefined}
           onClick={() => void submit()}
         >
           <Sparkles size={16} />
@@ -275,6 +276,11 @@ export function AmazonIntake({
       }
     >
       <div className="amazon-intake">
+      {assessment.quality === "empty" ? (
+        <StatusMessage id="amazon-planning-requirement" className="planning-input-requirement">
+          {assessmentMessage}
+        </StatusMessage>
+      ) : null}
       <AmazonSessionControls
         value={controls}
         disabled={disabled}

@@ -41,6 +41,13 @@ import {
   writeLastPlatform,
 } from "./domain/workspace/preferences";
 import { useWorkbenchStore, type WorkbenchAsset, type WorkbenchState } from "./store/workbench-store";
+import {
+  createLocalBackup,
+  localBackupFileName,
+  parseLocalBackup,
+  restoreLocalBackup,
+  summarizeLocalBackup,
+} from "./application/local-backup";
 
 function initialNavigationItem(): NavigationItemId {
   if (typeof window === "undefined") return "amazon";
@@ -486,6 +493,34 @@ export function App() {
       writeDemoModeBannerDismissed(window.localStorage, true);
     }
   };
+
+  const exportLocalBackup = useCallback(async () => {
+    const backup = await createLocalBackup({
+      storage: window.localStorage,
+      indexedDB: window.indexedDB,
+    });
+    const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = localBackupFileName(backup.exportedAt);
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    const summary = summarizeLocalBackup(backup);
+    return `备份已导出：${summary.projectCount} 个商品、${summary.assetCount} 个素材、${summary.runCount} 条生产记录。`;
+  }, []);
+
+  const importLocalBackup = useCallback(async (file: File) => {
+    const backup = parseLocalBackup(await file.text());
+    const summary = await restoreLocalBackup(backup, {
+      storage: window.localStorage,
+      indexedDB: window.indexedDB,
+    });
+    window.setTimeout(() => window.location.reload(), 600);
+    return `备份恢复成功：${summary.projectCount} 个商品、${summary.assetCount} 个素材。正在重新加载应用...`;
+  }, []);
   const openSettingsFromBanner = () => {
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("ecom:open-settings", { detail: { open: true } }));
@@ -947,6 +982,8 @@ export function App() {
       onTestRuntimeConnection={testRuntimeConnection}
       onTestTextConnection={(settings) => testRuntimeConnection(settings, "text")}
       onTestImageConnection={(settings) => testRuntimeConnection(settings, "image")}
+      onExportLocalBackup={exportLocalBackup}
+      onImportLocalBackup={importLocalBackup}
       onCreateProject={openProjectDialog}
       onSelectProject={requestProjectChange}
     >

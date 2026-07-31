@@ -1,5 +1,3 @@
-import { strToU8, zipSync } from "fflate";
-
 import { runCompliance } from "../compliance";
 import { currentSlotVersion } from "../generation/current-version";
 import type { SlotVersion } from "../generation/types";
@@ -171,6 +169,7 @@ export async function buildExportPackage({
     slots,
   };
 
+  const { strToU8, zipSync } = await import("fflate");
   archiveFiles["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
   archiveFiles["prompts.md"] = strToU8(buildPrompts(manifest));
   const externalCopy = buildExternalCopy(manifest);

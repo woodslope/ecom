@@ -1,7 +1,7 @@
 # Ecom Project Context
 
 > 当前真相源：项目起源、开源参考、领域边界、关键取舍和后续协作门禁。
-> Updated: 2026-07-21
+> Updated: 2026-07-28
 
 ## 1. 项目目标
 
@@ -105,6 +105,8 @@ flowchart LR
 
 旧 v1 测试业务数据仍不迁移、不读取。运行设置继续使用 `ecom-workbench.runtime-settings.v1`，并通过归一化保留既有 API 凭据和 Demo/API 选择。删除项目按 runs、assets、V3/v2 workspace、项目元数据顺序清理，失败可重试；不调用 `localStorage.clear()`；详细取舍见 `docs/adr/0001-product-session-run-boundaries.md`。
 
+设置页支持导出和恢复单个 JSON 本地备份。备份覆盖商品、v2/v3 workspace、素材 Blob、ProductionRun、本地任务和界面偏好；恢复会替换这些业务数据，并在写入失败时尝试回滚。运行设置、API Key 和 Provider 地址不进入备份，恢复后保持当前浏览器配置不变。
+
 ## 6. 产品与技术边界
 
 ### 当前支持
@@ -115,6 +117,7 @@ flowchart LR
 - Demo 与 OpenAI-compatible API 运行模式。
 - 可解释策划、Prompt 编辑、Copilot、图片生成、局部编辑和 ZIP 交付。
 - 当前商品、当前平台工作流内的本地批量生成任务，支持进度、取消、失败重试和刷新后继续。
+- 业务数据的本地 JSON 备份与恢复，API Key 和 Provider 设置除外。
 - 淘宝商品分析、固定 5 张主图 + 7 张详情图、逐图生产、手机商品页预览、部分/完整导出和历史重导出。
 - 桌面工作台：`1100px` 以上三模块，`900–1099px` 双模块加资料抽屉，`899px` 及以下显示桌面门禁。
 
@@ -134,7 +137,7 @@ flowchart LR
 - 治理实现：Token、共享 UI、页面壳、状态和动作层级是否由同一套机制拥有。
 - 工程运行：类型、测试、构建、Provider/存储契约和浏览器错误。
 
-当前浏览器证据位于 `artifacts/cross-platform-ais/`。当前收口基线为 `pnpm check:ui`、`pnpm typecheck`、`pnpm test`（74 个文件、387 项）、`pnpm build`、`VITE_BASE_PATH=/ecom/ pnpm build`、`pnpm test:browser`；批量任务已在真实浏览器中验证，断点覆盖 `1600/1280/1100/900/899`。
+当前浏览器证据位于 `artifacts/cross-platform-ais/`。当前收口基线为 `pnpm check:ui`、`pnpm typecheck`、`pnpm test`（88 个文件、455 项）、`pnpm build`、`VITE_BASE_PATH=/ecom/ pnpm build`、`pnpm test:browser`；浏览器烟测已连续执行两次通过，断点覆盖 `1600/1280/1100/900/899`。生产构建的最大业务块为 452.31 kB，低于 Vite 默认 500 kB 提示线。
 
 ## 8. 后续协作门禁
 
@@ -154,4 +157,4 @@ Amazon 对齐已从“实施阶段”切换为“维护基线”。后续改动�
 - `CROSS_PLATFORM_AIS_IMPLEMENTATION_PLAN.md`：任务 1–13 的实施与验证记录。
 - `TAOBAO_MXPAGE_IMPLEMENTATION_PLAN.md`：任务 14–23 的架构解耦、淘宝 workflow 和一致性治理执行记录。
 
-当前目录没有 Git 元数据，因此审查只能固定到明确文件和验证命令，不能提供提交级 diff 结论。
+当前目录包含 Git 元数据；改动审查以当前工作区 diff、验证命令和浏览器证据为准。本次收口未自动提交、推送或部署。

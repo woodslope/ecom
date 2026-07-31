@@ -56,6 +56,10 @@ describe("settings UI", () => {
     expect(markup).toContain("文本与图片服务地址");
     expect(markup).toContain("清空此字段");
     expect(markup).toContain("同时删除本地项目与素材");
+    expect(markup).toContain("本地数据备份");
+    expect(markup).toContain("导出本地备份");
+    expect(markup).toContain("恢复本地备份");
+    expect(markup).toContain("不包含 API Key 或 Provider 设置");
     expect(markup).not.toContain("API 配置尚未启用");
   });
 

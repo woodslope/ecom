@@ -5089,6 +5089,14 @@ select.select-control__input:disabled + .select-control__icon {
   background: rgba(234, 242, 247, 0.98);
 }
 
+.app-desktop-content {
+  display: contents;
+}
+
+.desktop-only-gate:focus {
+  outline: none;
+}
+
 .desktop-only-gate[hidden] {
   display: none !important;
 }

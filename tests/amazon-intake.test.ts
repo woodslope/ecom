@@ -357,6 +357,9 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).toContain("生成图片策划");
     expect(directMarkup).toContain("图片策划");
     expect(directMarkup).toContain('title="请填写商品资料或添加至少一张商品图。"');
+    expect(directMarkup).toContain('aria-describedby="amazon-planning-requirement"');
+    expect(directMarkup).toContain('id="amazon-planning-requirement"');
+    expect(directMarkup).toContain("请填写商品资料或添加至少一张商品图。");
     expect(directMarkup).toContain('class="platform-workflow-shell"');
     expect(directMarkup).toContain('class="workbench-chrome__progress-row"');
     expect(directMarkup).not.toContain("workbench-chrome__progress-row--compact");

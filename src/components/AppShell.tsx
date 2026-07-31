@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Cloud, CloudOff, Monitor } from "lucide-react";
 
 import type { NavigationItemId } from "../domain/platforms/types";
@@ -36,6 +36,8 @@ export function AppShell({
   onTestRuntimeConnection = async () => ({ ok: true, message: "连接成功" }),
   onTestTextConnection,
   onTestImageConnection,
+  onExportLocalBackup,
+  onImportLocalBackup,
   onSettingsOpenChange,
   children,
 }: {
@@ -60,11 +62,15 @@ export function AppShell({
   onTestRuntimeConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onTestTextConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onTestImageConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
+  onExportLocalBackup?: () => Promise<string>;
+  onImportLocalBackup?: (file: File) => Promise<string>;
   /** Notify parent when settings dialog opens/closes (e.g. demo banner → open settings). */
   onSettingsOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const desktopGateRef = useRef<HTMLDivElement>(null);
+  const focusBeforeGateRef = useRef<HTMLElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === "undefined" ? DESKTOP_MIN_WIDTH : window.innerWidth,
   );
@@ -115,42 +121,66 @@ export function AppShell({
   const runtimeLabel = usesApi ? "API 引擎" : "演示引擎";
   const desktopSupported = viewportWidth >= DESKTOP_MIN_WIDTH;
 
+  useEffect(() => {
+    if (!desktopSupported) {
+      const active = document.activeElement;
+      focusBeforeGateRef.current = active instanceof HTMLElement && active !== document.body
+        ? active
+        : null;
+      desktopGateRef.current?.focus();
+      return;
+    }
+
+    const previous = focusBeforeGateRef.current;
+    focusBeforeGateRef.current = null;
+    if (previous?.isConnected) previous.focus();
+  }, [desktopSupported]);
+
   return (
     <div className="app-frame" data-testid="app-frame">
-      <PlatformRail
-        activeItem={activeItem}
-        onChange={changeDestination}
-        runtimeBadge={
-          <button
-            type="button"
-            className="runtime-badge-button"
-            onClick={openSettings}
-            aria-label={`当前运行模式：${runtimeLabel}。打开设置切换 Demo / API`}
-            title="打开设置 · 切换 Demo / API"
-          >
-            <StatusChip tone="mode" className="runtime-badge">
-              {usesApi ? <Cloud size={12} /> : <CloudOff size={12} />}
-              <span className="runtime-badge__text">{usesApi ? "API" : "演示"}</span>
-            </StatusChip>
-          </button>
-        }
-      />
-      <div className="app-surface">
-        <main className="workspace" data-testid="workspace">
-          {children}
-        </main>
+      <div
+        className="app-desktop-content"
+        data-testid="app-desktop-content"
+        inert={!desktopSupported}
+        aria-hidden={!desktopSupported ? true : undefined}
+      >
+        <PlatformRail
+          activeItem={activeItem}
+          onChange={changeDestination}
+          runtimeBadge={
+            <button
+              type="button"
+              className="runtime-badge-button"
+              onClick={openSettings}
+              aria-label={`当前运行模式：${runtimeLabel}。打开设置切换 Demo / API`}
+              title="打开设置 · 切换 Demo / API"
+            >
+              <StatusChip tone="mode" className="runtime-badge">
+                {usesApi ? <Cloud size={12} /> : <CloudOff size={12} />}
+                <span className="runtime-badge__text">{usesApi ? "API" : "演示"}</span>
+              </StatusChip>
+            </button>
+          }
+        />
+        <div className="app-surface">
+          <main className="workspace" data-testid="workspace">
+            {children}
+          </main>
+        </div>
       </div>
 
       {/* Keep a stable test hook for smoke after top bar removal */}
       <div className="context-bar" data-testid="context-bar" hidden aria-hidden="true" />
 
       <div
+        ref={desktopGateRef}
         className="desktop-only-gate"
         data-testid="desktop-only-gate"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="desktop-only-gate-title"
         aria-describedby="desktop-only-gate-description"
+        tabIndex={-1}
         hidden={desktopSupported}
       >
         <div className="desktop-only-gate__card">
@@ -185,6 +215,8 @@ export function AppShell({
         onTest={onTestRuntimeConnection}
         onTestText={onTestTextConnection ?? onTestRuntimeConnection}
         onTestImage={onTestImageConnection ?? onTestRuntimeConnection}
+        onExportLocalBackup={onExportLocalBackup}
+        onImportLocalBackup={onImportLocalBackup}
       />
     </div>
   );
