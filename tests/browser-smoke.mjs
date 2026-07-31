@@ -69,16 +69,19 @@ try {
   page.on("console", (message) => {
     if (message.type() !== "error") return;
     if (
-      expectedConsoleErrorUrls.has(message.location().url) &&
+      expectedConsoleErrorUrls.size > 0 &&
       message.text().includes("status of 503")
     ) {
-      expectedConsoleErrorUrls.delete(message.location().url);
+      expectedConsoleErrorUrls.clear();
       expectedConsoleErrorCount += 1;
       return;
     }
     runtimeErrors.push(`console: ${message.text()}`);
   });
   page.on("pageerror", (error) => runtimeErrors.push(`pageerror: ${error.message}`));
+  page.on("response", (response) => {
+    if (response.status() === 404) runtimeErrors.push(`response 404: ${response.url()}`);
+  });
 
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByTestId("app-frame").waitFor({ state: "visible" });
@@ -791,9 +794,9 @@ try {
 
   await page.getByRole("button", { name: "生产记录", exact: true }).click();
   await page.getByRole("heading", { name: "生产记录", exact: true }).waitFor({ state: "visible" });
-  assert(await page.getByText("完成策划", { exact: true }).first().isVisible(), "历史缺少策划记录");
-  assert(await page.getByText(/生成图片 · PT01/, { exact: true }).first().isVisible(), "历史缺少生成记录");
-  assert(await page.getByText("导出交付", { exact: true }).first().isVisible(), "历史缺少导出记录");
+  await page.getByText("完成策划", { exact: true }).first().waitFor({ state: "visible" });
+  await page.getByText(/生成图片 · PT01/, { exact: true }).first().waitFor({ state: "visible" });
+  await page.getByText("导出交付", { exact: true }).first().waitFor({ state: "visible" });
   assert(
     await page.getByText(download.suggestedFilename(), { exact: true }).isVisible(),
     "历史没有显示本次导出产物",
@@ -1014,8 +1017,9 @@ try {
   );
   const browserApiKey = "browser-smoke-secret-key";
   const connectionTestUrl = `${baseUrl}__connection-test-fail`;
-  expectedConsoleErrorUrls.add(connectionTestUrl);
-  await page.route(connectionTestUrl, async (route) => {
+  const connectionTestEndpoint = `${connectionTestUrl}/chat/completions`;
+  expectedConsoleErrorUrls.add(connectionTestEndpoint);
+  await page.route(connectionTestEndpoint, async (route) => {
     await new Promise((resolveWait) => setTimeout(resolveWait, 250));
     await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
   });
@@ -1089,6 +1093,14 @@ try {
   assert(
     (await desktopGate.innerText()).includes("900"),
     "电脑端提示没有说明最低宽度",
+  );
+  assert(
+    (await page.getByTestId("app-desktop-content").getAttribute("inert")) !== null,
+    "电脑端门禁显示时底层工作台仍可交互",
+  );
+  assert(
+    await desktopGate.evaluate((element) => document.activeElement === element),
+    "电脑端门禁显示后没有接管键盘焦点",
   );
   assert(
     (await page.locator(".mobile-navigation").count()) === 0 ||
@@ -1341,10 +1353,7 @@ try {
     console.warn("Browser smoke note: no console 503 observed for connection fixture (UI path covered).");
   }
   const unexpectedRuntimeErrors = runtimeErrors.filter(
-    (entry) =>
-      !entry.includes("status of 404") &&
-      !entry.includes("status of 503") &&
-      !entry.includes("Failed to load resource"),
+    (entry) => !entry.includes("Failed to load resource"),
   );
   assert(unexpectedRuntimeErrors.length === 0, unexpectedRuntimeErrors.join("\n"));
   if (runtimeErrors.length) {
