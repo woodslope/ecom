@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Archive, CheckCircle2, CircleAlert, Sparkles } from "lucide-react";
 
 import { getPlatformRulePack } from "../domain/platforms/registry";
@@ -122,14 +122,43 @@ export function TaskHistoryArchive({
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositMessage, setDepositMessage] = useState<string | null>(null);
   const [depositFacts, setDepositFacts] = useState<ProductFacts | null>(null);
+  const assetUrlsRef = useRef<Record<string, string>>({});
+  const pendingAssetIdsRef = useRef(new Set<string>());
+  const mountedRef = useRef(true);
 
-  const resolveAssetRepository = () => assetRepository ?? (() => {
+  const resolveAssetRepository = useCallback(() => assetRepository ?? (() => {
     try {
       return createIndexedDbAssetRepository();
     } catch {
       return null;
     }
-  })();
+  })(), [assetRepository]);
+
+  const requestAssetUrls = useCallback((ids: readonly string[]) => {
+    const missingIds = [...new Set(ids)].filter(
+      (id) => !assetUrlsRef.current[id] && !pendingAssetIdsRef.current.has(id),
+    );
+    if (missingIds.length === 0 || typeof URL.createObjectURL !== "function") return;
+    const repository = resolveAssetRepository();
+    if (!repository) return;
+    missingIds.forEach((id) => pendingAssetIdsRef.current.add(id));
+    void loadHistoryAssetUrls(
+      missingIds,
+      (id) => repository.get(id),
+      URL.createObjectURL,
+    ).then((urls) => {
+      missingIds.forEach((id) => pendingAssetIdsRef.current.delete(id));
+      if (!mountedRef.current) {
+        releaseHistoryAssetUrls(urls, URL.revokeObjectURL);
+        return;
+      }
+      setAssetUrls((current) => {
+        const next = { ...current, ...urls };
+        assetUrlsRef.current = next;
+        return next;
+      });
+    });
+  }, [resolveAssetRepository]);
 
   const openDeposit = async (record: ProductionRunRecord) => {
     setDepositLoading(true);
@@ -169,7 +198,7 @@ export function TaskHistoryArchive({
         }
         if (cancelled) return;
         setRecords(sorted);
-        setExpandedRunId((current) => current && sorted.some(({ run }) => run.id === current) ? current : sorted[0]?.run.id ?? null);
+        setExpandedRunId((current) => current && sorted.some(({ run }) => run.id === current) ? current : null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -180,42 +209,30 @@ export function TaskHistoryArchive({
     };
   }, [projects, historyProjects, workspaceRepository, historyQueryService, filters]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setAssetUrls((current) => {
-      releaseHistoryAssetUrls(current, URL.revokeObjectURL);
-      return {};
-    });
-    const record = records.find(({ run }) => run.id === expandedRunId);
-    if (!record) return () => undefined;
-    const resolvedAssetRepository = resolveAssetRepository();
-    if (!resolvedAssetRepository || typeof URL.createObjectURL !== "function") return () => undefined;
-    const ids = record.run.events.flatMap((event) => event.assetId ? [event.assetId] : []);
-    void loadHistoryAssetUrls(
-      ids,
-      (id) => resolvedAssetRepository.get(id),
-      URL.createObjectURL,
-    ).then((urls) => {
-      if (cancelled) {
-        releaseHistoryAssetUrls(urls, URL.revokeObjectURL);
-        return;
-      }
-      setAssetUrls(urls);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [expandedRunId, records, assetRepository]);
-
   const filtered = useMemo(
     () => historyQueryService ? records : queryProductionRuns(records, filters),
     [historyQueryService, records, filters],
   );
+
+  useEffect(() => {
+    const expandedRecord = filtered.find(({ run }) => run.id === expandedRunId);
+    const detailIds = expandedRecord?.run.events.flatMap((event) => event.assetId ? [event.assetId] : []) ?? [];
+    requestAssetUrls(detailIds);
+  }, [expandedRunId, filtered, requestAssetUrls]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      releaseHistoryAssetUrls(assetUrlsRef.current, URL.revokeObjectURL);
+      assetUrlsRef.current = {};
+      pendingAssetIdsRef.current.clear();
+    };
+  }, []);
   const hasActiveFilters = Object.values(filters).some(Boolean);
   useEffect(() => {
-    if (filtered.length === 0) return;
-    if (!expandedRunId || !filtered.some(({ run }) => run.id === expandedRunId)) {
-      setExpandedRunId(filtered[0]!.run.id);
+    if (expandedRunId && !filtered.some(({ run }) => run.id === expandedRunId)) {
+      setExpandedRunId(null);
     }
   }, [expandedRunId, filtered]);
 
@@ -249,7 +266,7 @@ export function TaskHistoryArchive({
           description="完成一次策划后会建立 Run，后续生成、编辑和导出都归入该 Run。"
         />
       ) : filtered.length === 0 ? <EmptyState variant="result" eyebrow="没有匹配记录" icon={<Archive size={24} />} title="筛选条件没有结果" description="调整筛选条件，或清除全部筛选查看现有 Run。" action={<Button onClick={() => setFilters({})}>清除筛选</Button>} /> : <div className="production-history__list">
-        {filtered.map((record) => <ProductionRunCard key={record.run.id} record={record} expanded={expandedRunId === record.run.id} current={activeProjectId === record.project.id && activeRunIds.includes(record.run.id)} assetUrls={assetUrls} onToggle={() => setExpandedRunId((current) => current === record.run.id ? null : record.run.id)} onResume={() => onResumeRun?.(record)} onFork={() => onForkRun?.(record)} onReuse={(eventId) => onReuseImage?.(record, eventId)} onExport={onExportRun ? () => onExportRun(record) : undefined} onDeposit={onDepositRun ? () => void openDeposit(record) : undefined} />)}
+        {filtered.map((record) => <ProductionRunCard key={record.run.id} record={record} expanded={expandedRunId === record.run.id} current={activeProjectId === record.project.id && activeRunIds.includes(record.run.id)} assetUrls={assetUrls} onRequestPreviewAssets={requestAssetUrls} onToggle={() => setExpandedRunId((current) => current === record.run.id ? null : record.run.id)} onResume={() => onResumeRun?.(record)} onFork={() => onForkRun?.(record)} onReuse={(eventId) => onReuseImage?.(record, eventId)} onExport={onExportRun ? () => onExportRun(record) : undefined} onDeposit={onDepositRun ? () => void openDeposit(record) : undefined} />)}
       </div>}
       <DepositToLibraryDialog
         record={depositRecord}

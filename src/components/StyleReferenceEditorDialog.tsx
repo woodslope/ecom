@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { StyleReferenceDraft } from "../domain/assets/style-reference";
-import { getAmazonStylePreset } from "../domain/platforms/amazon-style-presets";
+import { getAmazonStylePreset } from "../domain/prompt-profiles/prompt-profiles";
 import { Button, Dialog, Field, Select } from "./ui";
 
 export function StyleReferenceEditorDialog({

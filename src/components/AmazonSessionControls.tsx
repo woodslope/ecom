@@ -27,9 +27,15 @@ import {
 } from "../domain/platforms/amazon-marketplaces";
 import type { AmazonPlanningRequestOptions, PlatformPlan } from "../domain/planning/types";
 import {
-  AMAZON_STYLE_PRESETS,
-  DEFAULT_AMAZON_STYLE_PRESET_ID,
-} from "../domain/platforms/amazon-style-presets";
+  PROMPT_PROFILES,
+  DEFAULT_PROMPT_PROFILE_ID,
+  allProfiles,
+  type PromptProfile,
+} from "../domain/prompt-profiles/prompt-profiles";
+import {
+  PromptProfileDialog,
+  usePromptProfilePicker,
+} from "./PromptProfileDialog";
 import { Button, Dialog, Field, IconButton, Select, SegmentedControl } from "./ui";
 
 export interface AmazonSessionControlsState {
@@ -83,7 +89,7 @@ export function controlsFromPlan(plan?: PlatformPlan | null): AmazonSessionContr
       aPlusType: DEFAULT_A_PLUS_CONTENT_TYPE,
       aPlusModuleSpecs: null,
       sizeTier: session?.sizeTier ?? "2K",
-      stylePresetId: session?.stylePresetId ?? DEFAULT_AMAZON_STYLE_PRESET_ID,
+      stylePresetId: session?.stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID,
     };
   }
   const aPlusType = session.aPlusType ?? DEFAULT_A_PLUS_CONTENT_TYPE;
@@ -102,7 +108,7 @@ export function controlsFromPlan(plan?: PlatformPlan | null): AmazonSessionContr
     aPlusType,
     aPlusModuleSpecs: useCustom ? cloneSpecs(normalizeAPlusModuleSpecs(aPlusType, custom)) : null,
     sizeTier: session.sizeTier ?? "2K",
-    stylePresetId: session.stylePresetId ?? DEFAULT_AMAZON_STYLE_PRESET_ID,
+    stylePresetId: session.stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID,
   };
 }
 
@@ -121,7 +127,7 @@ export function amazonControlsMatchPlan(
   if (state.marketplaceId !== session.marketplaceId || state.sizeTier !== (session.sizeTier ?? "2K")) {
     return false;
   }
-  if (state.stylePresetId !== (session.stylePresetId ?? DEFAULT_AMAZON_STYLE_PRESET_ID)) {
+  if (state.stylePresetId !== (session.stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID)) {
     return false;
   }
   if (state.plannerMode === "listing") {
@@ -282,10 +288,14 @@ export function AmazonSessionControls({
       : `${getAPlusContentTypeLabel(value.aPlusType)} · ${slotCount} 个模块`;
   const marketShort =
     AMAZON_MARKETPLACES.find((item) => item.id === value.marketplaceId)?.shortLabel ?? "US";
-  const styleShort =
-    AMAZON_STYLE_PRESETS.find((item) => item.id === value.stylePresetId)?.shortLabel ?? "零售";
+  const profilePicker = usePromptProfilePicker();
+  const availableProfiles =
+    profilePicker.profiles.length > 0 ? profilePicker.profiles : [...PROMPT_PROFILES];
+  const selectedProfile = availableProfiles.find((p) => p.id === value.stylePresetId);
+  const styleShort = selectedProfile?.style.shortLabel ?? "零售";
 
   return (
+    <>
     <section
       className={`amazon-session-controls amazon-session-controls--chrome${embedded ? " amazon-session-controls--embedded" : ""}`}
       aria-label="Amazon 策划模式"
@@ -421,25 +431,55 @@ export function AmazonSessionControls({
               </Select>
             </Field>
 
-            <Field label="基础风格" className="amazon-session-controls__field">
-              <Select
-                aria-label="基础风格"
-                value={value.stylePresetId}
-                disabled={disabled}
-                onChange={(event) =>
-                  onChange({
-                    ...value,
-                    stylePresetId: event.target.value,
-                  })
-                }
-              >
-                {AMAZON_STYLE_PRESETS.map((preset) => (
-                  <option key={preset.id} value={preset.id}>
-                    {preset.label}
-                    {preset.id === DEFAULT_AMAZON_STYLE_PRESET_ID ? "（默认）" : ""}
-                  </option>
-                ))}
-              </Select>
+            <Field
+              label="提示词方案"
+              hint="控制策划策略和视觉风格。干净零售适合大多数品类，营销转化强调卖点说服力。"
+              className="amazon-session-controls__field"
+            >
+              <div className="prompt-profile-select-row">
+                <Select
+                  aria-label="提示词方案"
+                  value={value.stylePresetId}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChange({
+                      ...value,
+                      stylePresetId: event.target.value,
+                    })
+                  }
+                >
+                  {availableProfiles.map((p) => (
+                    <option key={p.id} value={p.id} title={p.description}>
+                      {p.label}
+                      {p.source === "custom" ? "（自定义）" : p.id === DEFAULT_PROMPT_PROFILE_ID ? "（默认）" : ""}
+                    </option>
+                  ))}
+                </Select>
+                <div className="prompt-profile-select-row__actions">
+                  <Button
+                    type="button"
+                    variant="quiet"
+                    size="compact"
+                    disabled={disabled}
+                    title="新建提示词方案"
+                    onClick={profilePicker.openNew}
+                  >
+                    + 新建
+                  </Button>
+                  {selectedProfile?.source === "custom" ? (
+                    <Button
+                      type="button"
+                      variant="quiet"
+                      size="compact"
+                      disabled={disabled}
+                      title="编辑此方案"
+                      onClick={() => profilePicker.openEdit(selectedProfile)}
+                    >
+                      编辑
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
             </Field>
           </div>
 
@@ -511,6 +551,13 @@ export function AmazonSessionControls({
         </div>
       ) : null}
     </section>
+      <PromptProfileDialog
+        open={profilePicker.dialogOpen}
+        editProfile={profilePicker.editingProfile}
+        onClose={profilePicker.closeDialog}
+        onSaved={profilePicker.handleSaved}
+      />
+    </>
   );
 }
 

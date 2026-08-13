@@ -1,9 +1,10 @@
 import { Check, FileImage, ImageOff } from "lucide-react";
 
-import { currentSlotVersion } from "../domain/generation/current-version";
+import { activeSlotVersion, currentSlotVersion } from "../domain/generation/current-version";
 import type { SlotVersionState } from "../domain/generation/types";
 import type { PlatformPlan } from "../domain/planning/types";
 import type { PlatformRulePack, PlatformSlotGroup } from "../domain/platforms/types";
+import type { WorkbenchAsset } from "../store/workbench-store";
 import { StatusChip } from "./ui";
 
 const groupLabels: Record<PlatformSlotGroup, string> = {
@@ -27,6 +28,7 @@ function slotStatus(input: {
 export function SlotBoard({
   rulePack,
   plan,
+  assets = [],
   selectedSlotKey,
   versionStates,
   planningInputSignature,
@@ -35,6 +37,7 @@ export function SlotBoard({
 }: {
   rulePack: PlatformRulePack;
   plan: PlatformPlan;
+  assets?: WorkbenchAsset[];
   selectedSlotKey?: string;
   versionStates?: Record<string, SlotVersionState>;
   planningInputSignature?: string;
@@ -60,8 +63,15 @@ export function SlotBoard({
                 const slot = plan.slots.find((item) => item.slotKey === rule.key)!;
                 const selected = rule.key === selectedSlotKey;
                 const versionCount = versionStates?.[rule.key]?.versions.length ?? 0;
-                const hasCurrentVersion = Boolean(
-                  currentSlotVersion(slot, versionStates?.[rule.key], planningInputSignature),
+                const activeVersion = activeSlotVersion(versionStates?.[rule.key]);
+                const currentVersion = currentSlotVersion(
+                  slot,
+                  versionStates?.[rule.key],
+                  planningInputSignature,
+                );
+                const hasCurrentVersion = Boolean(currentVersion);
+                const previewAsset = assets.find(
+                  (asset) => asset.metadata.id === activeVersion?.assetId,
                 );
                 const hasMissingEvidence = slot.evidence.some((item) => item.startsWith("待补资料"));
                 const status = slotStatus({ hasCurrentVersion, versionCount, hasMissingEvidence });
@@ -81,13 +91,16 @@ export function SlotBoard({
                     onClick={() => onSelect(rule.key)}
                   >
                     <span className="slot-card__media" aria-hidden="true">
-                      {hasMissingEvidence ? (
+                      {previewAsset ? (
+                        <img src={previewAsset.objectUrl} alt="" />
+                      ) : hasMissingEvidence ? (
                         <ImageOff size={18} />
                       ) : hasCurrentVersion ? (
                         <Check size={18} />
                       ) : (
                         <FileImage size={18} />
                       )}
+                      {!previewAsset ? <small>{rule.key}</small> : null}
                     </span>
                     <span className="slot-card__content">
                       <span className="slot-card__topline">
@@ -106,10 +119,14 @@ export function SlotBoard({
                         </StatusChip>
                       </span>
                       <span className="slot-card__title">{rule.label}</span>
-                      <span className="slot-card__meta">
-                        {rule.dimensions.width} × {rule.dimensions.height} px
-                        {versionCount > 0 ? ` · ${versionCount} 版` : ""}
-                        {selected ? " · 当前" : ""}
+                      <span className="slot-card__footer">
+                        <span className="slot-card__meta">
+                          {rule.dimensions.width} × {rule.dimensions.height} px
+                        </span>
+                        <span className="slot-card__version-count">
+                          {versionCount > 0 ? `${versionCount} 个版本` : "暂无版本"}
+                          {selected ? " · 当前" : ""}
+                        </span>
                       </span>
                     </span>
                   </button>

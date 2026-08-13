@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { PlatformId } from "../domain/platforms/types";
@@ -45,9 +46,10 @@ export function PlatformWorkflowShell({
   children: ReactNode;
   className?: string;
 }) {
+  const progressLabel = totalSlots > 0 ? `${completedSlots}/${totalSlots}` : "等待策划";
+
   return (
     <div className={`platform-workflow-shell${className ? ` ${className}` : ""}`}>
-      {contextBar}
       <header
         className="workbench-chrome"
         aria-label={`${title}工作台顶栏`}
@@ -56,25 +58,32 @@ export function PlatformWorkflowShell({
           <div className="workbench-chrome__brand">
             <h1>{title}</h1>
             {badge}
-            <span
-              className="workbench-chrome__step"
-              aria-label={`当前步骤 ${WORKFLOW_STAGE_INDEX[stage]} / 4`}
-            >
-              {WORKFLOW_STAGE_INDEX[stage]}/4 · {WORKFLOW_STAGE_LABELS[stage]}
-            </span>
+            <details className="workbench-chrome__progress-menu">
+              <summary aria-label={`当前步骤 ${WORKFLOW_STAGE_INDEX[stage]} / 4，展开完整流程`}>
+                <span className="workbench-chrome__progress-marker" aria-hidden="true">
+                  {WORKFLOW_STAGE_INDEX[stage]}
+                </span>
+                <span>{WORKFLOW_STAGE_LABELS[stage]}</span>
+                <small>{progressLabel}</small>
+                <ChevronDown size={13} aria-hidden="true" />
+              </summary>
+              <div className="workbench-chrome__progress-popover">
+                <WorkflowStepper
+                  platform={platform}
+                  stage={stage}
+                  completedSlots={completedSlots}
+                  totalSlots={totalSlots}
+                />
+              </div>
+            </details>
           </div>
-          {controls}
+          {contextBar ? <div className="workbench-chrome__context">{contextBar}</div> : null}
+          {controls ? <div className="workbench-chrome__controls">{controls}</div> : null}
           {actions ? <div className="workbench-chrome__tools">{actions}</div> : null}
         </div>
         {onboarding ? (
           <div className="workbench-chrome__onboarding">{onboarding}</div>
         ) : null}
-        <WorkflowStepper
-          platform={platform}
-          stage={stage}
-          completedSlots={completedSlots}
-          totalSlots={totalSlots}
-        />
       </header>
       <div className="platform-workflow-shell__content">{children}</div>
     </div>

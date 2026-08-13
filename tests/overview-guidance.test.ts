@@ -10,6 +10,7 @@ describe("overview next-action guidance", () => {
     expect(
       resolveOverviewNextAction({
         hasActiveProject: false,
+        hasUsableFacts: false,
         assetCount: 0,
         preferredPlatform: "amazon",
       }),
@@ -24,6 +25,7 @@ describe("overview next-action guidance", () => {
     expect(
       resolveOverviewNextAction({
         hasActiveProject: true,
+        hasUsableFacts: true,
         assetCount: 2,
         preferredPlatform: "amazon",
       }).destination,
@@ -33,6 +35,7 @@ describe("overview next-action guidance", () => {
   it("routes an explicit Taobao preference without Amazon-only copy", () => {
     const noAssets = resolveOverviewNextAction({
       hasActiveProject: true,
+      hasUsableFacts: false,
       assetCount: 0,
       preferredPlatform: "taobao",
     });
@@ -42,11 +45,32 @@ describe("overview next-action guidance", () => {
 
     const ready = resolveOverviewNextAction({
       hasActiveProject: true,
+      hasUsableFacts: true,
       assetCount: 3,
       preferredPlatform: "taobao",
     });
     expect(ready.destination).toBe("taobao");
     expect(ready.actionLabel).toContain("淘宝");
+  });
+
+  it("treats usable facts as valid planning input without reference images", () => {
+    const amazon = resolveOverviewNextAction({
+      hasActiveProject: true,
+      hasUsableFacts: true,
+      assetCount: 0,
+      preferredPlatform: "amazon",
+    });
+    expect(amazon.title).toContain("Amazon");
+    expect(amazon.title).not.toContain("补参考图");
+
+    const taobao = resolveOverviewNextAction({
+      hasActiveProject: true,
+      hasUsableFacts: true,
+      assetCount: 0,
+      preferredPlatform: "taobao",
+    });
+    expect(taobao.title).toContain("淘宝");
+    expect(taobao.title).not.toContain("补参考图");
   });
 
   it("keeps the empty status platform-neutral", () => {

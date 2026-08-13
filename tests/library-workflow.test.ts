@@ -210,7 +210,7 @@ describe("library workflow", () => {
       expect(markup).toContain(`aria-label="更多：${projects[0]!.name}"`);
     }
     expect(factsMarkup).toContain('aria-selected="true">商品事实');
-    expect(factsMarkup).toContain("保存商品资料");
+    expect(factsMarkup).toContain("保存资料");
     expect(assetsMarkup).toContain('aria-selected="true">参考素材');
     expect(assetsMarkup).toContain('type="file"');
     expect(progressMarkup).toContain('aria-selected="true">平台进度');

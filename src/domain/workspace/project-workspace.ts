@@ -26,6 +26,10 @@ export type { PlatformWorkflowId } from "../platforms/types";
 import type { TaskRecord } from "../tasks";
 import type { PlatformFactsDraft } from "../localization/product-localizer";
 import type { ProductFacts } from "../projects/types";
+import {
+  normalizeIndustryTemplateSnapshot,
+  type IndustryTemplateSnapshot,
+} from "../prompt-templates/industry-template-packs";
 
 export const PROJECT_WORKSPACE_STORAGE_PREFIX = "ecom-workbench.workspace.v2.";
 
@@ -51,6 +55,8 @@ export interface AmazonSessionOptions {
 
 export interface TaobaoSessionOptions {
   platformId: "taobao";
+  /** Prompt profile id for planning strategy & visual style. */
+  stylePresetId?: string | null;
 }
 
 export type PlatformSessionOptions = AmazonSessionOptions | TaobaoSessionOptions;
@@ -68,6 +74,7 @@ export interface PlatformSession {
   styleReferenceNotice?: string;
   taobaoAnalysis?: TaobaoProductAnalysis;
   localizedFactsDraft?: PlatformFactsDraft;
+  industryTemplate?: IndustryTemplateSnapshot;
   plan?: PlatformPlan;
   planInputSignature?: string;
   selectedSlotKey?: string;
@@ -98,6 +105,7 @@ export interface PlatformRunContext {
   selectedStyleReferenceId?: string;
   taobaoAnalysis?: TaobaoProductAnalysis;
   localizedFactsDraft?: PlatformFactsDraft;
+  industryTemplate?: IndustryTemplateSnapshot;
 }
 
 export interface ProductionRun {
@@ -350,7 +358,15 @@ function normalizeSessionOptions(
   workflowId: PlatformWorkflowId,
 ): PlatformSessionOptions | null {
   if (!isRecord(value) || value.platformId !== platformId) return null;
-  if (platformId === "taobao") return { platformId: "taobao" };
+  if (platformId === "taobao") {
+    return {
+      platformId: "taobao",
+      stylePresetId:
+        typeof value.stylePresetId === "string" || value.stylePresetId === null
+          ? value.stylePresetId
+          : null,
+    };
+  }
 
   const plannerMode: AmazonWorkspaceMode =
     workflowId === "amazon-aplus" ? "aplus" : "listing";
@@ -504,6 +520,9 @@ function normalizeSession(value: unknown, projectId: string): PlatformSession | 
     ...(normalizeLocalizedFactsDraft(value.localizedFactsDraft)
       ? { localizedFactsDraft: normalizeLocalizedFactsDraft(value.localizedFactsDraft)! }
       : {}),
+    ...(normalizeIndustryTemplateSnapshot(value.industryTemplate)
+      ? { industryTemplate: normalizeIndustryTemplateSnapshot(value.industryTemplate)! }
+      : {}),
     ...(plan ? { plan } : {}),
     ...(typeof value.planInputSignature === "string"
       ? { planInputSignature: value.planInputSignature }
@@ -641,6 +660,13 @@ function normalizeRun(value: unknown, projectId: string): ProductionRun | null {
         ? {
             localizedFactsDraft: normalizeLocalizedFactsDraft(
               value.contextSnapshot.localizedFactsDraft,
+            )!,
+          }
+        : {}),
+      ...(normalizeIndustryTemplateSnapshot(value.contextSnapshot.industryTemplate)
+        ? {
+            industryTemplate: normalizeIndustryTemplateSnapshot(
+              value.contextSnapshot.industryTemplate,
             )!,
           }
         : {}),

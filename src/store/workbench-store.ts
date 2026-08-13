@@ -107,10 +107,16 @@ import {
 import {
   appendStyleGuidanceToPrompt,
   appendStyleReferenceGuidance,
-  DEFAULT_AMAZON_STYLE_PRESET_ID,
+  DEFAULT_PROMPT_PROFILE_ID,
   getAmazonStylePreset,
   shouldApplyStyleToSlot,
-} from "../domain/platforms/amazon-style-presets";
+} from "../domain/prompt-profiles/prompt-profiles";
+import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
+import type {
+  IndustryTemplateTransformer,
+  IndustryTemplateTransformRequest,
+  IndustryTemplateTransformResult,
+} from "../domain/prompt-templates/industry-template-transformer";
 import type { PlatformId } from "../domain/platforms/types";
 import {
   productFactsToAmazonListingText,
@@ -186,6 +192,8 @@ import { OpenAICopilot } from "../services/openai-copilot";
 import { OpenAIPlanner } from "../services/openai-planner";
 import { OpenAIImageGenerator } from "../services/openai-image-generator";
 import { OpenAIProductLocalizer } from "../services/openai-product-localizer";
+import { demoIndustryTemplateTransformer } from "../services/demo-industry-template-transformer";
+import { OpenAIIndustryTemplateTransformer } from "../services/openai-industry-template-transformer";
 import {
   createFailOnceImageGenerator,
   demoImageGenerator,
@@ -205,6 +213,7 @@ export interface StartAmazonSessionInput {
   files: File[];
   selectedReferenceAssetIds: string[];
   selectedStyleReferenceId?: string | null;
+  industryTemplate?: IndustryTemplateSnapshot;
   options: AmazonPlanningRequestOptions;
 }
 
@@ -214,6 +223,9 @@ export interface StartTaobaoSessionInput {
   productText?: string;
   selectedReferenceAssetIds: string[];
   planningInput?: PlanningInputSnapshot;
+  /** Prompt profile id carried into the session options. */
+  stylePresetId?: string | null;
+  industryTemplate?: IndustryTemplateSnapshot;
 }
 
 export interface AnalyzeTaobaoProductInput {
@@ -222,6 +234,8 @@ export interface AnalyzeTaobaoProductInput {
   productText: string;
   files: File[];
   selectedReferenceAssetIds: string[];
+  stylePresetId?: string | null;
+  industryTemplate?: IndustryTemplateSnapshot;
 }
 
 export interface DepositRunInput {
@@ -251,6 +265,8 @@ export interface WorkbenchStoreDependencies {
   createImageGenerator?: (settings: RuntimeSettings) => ImageGenerator;
   copilotEngine?: CopilotEngine;
   createCopilotEngine?: (settings: RuntimeSettings) => CopilotEngine;
+  industryTemplateTransformer?: IndustryTemplateTransformer;
+  createIndustryTemplateTransformer?: (settings: RuntimeSettings) => IndustryTemplateTransformer;
   testConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   testTextConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   testImageConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
@@ -308,6 +324,8 @@ export interface WorkbenchState {
   copilotFeedbackTarget: { platformId: PlatformId; slotKey: string } | null;
   copilotError: string | null;
   copilotMessage: string | null;
+  industryTemplateTransforming: boolean;
+  industryTemplateTransformError: string | null;
   initialize(): Promise<void>;
   startAmazonSession(input: StartAmazonSessionInput): Promise<PlatformSession | null>;
   startTaobaoSession(input: StartTaobaoSessionInput): Promise<PlatformSession | null>;
@@ -394,6 +412,10 @@ export interface WorkbenchState {
   ): Promise<boolean>;
   cancelCopilot(): void;
   clearCopilotFeedback(): void;
+  transformIndustryTemplate(
+    request: IndustryTemplateTransformRequest,
+  ): Promise<IndustryTemplateTransformResult | null>;
+  cancelIndustryTemplateTransform(): void;
   retryActiveProjectResources(): Promise<void>;
   clearResourceRestoreError(): void;
   clearPlanningError(): void;
@@ -475,8 +497,20 @@ function workflowForPlan(platformId: PlatformId, plan: PlatformPlan): PlatformWo
   return plan.amazonSession?.plannerMode === "aplus" ? "amazon-aplus" : "amazon-listing";
 }
 
-function optionsForPlan(platformId: PlatformId, plan: PlatformPlan): AmazonSessionOptions | { platformId: "taobao" } {
-  if (platformId === "taobao") return { platformId: "taobao" };
+function optionsForPlan(
+  platformId: PlatformId,
+  plan: PlatformPlan,
+  existingOptions?: PlatformSession["options"],
+): PlatformSession["options"] {
+  if (platformId === "taobao") {
+    return {
+      platformId: "taobao",
+      stylePresetId:
+        existingOptions?.platformId === "taobao"
+          ? existingOptions.stylePresetId ?? null
+          : null,
+    };
+  }
   const resolved = resolveAmazonPlanningSession({
     plannerMode: plan.amazonSession?.plannerMode === "aplus" ? "aplus" : "listing",
     marketplaceId: plan.amazonSession?.marketplaceId,
@@ -637,6 +671,8 @@ export function createWorkbenchStore(
   const planningTimeoutMs = dependencies.planningTimeoutMs ?? 135_000;
   const imageGenerator = dependencies.imageGenerator ?? demoImageGenerator;
   const copilotEngine = dependencies.copilotEngine ?? demoCopilot;
+  const industryTemplateTransformer =
+    dependencies.industryTemplateTransformer ?? demoIndustryTemplateTransformer;
   const generationTimeoutMs = dependencies.generationTimeoutMs ?? 60_000;
   const createVersionId = dependencies.createVersionId ?? (() => createStableId("version"));
   const now = dependencies.now ?? (() => new Date().toISOString());
@@ -648,6 +684,8 @@ export function createWorkbenchStore(
   let exportRequestId = 0;
   let copilotRequestId = 0;
   let activeCopilotController: AbortController | null = null;
+  let industryTemplateTransformRequestId = 0;
+  let activeIndustryTemplateTransformController: AbortController | null = null;
   const canceledExecutionJobIds = new Set<string>();
   let workspaceWriteQueue: Promise<void> = Promise.resolve();
   const isCurrentLifecycle = (version: number) => version === lifecycleVersion;
@@ -714,6 +752,14 @@ export function createWorkbenchStore(
     copilotRequestId += 1;
     activeCopilotController?.abort(new DOMException("Copilot 上下文已变更", "AbortError"));
     activeCopilotController = null;
+  };
+
+  const invalidateIndustryTemplateTransform = () => {
+    industryTemplateTransformRequestId += 1;
+    activeIndustryTemplateTransformController?.abort(
+      new DOMException("行业模板改造上下文已变更", "AbortError"),
+    );
+    activeIndustryTemplateTransformController = null;
   };
 
   return createStore<WorkbenchState>((set, get) => {
@@ -813,6 +859,8 @@ export function createWorkbenchStore(
     copilotTarget: null,
     copilotFeedbackTarget: null,
     copilotError: null,
+    industryTemplateTransforming: false,
+    industryTemplateTransformError: null,
     copilotMessage: null,
 
     async initialize() {
@@ -1170,6 +1218,11 @@ export function createWorkbenchStore(
             options,
             selectedReferenceAssetIds,
             planningInput,
+            ...(input.industryTemplate
+              ? { industryTemplate: structuredClone(input.industryTemplate) }
+              : existing?.industryTemplate
+                ? { industryTemplate: structuredClone(existing.industryTemplate) }
+                : {}),
             ...(existing?.localizedFactsDraft
               ? { localizedFactsDraft: existing.localizedFactsDraft }
               : {}),
@@ -1332,10 +1385,15 @@ export function createWorkbenchStore(
               listingText: existing?.sourceInput.listingText ?? "",
               taobaoProduct: { productText, selectedReferenceAssetIds: referenceIds },
             },
-            options: { platformId: "taobao" },
+            options: { platformId: "taobao", stylePresetId: input.stylePresetId ?? null },
             selectedReferenceAssetIds: referenceIds,
             planningInput,
             localizedFactsDraft,
+            ...(input.industryTemplate
+              ? { industryTemplate: structuredClone(input.industryTemplate) }
+              : existing?.industryTemplate
+                ? { industryTemplate: structuredClone(existing.industryTemplate) }
+                : {}),
             ...(existing?.selectedStyleReferenceId
               ? { selectedStyleReferenceId: existing.selectedStyleReferenceId }
               : {}),
@@ -1410,6 +1468,10 @@ export function createWorkbenchStore(
           sourceMode,
           productText: input.productText,
           selectedReferenceAssetIds: input.selectedReferenceAssetIds,
+          stylePresetId: input.stylePresetId ?? null,
+          ...(input.industryTemplate
+            ? { industryTemplate: structuredClone(input.industryTemplate) }
+            : {}),
         });
         const project = get().activeProject;
         if (!draft || !project) return null;
@@ -1644,7 +1706,7 @@ export function createWorkbenchStore(
               aPlusModuleSpecs: existingOptions?.aPlusModuleSpecs,
               sizeTier: existingOptions?.sizeTier ?? DEFAULT_SIZE_TIER,
               stylePresetId:
-                existingOptions?.stylePresetId ?? DEFAULT_AMAZON_STYLE_PRESET_ID,
+                existingOptions?.stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID,
             });
             const options: AmazonSessionOptions = {
               platformId: "amazon",
@@ -1724,7 +1786,10 @@ export function createWorkbenchStore(
                 selectedReferenceAssetIds: referenceAssetIds,
               },
             },
-            options: { platformId: "taobao" },
+            options: {
+              platformId: "taobao",
+              stylePresetId: workspaceExisting?.options?.stylePresetId ?? null,
+            },
             selectedReferenceAssetIds: referenceAssetIds,
             planningInput,
             ...(workspaceExisting?.selectedStyleReferenceId
@@ -1873,6 +1938,7 @@ export function createWorkbenchStore(
       invalidateGeneration();
       invalidateExport();
       invalidateCopilot();
+      invalidateIndustryTemplateTransform();
       set({
         loading: true,
         error: null,
@@ -1935,23 +2001,23 @@ export function createWorkbenchStore(
         return null;
       }
       if (get().planningPlatformId) {
-        set({ error: "当前正在生成平台策划，请完成或取消后再保存商品资料。" });
+        set({ error: "当前正在生成平台策划，请完成或取消后再保存资料。" });
         return null;
       }
       if (get().copilotTarget) {
-        set({ error: "当前 Copilot 请求正在处理，请完成或取消后再保存商品资料。" });
+        set({ error: "当前 Copilot 请求正在处理，请完成或取消后再保存资料。" });
         return null;
       }
       if (get().exportingPlatform) {
-        set({ error: "当前正在导出交付包，请完成后再保存商品资料。" });
+        set({ error: "当前正在导出交付包，请完成后再保存资料。" });
         return null;
       }
       if (get().generationRecoveryRequired) {
-        set({ error: "当前图片版本与素材需要恢复，请完成恢复后再保存商品资料。" });
+        set({ error: "当前图片版本与素材需要恢复，请完成恢复后再保存资料。" });
         return null;
       }
       if (get().generatingSlot) {
-        set({ error: "当前正在生成图片，请完成或取消后再保存商品资料。" });
+        set({ error: "当前正在生成图片，请完成或取消后再保存资料。" });
         return null;
       }
 
@@ -1993,6 +2059,7 @@ export function createWorkbenchStore(
         get().generatingSlot ||
         get().copilotTarget ||
         get().exportingPlatform ||
+        get().industryTemplateTransforming ||
         get().generationRecoveryRequired
       ) {
         set({ error: "当前有进行中的任务，请完成或取消后再删除商品项目。" });
@@ -2003,6 +2070,7 @@ export function createWorkbenchStore(
       invalidateGeneration();
       invalidateExport();
       invalidateCopilot();
+      invalidateIndustryTemplateTransform();
       lifecycleVersion += 1;
       set({ loading: true, error: null });
       try {
@@ -2051,6 +2119,7 @@ export function createWorkbenchStore(
       invalidateGeneration();
       invalidateExport();
       invalidateCopilot();
+      invalidateIndustryTemplateTransform();
       set({
         loading: true,
         error: null,
@@ -2473,6 +2542,9 @@ export function createWorkbenchStore(
       const storedAmazonOptions = planningSession?.options.platformId === "amazon"
         ? planningSession.options
         : undefined;
+      const taobaoProfileId = platformId === "taobao"
+        ? (planningSession?.options as { stylePresetId?: string | null } | undefined)?.stylePresetId ?? null
+        : null;
       const effectiveAmazonOptions = platformId === "amazon"
         ? useLegacyCombinedAmazonPlan
           ? { plannerMode: "legacy-combined" as const }
@@ -2695,8 +2767,9 @@ export function createWorkbenchStore(
           baseRulePack,
           controller.signal,
           referenceImages,
-          effectiveAmazonOptions,
+          effectiveAmazonOptions ?? (taobaoProfileId ? { stylePresetId: taobaoProfileId } as AmazonPlanningRequestOptions : undefined),
           inputAssessment,
+          planningSession?.industryTemplate,
         );
         ensureCurrentPlanning();
         const plan = normalizePlatformPlan(rawPlan, baseRulePack);
@@ -2727,7 +2800,7 @@ export function createWorkbenchStore(
             workflowId,
             source: plan.source,
             sourceInput: existingSession?.sourceInput ?? { listingText: "" },
-            options: optionsForPlan(platformId, plan),
+            options: optionsForPlan(platformId, plan, existingSession?.options),
             selectedReferenceAssetIds,
             planningInput,
             ...(existingSession?.selectedStyleReferenceId
@@ -2741,6 +2814,9 @@ export function createWorkbenchStore(
               : localizedFactsDraft
                 ? { localizedFactsDraft }
                 : {}),
+            ...(existingSession?.industryTemplate
+              ? { industryTemplate: existingSession.industryTemplate }
+              : {}),
             plan,
             planInputSignature: inputSignature,
             selectedSlotKey,
@@ -4056,7 +4132,7 @@ export function createWorkbenchStore(
         .filter((candidate) => candidate.workflowId === located.run.workflowId)
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
       if (!session?.plan || session.activeRunId !== runId) {
-        set({ error: "该记录已被后续策划替代，请使用“基于此记录新建”继续。" });
+        set({ error: "该记录已被后续策划替代，请使用“基于记录新建”继续。" });
         return false;
       }
       if (get().activeProject?.id !== located.project.id) {
@@ -4067,7 +4143,7 @@ export function createWorkbenchStore(
         .filter((candidate) => candidate.workflowId === located.run.workflowId)
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
       if (!currentSession?.plan || currentSession.activeRunId !== runId) {
-        set({ error: "该记录已不是当前任务，请使用“基于此记录新建”继续。" });
+        set({ error: "该记录已不是当前任务，请使用“基于记录新建”继续。" });
         return false;
       }
       const plan = currentSession.plan;
@@ -4228,7 +4304,7 @@ export function createWorkbenchStore(
         located.project.scope !== "task-draft" ||
         located.run.contextSnapshot.planningInput?.sourceMode === "library"
       ) {
-        set({ error: "只有手动任务草稿可以沉淀到资料库。" });
+        set({ error: "只有手动任务草稿可以保存到资料库。" });
         return null;
       }
 
@@ -4738,6 +4814,76 @@ export function createWorkbenchStore(
       });
     },
 
+    async transformIndustryTemplate(request) {
+      if (
+        get().loading ||
+        get().planningPlatformId ||
+        get().generatingSlot ||
+        get().copilotTarget ||
+        get().industryTemplateTransforming
+      ) {
+        set({
+          industryTemplateTransformError: "当前有进行中的任务，请完成或取消后再改造行业模板。",
+        });
+        return null;
+      }
+      const settings = get().runtimeSettings;
+      if (settings.mode === "api") {
+        if (!runtimeTextApiKey(settings)) {
+          set({ industryTemplateTransformError: "请先在设置中填写文本策划 API Key。" });
+          return null;
+        }
+        if (!settings.planningModel.trim()) {
+          set({ industryTemplateTransformError: "请先在设置中填写文本策划模型。" });
+          return null;
+        }
+      }
+
+      const operationLifecycle = lifecycleVersion;
+      const requestId = ++industryTemplateTransformRequestId;
+      const controller = new AbortController();
+      activeIndustryTemplateTransformController = controller;
+      set({ industryTemplateTransforming: true, industryTemplateTransformError: null });
+      try {
+        const transformer = settings.mode === "api" && dependencies.createIndustryTemplateTransformer
+          ? dependencies.createIndustryTemplateTransformer(settings)
+          : industryTemplateTransformer;
+        const result = await transformer.transform(request, controller.signal);
+        if (
+          controller.signal.aborted ||
+          !isCurrentLifecycle(operationLifecycle) ||
+          requestId !== industryTemplateTransformRequestId
+        ) {
+          return null;
+        }
+        set({ industryTemplateTransforming: false, industryTemplateTransformError: null });
+        return result;
+      } catch (error) {
+        if (!isCurrentLifecycle(operationLifecycle) || requestId !== industryTemplateTransformRequestId) {
+          return null;
+        }
+        const canceled = controller.signal.aborted ||
+          (error instanceof DOMException && error.name === "AbortError");
+        set({
+          industryTemplateTransforming: false,
+          industryTemplateTransformError: canceled
+            ? "行业模板改造已取消。"
+            : `行业模板改造失败：${errorMessage(error)}`,
+        });
+        return null;
+      } finally {
+        if (requestId === industryTemplateTransformRequestId) {
+          activeIndustryTemplateTransformController = null;
+        }
+      }
+    },
+
+    cancelIndustryTemplateTransform() {
+      activeIndustryTemplateTransformController?.abort(
+        new DOMException("用户取消行业模板改造", "AbortError"),
+      );
+    },
+
     async runCopilotCommand(platformId, slotKey, command) {
       if (get().loading) {
         set({
@@ -5033,6 +5179,7 @@ export function createWorkbenchStore(
       invalidateGeneration();
       invalidateExport();
       invalidateCopilot();
+      invalidateIndustryTemplateTransform();
       const assets = get().assets;
       if (assets.length > 0) {
         revokeAssets(assets, dependencies);
@@ -5046,6 +5193,7 @@ export function createWorkbenchStore(
         exportingPlatform: null,
         copilotTarget: null,
         copilotFeedbackTarget: null,
+        industryTemplateTransforming: false,
       });
     },
     });
@@ -5181,6 +5329,14 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
     },
     createCopilotEngine(settings) {
       return new OpenAICopilot({
+        endpoint: `${runtimeTextBaseUrl(settings)}/chat/completions`,
+        apiKey: runtimeTextApiKey(settings),
+        model: settings.planningModel,
+      });
+    },
+    industryTemplateTransformer: demoIndustryTemplateTransformer,
+    createIndustryTemplateTransformer(settings) {
+      return new OpenAIIndustryTemplateTransformer({
         endpoint: `${runtimeTextBaseUrl(settings)}/chat/completions`,
         apiKey: runtimeTextApiKey(settings),
         model: settings.planningModel,

@@ -1,4 +1,4 @@
-import type { AmazonStylePreset } from "../platforms/amazon-style-presets";
+import type { AmazonStylePreset } from "../prompt-profiles/prompt-profiles";
 
 export type StyleTypography = "sans" | "serif" | "display";
 export type StyleLighting = "neutral" | "soft" | "dramatic";

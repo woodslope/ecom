@@ -1,4 +1,5 @@
-import { Database, FileText, FolderOpen, PackageOpen, RotateCcw } from "lucide-react";
+import { ArrowRight, Database, FileText, FolderOpen, MoreHorizontal, PackageOpen, RotateCcw } from "lucide-react";
+import { useRef } from "react";
 
 import type { ProductIntakeSourceMode } from "../domain/projects/product-source-text";
 import type { ProductProject } from "../domain/projects/types";
@@ -23,6 +24,8 @@ export function ProductContextBar({
   onOpenDetails,
   onSwitchProduct,
   onOpenLibrary,
+  onSyncToPlatform,
+  syncingToPlatform = false,
 }: {
   platformLabel: string;
   project: ProductProject | null;
@@ -37,7 +40,11 @@ export function ProductContextBar({
   onOpenDetails?: () => void;
   onSwitchProduct?: () => void;
   onOpenLibrary?: () => void;
+  /** e.g. Amazon → Taobao: shown when a plan exists on the source platform. */
+  onSyncToPlatform?: () => void;
+  syncingToPlatform?: boolean;
 }) {
+  const menuRef = useRef<HTMLDetailsElement>(null);
   const hasSourceControls = Boolean(sourceMode && onSourceModeChange);
   const isManualTask = sourceMode === "manual";
   const identityLabel = isManualTask ? "本次任务" : "当前商品";
@@ -49,6 +56,11 @@ export function ProductContextBar({
     : project
       ? `档案：${project.name}`
       : `${platformLabel} 临时任务`;
+  const hasMoreActions = Boolean(onOpenLibrary || onSyncToPlatform);
+  const closeMenuAndRun = (action?: () => void) => {
+    menuRef.current?.removeAttribute("open");
+    action?.();
+  };
 
   return (
     <section
@@ -58,11 +70,18 @@ export function ProductContextBar({
       <span className="product-context-bar__icon" aria-hidden="true">
         {isManualTask ? <FileText size={17} /> : <PackageOpen size={17} />}
       </span>
-      <div className="product-context-bar__identity">
+      <button
+        type="button"
+        className="product-context-bar__identity"
+        aria-label={detailLabel && onOpenDetails ? detailLabel : undefined}
+        title={detailLabel && onOpenDetails ? detailLabel : detailText}
+        disabled={!detailLabel || !onOpenDetails || disabled}
+        onClick={detailLabel && onOpenDetails ? onOpenDetails : undefined}
+      >
         <span>{identityLabel}</span>
         <strong title={productLabel}>{productLabel}</strong>
         <em title={detailText}>{detailText}</em>
-      </div>
+      </button>
       <StatusChip tone={statusTone}>{statusLabel}</StatusChip>
       <div className="product-context-bar__actions">
         {sourceMode && onSourceModeChange ? (
@@ -85,23 +104,62 @@ export function ProductContextBar({
             <RotateCcw size={15} aria-hidden="true" />
           </IconButton>
         ) : null}
-        {detailLabel && onOpenDetails ? (
-          <Button variant="secondary" size="compact" disabled={disabled} onClick={onOpenDetails}>
-            <Database size={14} />
-            {detailLabel}
-          </Button>
-        ) : null}
         {onSwitchProduct ? (
-          <Button variant="secondary" size="compact" disabled={disabled} onClick={onSwitchProduct}>
+          <IconButton
+            className="product-context-bar__switch"
+            label={project ? "切换商品" : "选择商品"}
+            disabled={disabled}
+            onClick={onSwitchProduct}
+          >
             <PackageOpen size={14} />
-            {project ? "切换商品" : "选择商品"}
-          </Button>
+          </IconButton>
         ) : null}
-        {onOpenLibrary ? (
-          <Button variant="quiet" size="compact" disabled={disabled} onClick={onOpenLibrary}>
-            <FolderOpen size={14} />
-            管理资料
-          </Button>
+        {hasMoreActions ? (
+          <details ref={menuRef} className="product-context-bar__menu">
+            <summary aria-label="更多商品操作" title="更多商品操作">
+              <MoreHorizontal size={16} aria-hidden="true" />
+            </summary>
+            <div className="product-context-bar__menu-popover" role="menu">
+              {detailLabel && onOpenDetails ? (
+                <Button
+                  role="menuitem"
+                  variant="quiet"
+                  size="compact"
+                  disabled={disabled}
+                  onClick={() => closeMenuAndRun(onOpenDetails)}
+                >
+                  <Database size={14} />
+                  {detailLabel}
+                </Button>
+              ) : null}
+              {onOpenLibrary ? (
+                <Button
+                  role="menuitem"
+                  variant="quiet"
+                  size="compact"
+                  disabled={disabled}
+                  onClick={() => closeMenuAndRun(onOpenLibrary)}
+                >
+                  <FolderOpen size={14} />
+                  管理资料
+                </Button>
+              ) : null}
+              {onSyncToPlatform && project ? (
+                <Button
+                  role="menuitem"
+                  variant="quiet"
+                  size="compact"
+                  disabled={disabled || syncingToPlatform}
+                  onClick={() => closeMenuAndRun(onSyncToPlatform)}
+                >
+                  <ArrowRight size={14} />
+                  {syncingToPlatform
+                    ? "同步中…"
+                    : `同步到${platformLabel === "Amazon" ? "淘宝 / 天猫" : "Amazon"}`}
+                </Button>
+              ) : null}
+            </div>
+          </details>
         ) : null}
       </div>
     </section>

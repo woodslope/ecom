@@ -5,7 +5,7 @@ import { planningInputQualityLabel } from "../domain/planning/input-assessment";
 import type { ProductFacts, ProductProject } from "../domain/projects/types";
 import { getAPlusContentTypeLabel } from "../domain/platforms/amazon-catalog";
 import { getAmazonMarketplaceLabel } from "../domain/platforms/amazon-marketplaces";
-import { AMAZON_STYLE_PRESETS } from "../domain/platforms/amazon-style-presets";
+import { PROMPT_PROFILES } from "../domain/prompt-profiles/prompt-profiles";
 import type {
   AmazonWorkspaceMode,
   PlatformSession,
@@ -47,7 +47,7 @@ export function AmazonSessionSummary({
     (id) => assets.find((asset) => asset.metadata.id === id)?.metadata.name ?? `素材 ${id}`,
   );
   const styleLabel =
-    AMAZON_STYLE_PRESETS.find((preset) => preset.id === options.stylePresetId)?.label ??
+    PROMPT_PROFILES.find((p) => p.id === options.stylePresetId)?.label ??
     options.stylePresetId ??
     "默认风格";
   const planningInput = session.planningInput;
@@ -84,6 +84,10 @@ export function AmazonSessionSummary({
             <div><dt>站点</dt><dd>{getAmazonMarketplaceLabel(options.marketplaceId)}</dd></div>
             <div><dt>尺寸</dt><dd>{options.sizeTier}</dd></div>
             <div><dt>风格</dt><dd>{styleLabel}</dd></div>
+            <div>
+              <dt>行业模板</dt>
+              <dd>{session.industryTemplate ? `${session.industryTemplate.name} v${session.industryTemplate.version}` : "旧任务未选择"}</dd>
+            </div>
           </dl>
         </section>
         <section>
@@ -94,7 +98,7 @@ export function AmazonSessionSummary({
       {session.localizedFactsDraft && onConfirmLocalizedFacts ? (
         <LocalizedFactsReview
           draft={session.localizedFactsDraft}
-          actionLabel="保存并重新生成策划"
+          actionLabel="保存并重新策划"
           onConfirm={onConfirmLocalizedFacts}
         />
       ) : null}
@@ -121,6 +125,8 @@ export function AmazonWorkspace({
   onWorkspaceDirtyChange,
   onCreateStyleReference = async () => null,
   onRemoveAsset = async () => undefined,
+  onSyncToTaobao,
+  syncingToTaobao = false,
   children,
 }: {
   activeProject: ProductProject | null;
@@ -138,7 +144,9 @@ export function AmazonWorkspace({
   onWorkspaceDirtyChange?: (reason: string | null) => void;
   onCreateStyleReference?: (presetId: string, draft: Partial<StyleReferenceDraft>) => Promise<WorkbenchAsset | null>;
   onRemoveAsset?: (id: string) => Promise<void>;
-  children: ReactNode;
+  onSyncToTaobao?: () => void;
+  syncingToTaobao?: boolean;
+  children: ReactNode | ((contextBar: ReactNode) => ReactNode);
 }) {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const qualityLabel = session?.planningInput
@@ -151,7 +159,7 @@ export function AmazonWorkspace({
   return (
     <div className="amazon-workspace">
       {session?.plan ? (
-        <>
+        typeof children === "function" ? children(
           <ProductContextBar
             platformLabel="Amazon"
             project={activeProject}
@@ -162,9 +170,27 @@ export function AmazonWorkspace({
             onOpenDetails={() => setSummaryOpen(true)}
             onSwitchProduct={onOpenProductPicker}
             onOpenLibrary={onOpenLibrary}
-          />
-          {children}
-        </>
+            onSyncToPlatform={onSyncToTaobao}
+            syncingToPlatform={syncingToTaobao}
+          />,
+        ) : (
+          <>
+            <ProductContextBar
+              platformLabel="Amazon"
+              project={activeProject}
+              statusLabel={statusLabel}
+              statusTone="success"
+              detailLabel="任务输入"
+              disabled={loading || planning}
+              onOpenDetails={() => setSummaryOpen(true)}
+              onSwitchProduct={onOpenProductPicker}
+              onOpenLibrary={onOpenLibrary}
+              onSyncToPlatform={onSyncToTaobao}
+              syncingToPlatform={syncingToTaobao}
+            />
+            {children}
+          </>
+        )
       ) : session?.localizedFactsDraft ? (
         <PlatformWorkflowShell
           platform="amazon"

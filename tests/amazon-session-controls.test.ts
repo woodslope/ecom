@@ -83,7 +83,7 @@ describe("AmazonSessionControls", () => {
     expect(markup).toContain("目标站点");
     expect(markup).toContain("Listing 张数");
     expect(markup).toContain("生成尺寸档");
-    expect(markup).toContain("基础风格");
+    expect(markup).toContain("提示词方案");
     expect(markup).toContain("MAIN + PT01-PT06");
     expect(markup.includes("调整参数") || markup.includes("收起参数")).toBe(true);
   });

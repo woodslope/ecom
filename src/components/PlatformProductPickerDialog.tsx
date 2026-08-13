@@ -97,7 +97,7 @@ export function PlatformProductPickerDialog({
               disabled={busy || loading}
               onClick={() => void run({ kind: "manual" })}
             >
-              手动填写 / 粘贴
+              手动录入
             </Button>
           ) : null}
           <Button
@@ -242,7 +242,7 @@ export function PlatformProductPickerDialog({
                   onClick={() => void run({ kind: "create" })}
                 >
                   <Plus size={14} />
-                  新建另一个商品
+                  新建商品
                 </Button>
               </>
             ) : (

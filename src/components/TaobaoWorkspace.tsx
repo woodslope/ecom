@@ -22,6 +22,7 @@ export function TaobaoWorkspace({
   onReanalyze,
   reanalyzeDisabled = false,
   reanalyzeDisabledReason,
+  stylePresetId,
   children,
 }: {
   activeProject: ProductProject | null;
@@ -38,7 +39,9 @@ export function TaobaoWorkspace({
   onReanalyze?: () => void;
   reanalyzeDisabled?: boolean;
   reanalyzeDisabledReason?: string;
-  children: ReactNode;
+  /** Prompt profile id for Taobao planning. */
+  stylePresetId?: string | null;
+  children: ReactNode | ((contextBar: ReactNode) => ReactNode);
 }) {
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const analysis = session?.taobaoAnalysis;
@@ -50,20 +53,34 @@ export function TaobaoWorkspace({
   return (
     <div className="taobao-workspace">
       {hasPlan ? (
-        <ProductContextBar
-          platformLabel="淘宝 / 天猫"
-          project={activeProject}
-          statusLabel={qualityLabel ?? "图片策划"}
-          statusTone="success"
-          detailLabel={analysis ? "分析详情" : undefined}
-          disabled={loading}
-          onOpenDetails={analysis ? () => setAnalysisOpen(true) : undefined}
-          onSwitchProduct={onOpenProductPicker}
-          onOpenLibrary={onOpenLibrary}
-        />
-      ) : null}
-      {hasPlan ? (
-        children
+        typeof children === "function" ? children(
+          <ProductContextBar
+            platformLabel="淘宝 / 天猫"
+            project={activeProject}
+            statusLabel={qualityLabel ?? "图片策划"}
+            statusTone="success"
+            detailLabel={analysis ? "分析详情" : undefined}
+            disabled={loading}
+            onOpenDetails={analysis ? () => setAnalysisOpen(true) : undefined}
+            onSwitchProduct={onOpenProductPicker}
+            onOpenLibrary={onOpenLibrary}
+          />,
+        ) : (
+          <>
+            <ProductContextBar
+              platformLabel="淘宝 / 天猫"
+              project={activeProject}
+              statusLabel={qualityLabel ?? "图片策划"}
+              statusTone="success"
+              detailLabel={analysis ? "分析详情" : undefined}
+              disabled={loading}
+              onOpenDetails={analysis ? () => setAnalysisOpen(true) : undefined}
+              onSwitchProduct={onOpenProductPicker}
+              onOpenLibrary={onOpenLibrary}
+            />
+            {children}
+          </>
+        )
       ) : (
         <TaobaoIntake
           activeProject={activeProject}
@@ -77,9 +94,19 @@ export function TaobaoWorkspace({
           onDirtyChange={onWorkspaceDirtyChange}
           onOpenLibrary={onOpenLibrary}
           onOpenProductPicker={onOpenProductPicker}
-          onOpenAnalysisDetails={analysis ? () => setAnalysisOpen(true) : undefined}
+          onOpenAnalysisDetails={
+            session?.taobaoAnalysis
+              ? () => setAnalysisOpen(true)
+              : undefined
+          }
+          stylePresetId={stylePresetId}
         />
       )}
+      {reanalyzeDisabledReason ? (
+        <p className="taobao-intake__reanalyze-status">
+          {reanalyzeDisabledReason}
+        </p>
+      ) : null}
       {analysis ? (
         <TaobaoAnalysisSummary
           open={analysisOpen}

@@ -21,9 +21,16 @@ import {
 } from "../domain/platforms/taobao-analysis";
 import type { PlatformSession } from "../domain/workspace/project-workspace";
 import type { AnalyzeTaobaoProductInput, WorkbenchAsset } from "../store/workbench-store";
+import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
+import { getPlatformRulePack } from "../domain/platforms/registry";
 import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
 import { ProductContextBar } from "./ProductContextBar";
-import { Button, Dialog, EmptyState, Field, Panel, StatusChip, StatusMessage } from "./ui";
+import { IndustryTemplateSelector } from "./IndustryTemplateSelector";
+import { Button, Dialog, EmptyState, Field, Panel, Select, StatusChip, StatusMessage } from "./ui";
+import {
+  allProfiles,
+  DEFAULT_PROMPT_PROFILE_ID,
+} from "../domain/prompt-profiles/prompt-profiles";
 
 export function taobaoAnalysisHasReference(input: {
   selectedReferenceCount: number;
@@ -154,6 +161,7 @@ export function TaobaoIntake({
   onOpenLibrary,
   onOpenProductPicker,
   onOpenAnalysisDetails,
+  stylePresetId,
 }: {
   activeProject: ProductProject | null;
   assets: WorkbenchAsset[];
@@ -167,6 +175,7 @@ export function TaobaoIntake({
   onOpenLibrary?: () => void;
   onOpenProductPicker?: () => void;
   onOpenAnalysisDetails?: () => void;
+  stylePresetId?: string | null;
 }) {
   const referenceAssets = useMemo(
     () => assets.filter((asset) => asset.metadata.kind === "reference"),
@@ -186,6 +195,12 @@ export function TaobaoIntake({
   );
   const [files, setFiles] = useState<File[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [selectedStylePresetId, setSelectedStylePresetId] = useState(
+    () => stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID,
+  );
+  const [industryTemplate, setIndustryTemplate] = useState<IndustryTemplateSnapshot | undefined>(
+    session?.industryTemplate,
+  );
 
   useEffect(() => {
     const draft = session?.sourceInput.taobaoProduct;
@@ -201,12 +216,16 @@ export function TaobaoIntake({
     );
     setFiles([]);
     setDirty(false);
+    setSelectedStylePresetId(stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID);
+    setIndustryTemplate(session?.industryTemplate);
   }, [
     activeProject,
     referenceAssets,
     session?.planningInput?.sourceMode,
     session?.sourceInput.taobaoProduct?.productText,
     session?.sourceInput.taobaoProduct?.selectedReferenceAssetIds,
+    stylePresetId,
+    session?.industryTemplate,
   ]);
 
   useEffect(() => {
@@ -267,6 +286,8 @@ export function TaobaoIntake({
       productText,
       files,
       selectedReferenceAssetIds: selectedIds,
+      stylePresetId: selectedStylePresetId,
+      ...(industryTemplate ? { industryTemplate } : {}),
     });
     if (result) {
       setFiles([]);
@@ -303,6 +324,21 @@ export function TaobaoIntake({
         />
       }
       actions={
+        <div className="taobao-intake__actions">
+        <Field label="方案" className="taobao-intake__profile-field">
+          <Select
+            aria-label="提示词方案"
+            value={selectedStylePresetId}
+            disabled={loading}
+            onChange={(event) => setSelectedStylePresetId(event.target.value)}
+          >
+            {allProfiles().map((profile) => (
+              <option key={profile.id} value={profile.id} title={profile.description}>
+                {profile.label}{profile.source === "custom" ? "（自定义）" : ""}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <Button
           type="button"
           className="planning-primary-action"
@@ -316,6 +352,7 @@ export function TaobaoIntake({
           <Sparkles size={16} />
           生成图片策划
         </Button>
+        </div>
       }
     >
       <form className="taobao-intake" onSubmit={(event) => {
@@ -341,6 +378,13 @@ export function TaobaoIntake({
           ) : null}
         </StatusMessage>
       ) : null}
+      <IndustryTemplateSelector
+        scope={{ platformId: "taobao", workflowId: "taobao-product" }}
+        rulePack={getPlatformRulePack("taobao")}
+        value={industryTemplate}
+        disabled={loading || Boolean(lockedReason)}
+        onChange={setIndustryTemplate}
+      />
       {error ? <StatusMessage tone="danger">{error}</StatusMessage> : null}
 
       <div className="taobao-intake__grid">

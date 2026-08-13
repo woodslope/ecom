@@ -15,6 +15,12 @@ import type { PlatformRulePack } from "../domain/platforms/types";
 import { hasAmazonChinesePromptTemplate } from "../domain/platforms/prompt-language";
 import { getAmazonMarketplaceByLocale } from "../domain/platforms/amazon-marketplaces";
 import { isAPlusExternalTextSlotRule } from "../domain/platforms/amazon-catalog";
+import {
+  type PromptProfile,
+  buildPlanningStrategySnippet,
+  resolvePromptProfile,
+} from "../domain/prompt-profiles/prompt-profiles";
+import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
 
 export interface OpenAIPlannerOptions {
   endpoint: string;
@@ -91,7 +97,11 @@ function structuredJsonText(content: unknown): string {
   return fenced ? fenced[1].trim() : text;
 }
 
-function planningSystemPrompt(rulePack: PlatformRulePack): string {
+function planningSystemPrompt(
+  rulePack: PlatformRulePack,
+  profile?: PromptProfile | null,
+  industryTemplate?: IndustryTemplateSnapshot,
+): string {
   const slotKeys = rulePack.slots.map((slot) => slot.key).join(", ");
   const externalTextSlotKeys = rulePack.slots
     .filter(isAPlusExternalTextSlotRule)
@@ -139,6 +149,15 @@ function planningSystemPrompt(rulePack: PlatformRulePack): string {
     "User-supplied facts may be used as factual copy and evidence. Image-visible information may describe only directly observable appearance, color, shape, count, layout, and visible construction.",
     "Never infer hidden dimensions, material composition, performance, efficacy, certification, warranty, compatibility, package contents, or safety claims from an image.",
     "When a fact is missing, mark it as missing in evidence and keep copy/prompt neutral instead of inventing it.",
+    ...(profile ? [buildPlanningStrategySnippet(profile)] : []),
+    ...(industryTemplate
+      ? [
+          `Industry template: ${industryTemplate.name} v${industryTemplate.version}.`,
+          "Treat the industry template as reusable slot direction, not as product evidence.",
+          "Current product facts, reference-image evidence, marketplace rules, and slot compliance always override template guidance.",
+          "Do not copy concrete product facts from template guidance unless the same fact is present in the current project evidence.",
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -159,6 +178,7 @@ async function planningUserContent(
   apiKey: string,
   allowReferenceImages = true,
   inputAssessment?: PlanningInputAssessment,
+  industryTemplate?: IndustryTemplateSnapshot,
 ): Promise<unknown> {
   const images = (allowReferenceImages ? referenceImages : []).filter(
     (image) => image.blob.size > 0 && image.mimeType.startsWith("image/"),
@@ -167,6 +187,17 @@ async function planningUserContent(
     project,
     rulePack,
     ...(inputAssessment ? { inputAssessment } : {}),
+    ...(industryTemplate
+      ? {
+          industryTemplate: {
+            id: industryTemplate.id,
+            name: industryTemplate.name,
+            version: industryTemplate.version,
+            brief: industryTemplate.brief,
+            slots: industryTemplate.slots,
+          },
+        }
+      : {}),
     referenceImages: images.map(({ name, mimeType }) => ({ name, mimeType })),
     ...(!allowReferenceImages && referenceImages.length > 0
       ? { referenceImagesSkipped: "The configured planner provider accepts text only; reference images were intentionally omitted." }
@@ -213,34 +244,41 @@ function httpError(response: Response): OpenAIPlannerError {
   if (response.status === 401) {
     return new OpenAIPlannerError(
       "auth",
-      "API 密钥校验失败，请检查密钥是否正确且仍然有效。",
+      "API 密钥校验失败（401）。排查步骤：1. 确认密钥完整复制无多余空格；2. 检查密钥是否过期或被吊销；3. 确认密钥属于这个 API 地址对应的服务商。",
       response.status,
     );
   }
   if (response.status === 403) {
     return new OpenAIPlannerError(
       "auth",
-      "API 权限校验失败，请检查密钥与所选模型的访问权限。",
+      "API 权限不足（403）。排查步骤：1. 确认账户已绑定有效支付方式；2. 检查模型是否有访问权限；3. 部分服务商需先充值才能调用。",
       response.status,
     );
   }
   if (response.status === 404) {
     return new OpenAIPlannerError(
       "path",
-      "API 地址不存在，请确认填写的是 Chat Completions endpoint。",
+      "API 地址不存在（404）。排查步骤：1. 确认地址以 /v1 结尾；2. 完整的 Chat Completions 地址应为 https://你的服务商/v1/chat/completions；3. 检查地址中是否有拼写错误。",
       response.status,
     );
   }
   if (response.status === 429) {
     return new OpenAIPlannerError(
       "quota",
-      "API 额度或速率限制已触发，请检查余额、配额或稍后重试。",
+      "请求过于频繁或额度不足（429）。排查步骤：1. 等待 30 秒后重试；2. 检查账户余额和配额限制；3. 降低并发请求数。",
+      response.status,
+    );
+  }
+  if (response.status >= 500) {
+    return new OpenAIPlannerError(
+      "http",
+      `服务商服务器错误（${response.status}）。排查步骤：1. 等待 1-2 分钟后重试；2. 访问服务商状态页面确认服务是否正常；3. 尝试更换 API 地址。`,
       response.status,
     );
   }
   return new OpenAIPlannerError(
     "http",
-    `API 请求失败（HTTP ${response.status}），请稍后重试或检查服务商状态。`,
+    `API 请求失败（HTTP ${response.status}）。排查步骤：1. 检查网络连接是否正常；2. 确认服务商是否支持浏览器 CORS 访问；3. 查看浏览器 Console 是否有更多错误信息。`,
     response.status,
   );
 }
@@ -305,7 +343,10 @@ async function parsePlanResponse(
     if (error instanceof PlanningNormalizationError) {
       throw new OpenAIPlannerError("format", error.userMessage);
     }
-    throw new OpenAIPlannerError("format", "AI 策划结果格式不正确，请重试或更换模型。");
+    throw new OpenAIPlannerError(
+      "format",
+      "AI 返回的策划结果格式异常。排查步骤：1. 点击重试（多数情况一次重试即可恢复）；2. 检查所选模型是否支持 JSON 输出；3. 尝试更换更稳定的模型。",
+    );
   }
 }
 
@@ -323,6 +364,7 @@ export class OpenAIPlanner implements PlannerEngine {
     referenceImages: readonly PlanningReferenceImage[] = [],
     amazonOptions?: AmazonPlanningRequestOptions,
     inputAssessment?: PlanningInputAssessment,
+    industryTemplate?: IndustryTemplateSnapshot,
   ): Promise<PlatformPlan> {
     if (signal.aborted) {
       throwAbortReason(signal, this.options.apiKey);
@@ -350,6 +392,7 @@ export class OpenAIPlanner implements PlannerEngine {
     }
     // Rebind local name used below
     rulePack = effectivePack;
+    const promptProfile = resolvePromptProfile(amazonOptions?.stylePresetId);
 
     const requestController = new AbortController();
     let removeAbortListener: () => void = () => undefined;
@@ -368,7 +411,7 @@ export class OpenAIPlanner implements PlannerEngine {
         timeoutId = setTimeout(() => {
           const error = new OpenAIPlannerError(
             "timeout",
-            "AI 策划请求超时，请检查网络或调高超时设置后重试。",
+            "策划请求超时（>2 分钟）。排查步骤：1. 检查网络连接是否稳定；2. 尝试更换更快的模型；3. 减少参考图数量或改用已压缩的小图。",
           );
           reject(error);
           requestController.abort(error);
@@ -383,6 +426,7 @@ export class OpenAIPlanner implements PlannerEngine {
           this.options.apiKey,
           this.options.plannerReferenceImages !== false,
           inputAssessment,
+          industryTemplate,
         );
         if (requestController.signal.aborted) {
           throwAbortReason(requestController.signal, this.options.apiKey);
@@ -399,7 +443,7 @@ export class OpenAIPlanner implements PlannerEngine {
             messages: [
               {
                 role: "system",
-                content: planningSystemPrompt(rulePack),
+                content: planningSystemPrompt(rulePack, promptProfile, industryTemplate),
               },
               {
                 role: "user",
@@ -425,7 +469,7 @@ export class OpenAIPlanner implements PlannerEngine {
       }
       throw new OpenAIPlannerError(
         "http",
-        "无法连接 API，请检查网络、CORS 配置和接口地址。",
+        "无法连接 API。排查步骤：1. 检查浏览器网络是否正常；2. 确认 API 地址支持 HTTPS 和 CORS 跨域请求；3. 尝试用 curl 或 Postman 测试同一地址；4. 如果使用代理，检查代理配置。",
       );
     } finally {
       removeAbortListener();

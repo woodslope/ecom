@@ -1,7 +1,7 @@
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import { AMAZON_STYLE_PRESETS } from "../domain/platforms/amazon-style-presets";
+import { AMAZON_STYLE_PRESETS } from "../domain/prompt-profiles/prompt-profiles";
 import type { StyleReferenceDraft } from "../domain/assets/style-reference";
 import type { WorkbenchAsset } from "../store/workbench-store";
 import { Button, Dialog, Field, IconButton, Select, StatusMessage } from "./ui";
@@ -82,7 +82,7 @@ export function StyleReferencePicker({
           onClick={() => setEditorOpen(true)}
         >
           <Pencil size={14} />
-          新建自定义风格
+          新建风格
         </Button>
       </div>
       <Field label="当前风格板">

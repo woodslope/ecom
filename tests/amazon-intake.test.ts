@@ -382,7 +382,7 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).not.toContain('class="action-bar');
     expect(directMarkup).not.toContain("打开资料库");
     expect(existingMarkup).toContain("不会自动覆盖共享商品资料");
-    expect(existingMarkup).toContain("同步到共享商品资料");
+    expect(existingMarkup).toContain("同步商品资料");
     expect(existingMarkup).toContain("Session-only Travel Pillow");
     expect(existingMarkup).toContain('aria-label="重新载入资料库内容"');
     expect(existingMarkup.match(/<section class="product-context-bar/g)).toHaveLength(1);

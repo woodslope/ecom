@@ -126,6 +126,21 @@ describe("demo copilot", () => {
     expect(Object.keys(patch).sort()).toEqual(["prompt", "visibleCopy"]);
   });
 
+  it("rewrites the current Prompt through the same scoped Copilot patch contract", async () => {
+    const patch = await demoCopilot.adjust(
+      context,
+      "rewrite-prompt",
+      new AbortController().signal,
+    );
+
+    expect("prompt" in patch).toBe(true);
+    if (!("prompt" in patch)) throw new Error("预期 Copilot 返回槽位补丁");
+    expect(patch.visibleCopy).toBe(slot.visibleCopy);
+    expect(patch.prompt).toContain("平台适配");
+    expect(patch.prompt).toContain("事实依据");
+    expect(Object.keys(patch).sort()).toEqual(["prompt", "visibleCopy"]);
+  });
+
   it("adapts the selected slot to its platform and explains the AI change", async () => {
     const result = await demoCopilot.adjust(
       context,

@@ -84,7 +84,51 @@ try {
   });
 
   await page.goto(baseUrl, { waitUntil: "networkidle" });
-  await page.getByTestId("app-frame").waitFor({ state: "visible" });
+  try {
+    await page.getByTestId("app-frame").waitFor({ state: "visible" });
+  } catch (error) {
+    if (runtimeErrors.length > 0) {
+      throw new Error(`应用根节点未挂载：\n${runtimeErrors.join("\n")}`, { cause: error });
+    }
+    throw error;
+  }
+
+  const quickStartContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const quickStartPage = await quickStartContext.newPage();
+  const quickStartErrors = [];
+  quickStartPage.on("pageerror", (error) => quickStartErrors.push(error.message));
+  try {
+    await quickStartPage.goto(baseUrl, { waitUntil: "networkidle" });
+    await quickStartPage.getByTestId("app-frame").waitFor({ state: "visible" });
+    await quickStartPage.getByRole("button", { name: "快速体验", exact: true }).click();
+    await quickStartPage.locator(".amazon-workspace").waitFor({ state: "visible" });
+    await quickStartPage.getByLabel("Amazon Listing 原文", { exact: true }).waitFor({
+      state: "visible",
+    });
+    assert(
+      (await quickStartPage.getByLabel("Amazon Listing 原文", { exact: true }).inputValue())
+        .includes("CloudRest Memory Foam Travel Pillow"),
+      "快速体验没有把示例商品载入 Amazon 任务输入",
+    );
+    await quickStartPage.locator(".platform-rail").getByRole("button", {
+      name: "资料库",
+      exact: true,
+    }).click();
+    await quickStartPage.locator(".library-project-card", {
+      hasText: "Amazon US · CloudRest Travel Pillow",
+    }).waitFor({
+      state: "visible",
+    });
+    assert(quickStartErrors.length === 0, `快速体验出现运行时错误：${quickStartErrors.join(" | ")}`);
+  } finally {
+    await quickStartContext.close();
+  }
+
+  const onboardingDialog = page.getByRole("dialog", { name: "新手指引", exact: true });
+  if (await onboardingDialog.isVisible()) {
+    await onboardingDialog.getByRole("button", { name: "跳过引导", exact: true }).click();
+    await onboardingDialog.waitFor({ state: "hidden" });
+  }
 
   const desktopOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -156,7 +200,7 @@ try {
     const workspace = document.querySelector(".workspace");
     const detailScroll = document.querySelector(".library-detail .product-source-panel__scroll");
     const saveButton = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("保存商品资料"),
+      button.textContent?.includes("保存资料"),
     );
     if (detailScroll instanceof HTMLElement) detailScroll.scrollTop = detailScroll.scrollHeight;
     const detailRect = detailScroll?.getBoundingClientRect();
@@ -247,6 +291,30 @@ try {
   );
   const intakeUpload = page.locator('.amazon-intake__upload input[type="file"]');
   await intakeUpload.waitFor({ state: "attached" });
+  const industryTemplateSelect = page.getByLabel("行业模板", { exact: true });
+  await industryTemplateSelect.waitFor({ state: "visible" });
+  assert(
+    (await industryTemplateSelect.locator("option:checked").innerText()).includes("通用模板"),
+    "Amazon 新任务没有默认使用通用行业模板",
+  );
+  await page.getByRole("button", { name: "管理模板", exact: true }).click();
+  const industryTemplateDialog = page.getByRole("dialog", { name: "行业模板库", exact: true });
+  await industryTemplateDialog.waitFor({ state: "visible" });
+  assert(
+    (await industryTemplateDialog.locator(".industry-template-slot-preview details").count()) === 7,
+    "Amazon Listing 通用模板没有覆盖当前 7 个槽位",
+  );
+  await industryTemplateDialog.locator(".field", { hasText: "模板名称" }).locator("input").fill("旅行用品模板");
+  await industryTemplateDialog.locator(".field", { hasText: "行业" }).locator("input").fill("旅行用品");
+  await industryTemplateDialog.locator(".field", { hasText: "产品类型" }).locator("input").fill("旅行枕、收纳用品");
+  await industryTemplateDialog.getByRole("button", { name: "生成并保存行业模板", exact: true }).click();
+  await industryTemplateDialog.getByText(/已保存“旅行用品模板”v1/).waitFor({ state: "visible" });
+  await industryTemplateDialog.getByRole("button", { name: "完成", exact: true }).click();
+  await industryTemplateDialog.waitFor({ state: "hidden" });
+  assert(
+    (await industryTemplateSelect.locator("option:checked").innerText()).includes("旅行用品模板"),
+    "保存后的行业模板没有应用到当前 Amazon 任务",
+  );
 
   const firstUploadGeometry = await page.evaluate(() => {
     const references = document.querySelector(".amazon-intake__references")?.getBoundingClientRect();
@@ -323,7 +391,7 @@ try {
 
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  const baseStyleSelect = page.getByLabel("基础风格", { exact: true });
+  const baseStyleSelect = page.getByLabel("提示词方案", { exact: true });
   const styleBoardSelect = page.locator('select[aria-label="附加风格板"]');
   await baseStyleSelect.selectOption("studio-proof");
   assert(
@@ -336,7 +404,7 @@ try {
     "选择内置附加风格板后，基础风格没有同步",
   );
 
-  await page.getByRole("button", { name: "新建自定义风格", exact: true }).click();
+  await page.getByRole("button", { name: "新建风格", exact: true }).click();
   const styleEditorDialog = page.getByRole("dialog", { name: "新建自定义风格", exact: true });
   await styleEditorDialog.waitFor({ state: "visible" });
   await styleEditorDialog.getByLabel("风格名称", { exact: true }).fill("浏览器静谧棚拍");
@@ -434,7 +502,7 @@ try {
   ]);
   if (await localizedFactsReview.isVisible()) {
     await localizedFactsReview
-      .getByRole("button", { name: "确认并生成图片策划", exact: true })
+      .getByRole("button", { name: "确认并生成策划", exact: true })
       .click();
     await Promise.race([
       page.locator(".slot-card").first().waitFor({ state: "visible" }),
@@ -794,6 +862,12 @@ try {
 
   await page.getByRole("button", { name: "生产记录", exact: true }).click();
   await page.getByRole("heading", { name: "生产记录", exact: true }).waitFor({ state: "visible" });
+  await page.locator(".production-run-card__gallery").first().waitFor({ state: "visible" });
+  assert(
+    (await page.locator(".production-run-card__thumbnail").count()) > 0,
+    "历史 Run 卡没有直接展示生成结果缩略图",
+  );
+  await page.getByRole("button", { name: "查看详情", exact: true }).first().click();
   await page.getByText("完成策划", { exact: true }).first().waitFor({ state: "visible" });
   await page.getByText(/生成图片 · PT01/, { exact: true }).first().waitFor({ state: "visible" });
   await page.getByText("导出交付", { exact: true }).first().waitFor({ state: "visible" });
@@ -808,6 +882,7 @@ try {
   await page.getByText("筛选条件没有结果", { exact: true }).waitFor({ state: "visible" });
   await captureEvidence(page, "production-history-filter-empty-1280.png");
   await page.getByRole("button", { name: "清除筛选", exact: true }).click();
+  await page.locator(".production-run-card__thumbnail img").first().waitFor({ state: "visible" });
   await page.setViewportSize({ width: 900, height: 800 });
   assert(
     !(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)),
@@ -1049,7 +1124,10 @@ try {
   await dialog.getByText("设置已保存。", { exact: true }).waitFor({ state: "visible" });
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "hidden" });
-  assert((await page.locator(".runtime-badge").innerText()).includes("API"), "保存后运行模式徽标没有切换到 API");
+  assert(
+    (await page.locator(".runtime-badge-button").getAttribute("aria-label"))?.includes("API"),
+    "保存后运行模式徽标没有切换到 API",
+  );
   assert(await page.getByText("API 图片生成", { exact: true }).isVisible(), "API 模式生成区仍显示 Demo 来源");
 
   await page.reload({ waitUntil: "networkidle" });
@@ -1062,7 +1140,10 @@ try {
   );
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "hidden" });
-  assert((await page.locator(".runtime-badge").innerText()).includes("API"), "刷新后没有恢复 API 模式徽标");
+  assert(
+    (await page.locator(".runtime-badge-button").getAttribute("aria-label"))?.includes("API"),
+    "刷新后没有恢复 API 模式徽标",
+  );
   await page.getByRole("button", { name: "概览", exact: true }).click();
   const runtimeMetric = page.locator(".metric--yellow");
   assert((await runtimeMetric.innerText()).includes("API"), "概览运行模式与运行徽标不一致");
@@ -1078,7 +1159,10 @@ try {
   await dialog.getByText("设置已保存。", { exact: true }).waitFor({ state: "visible" });
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "hidden" });
-  assert((await page.locator(".runtime-badge").innerText()).includes("演示"), "切回 Demo 后徽标未更新");
+  assert(
+    (await page.locator(".runtime-badge-button").getAttribute("aria-label"))?.includes("演示"),
+    "切回 Demo 后徽标未更新",
+  );
   await page.getByRole("button", { name: "Amazon", exact: true }).click();
   await page.getByRole("heading", { name: "Amazon", exact: true }).waitFor({ state: "visible" });
 
@@ -1250,7 +1334,7 @@ try {
       (await page.getByText("7 个必需槽位", { exact: true }).count()) === 1,
     "淘宝工作区没有显示固定 5+7 Rule Pack",
   );
-  const taobaoCurrentStep = page.locator('.workbench-stepper__item[aria-current="step"]');
+  const taobaoCurrentStep = page.locator(".workbench-chrome__progress-menu > summary");
   assert(
     (await taobaoCurrentStep.innerText()).includes("策划检查"),
     "淘宝完成策划后没有进入共享的策划检查阶段",

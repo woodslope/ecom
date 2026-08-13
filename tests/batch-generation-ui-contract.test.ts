@@ -6,7 +6,7 @@ import workspaceSource from "../src/components/PlatformWorkspace.tsx?raw";
 describe("batch generation UI contract", () => {
   it("exposes batch generation in platform workspaces and local jobs in production records", () => {
     expect(workspaceSource).toContain("onStartBatch");
-    expect(workspaceSource).toContain("批量生成剩余槽位");
+    expect(workspaceSource).toContain("批量生成（");
     expect(appSource).toContain("<ExecutionJobPanel");
     expect(appSource).toContain("startBatchGeneration");
     expect(appSource).toContain("jobs={jobs}");

@@ -46,6 +46,79 @@ describe("planning workspace UI contract", () => {
     );
   });
 
+  it("renders the active generated asset as a scannable slot thumbnail", async () => {
+    const plan = await demoPlanner.plan(
+      productFacts,
+      amazonRulePack,
+      new AbortController().signal,
+    );
+    const slot = plan.slots.find((item) => item.slotKey === "PT01")!;
+    const markup = renderToStaticMarkup(
+      createElement(SlotBoard, {
+        rulePack: amazonRulePack,
+        plan,
+        selectedSlotKey: "PT01",
+        planningInputSignature: "signature-01",
+        assets: [
+          {
+            metadata: {
+              id: "asset-active",
+              projectId: "project-01",
+              name: "pt01.png",
+              kind: "generated" as const,
+              tags: [],
+              mimeType: "image/png",
+              size: 256,
+              createdAt: "2026-08-09T00:00:00.000Z",
+              updatedAt: "2026-08-09T00:00:00.000Z",
+            },
+            objectUrl: "blob:test/generated-pt01",
+          },
+        ],
+        versionStates: {
+          PT01: {
+            activeVersionId: "version-02",
+            versions: [
+              {
+                id: "version-01",
+                slotKey: "PT01",
+                assetId: "asset-old",
+                createdAt: "2026-08-09T00:00:00.000Z",
+                source: "demo" as const,
+                promptSnapshot: slot.prompt,
+                visibleCopySnapshot: slot.visibleCopy,
+                planningInputSignature: "signature-01",
+                width: 2000,
+                height: 2000,
+                mimeType: "image/png",
+                parameters: {},
+              },
+              {
+                id: "version-02",
+                slotKey: "PT01",
+                assetId: "asset-active",
+                createdAt: "2026-08-09T01:00:00.000Z",
+                source: "demo" as const,
+                promptSnapshot: slot.prompt,
+                visibleCopySnapshot: slot.visibleCopy,
+                planningInputSignature: "signature-01",
+                width: 2000,
+                height: 2000,
+                mimeType: "image/png",
+                parameters: {},
+              },
+            ],
+          },
+        },
+        onSelect: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('src="blob:test/generated-pt01"');
+    expect(markup).toContain("2 个版本");
+    expect(markup).toContain("已完成");
+  });
+
   it("renders editable visible copy and prompt while keeping evidence visible", async () => {
     const plan = await demoPlanner.plan(
       productFacts,

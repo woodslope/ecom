@@ -7,6 +7,7 @@ import type {
 } from "../platforms/amazon-catalog";
 import type { PlatformId, PlatformRulePack } from "../platforms/types";
 import type { PlanningInputAssessment } from "./input-assessment";
+import type { IndustryTemplateSnapshot } from "../prompt-templates/industry-template-packs";
 
 export type PlanningSource = "demo" | "api";
 
@@ -90,5 +91,6 @@ export interface PlannerEngine {
     referenceImages?: readonly PlanningReferenceImage[],
     amazonOptions?: AmazonPlanningRequestOptions,
     inputAssessment?: PlanningInputAssessment,
+    industryTemplate?: IndustryTemplateSnapshot,
   ): Promise<PlatformPlan>;
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 
 import {
   defaultRuntimeSettings,
@@ -6,7 +7,7 @@ import {
   type ConnectionTestResult,
   type RuntimeSettings,
 } from "../domain/settings";
-import { Button, Dialog, Field, SegmentedControl, StatusMessage } from "./ui";
+import { Button, Dialog, Field, IconButton, SegmentedControl, StatusMessage } from "./ui";
 
 export function connectionFeedbackMessage({
   draftChanged,
@@ -91,6 +92,8 @@ export function SettingsDialog({
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [textResult, setTextResult] = useState<ConnectionTestResult | null>(null);
   const [imageResult, setImageResult] = useState<ConnectionTestResult | null>(null);
+  const [textKeyVisible, setTextKeyVisible] = useState(false);
+  const [imageKeyVisible, setImageKeyVisible] = useState(false);
   const [backupOperation, setBackupOperation] = useState<"export" | "import" | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [backupError, setBackupError] = useState<string | null>(null);
@@ -109,6 +112,8 @@ export function SettingsDialog({
     setSaveMessage(null);
     setTextResult(null);
     setImageResult(null);
+    setTextKeyVisible(false);
+    setImageKeyVisible(false);
     setBackupOperation(null);
     setBackupMessage(null);
     setBackupError(null);
@@ -287,7 +292,17 @@ export function SettingsDialog({
                 />
               </Field>
               <Field label="文本 API Key">
-                <input aria-label="API Key" type="password" value={textKey} autoComplete="off" disabled={controlsDisabled} onChange={(event) => update("textApiKey", event.target.value)} />
+                <div className="settings-secret-field">
+                  <input aria-label="API Key" type={textKeyVisible ? "text" : "password"} value={textKey} autoComplete="off" disabled={controlsDisabled} onChange={(event) => update("textApiKey", event.target.value)} />
+                  <IconButton
+                    label={textKeyVisible ? "隐藏文本 API Key" : "显示文本 API Key"}
+                    aria-pressed={textKeyVisible}
+                    disabled={controlsDisabled}
+                    onClick={() => setTextKeyVisible((visible) => !visible)}
+                  >
+                    {textKeyVisible ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+                  </IconButton>
+                </div>
               </Field>
               {effectiveConnectionMode === "single" ? <Field label="图片生成模型"><input value={draft.imageModel} disabled={controlsDisabled} onChange={(event) => update("imageModel", event.target.value)} /></Field> : null}
               {String(draft.textBaseUrl ?? baseFromEndpoint(draft)).includes("api.deepseek.com") ? <StatusMessage tone="warning">{effectiveConnectionMode === "single" ? "DeepSeek 官方连接不支持生图；请改用双配置并设置独立图片服务。" : "DeepSeek 官方策划接口仅接收文本；参考图会在策划请求中明确跳过，正式生图仍使用独立图片服务。"}</StatusMessage> : null}
@@ -326,7 +341,17 @@ export function SettingsDialog({
                 />
               </Field>
               <Field label="图片 API Key">
-                <input aria-label="图片 API Key" type="password" value={imageKey} autoComplete="off" disabled={controlsDisabled} onChange={(event) => update("imageApiKey", event.target.value)} />
+                <div className="settings-secret-field">
+                  <input aria-label="图片 API Key" type={imageKeyVisible ? "text" : "password"} value={imageKey} autoComplete="off" disabled={controlsDisabled} onChange={(event) => update("imageApiKey", event.target.value)} />
+                  <IconButton
+                    label={imageKeyVisible ? "隐藏图片 API Key" : "显示图片 API Key"}
+                    aria-pressed={imageKeyVisible}
+                    disabled={controlsDisabled}
+                    onClick={() => setImageKeyVisible((visible) => !visible)}
+                  >
+                    {imageKeyVisible ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+                  </IconButton>
+                </div>
               </Field>
               <Field label="图片生成模型">
                 <input
@@ -379,6 +404,30 @@ export function SettingsDialog({
             </section> : null}
           </>
         )}
+
+        <section className="settings-service-group" aria-labelledby="privacy-info-title">
+          <div className="settings-service-group__heading">
+            <h3 id="privacy-info-title">数据存储说明</h3>
+          </div>
+          <div className="privacy-info-grid">
+            <div className="privacy-info-card">
+              <strong>浏览器本地</strong>
+              <span>商品资料、参考图、策划方案、生成结果和工作记录仅保存在当前浏览器的 localStorage 和 IndexedDB 中。</span>
+            </div>
+            <div className="privacy-info-card">
+              <strong>API 请求</strong>
+              <span>仅在你使用 API 模式时，策划 Prompt 和参考图会发送到你配置的 AI 服务地址。Key 不会写入仓库或静态构建。</span>
+            </div>
+            <div className="privacy-info-card">
+              <strong>本地备份</strong>
+              <span>导出的 JSON 备份不含 API Key 和 Provider 设置。恢复备份不会覆盖当前运行配置。</span>
+            </div>
+            <div className="privacy-info-card">
+              <strong>你的控制</strong>
+              <span>所有数据属于你。删除项目、清空浏览器存储或恢复备份都由你主动操作，没有自动同步或云端上传。</span>
+            </div>
+          </div>
+        </section>
 
         <section className="settings-service-group" aria-labelledby="local-backup-title">
           <div className="settings-service-group__heading">

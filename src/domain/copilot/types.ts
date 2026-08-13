@@ -3,6 +3,7 @@ import type { PlannedSlot } from "../planning/types";
 import type { ProductProject } from "../projects/types";
 
 export type CopilotCommand =
+  | "rewrite-prompt"
   | "shorten-copy"
   | "strengthen-evidence"
   | "adapt-platform"

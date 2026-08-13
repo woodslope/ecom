@@ -141,6 +141,18 @@ export class DemoCopilot implements CopilotEngine {
     await wait(this.delayMs, signal);
     throwIfAborted(signal);
 
+    if (command === "rewrite-prompt") {
+      const visibleCopy = context.slot.visibleCopy;
+      const prompt = platformAdaptedPrompt(context, visibleCopy);
+      return {
+        visibleCopy,
+        prompt: promptWithEvidence({
+          ...context,
+          slot: { ...context.slot, prompt },
+        }),
+      };
+    }
+
     if (command === "shorten-copy") {
       const visibleCopy = shortenCopyForContext(context);
       return {

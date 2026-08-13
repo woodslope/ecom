@@ -5,6 +5,11 @@ import { AppShell } from "./components/AppShell";
 import { AmazonWorkspace } from "./components/AmazonWorkspace";
 import { ExecutionJobPanel } from "./components/ExecutionJobPanel";
 import {
+  OnboardingGuide,
+  isOnboardingDismissed,
+  dismissOnboarding,
+} from "./components/OnboardingGuide";
+import {
   CopilotTaskStatus,
   GenerationFailureStatus,
   GenerationTaskStatus,
@@ -26,18 +31,18 @@ import type { NavigationItemId } from "./domain/platforms/types";
 import type { ExecutionJob } from "./domain/jobs/types";
 import type { HistoryQueryService } from "./domain/history/query";
 import { getPlatformRulePack } from "./domain/platforms/registry";
+import { hasUsableProductFacts } from "./domain/projects/product-source-text";
 import type { ProductProject, UpdateProductProjectInput } from "./domain/projects/types";
+import { demoProductFixtures } from "./domain/projects/demo-fixtures";
 import { runtimeSupportsImageEditing, type RuntimeMode } from "./domain/settings";
-import type { PlatformWorkflowId } from "./domain/workspace/project-workspace";
+import type { PlatformWorkflowId, ProductionRun } from "./domain/workspace/project-workspace";
 import type { ProductionRunRecord } from "./domain/tasks";
 import {
   OVERVIEW_EMPTY_STATUS,
   resolveOverviewNextAction,
 } from "./domain/workspace/overview-guidance";
 import {
-  readDemoModeBannerDismissed,
   readLastPlatformOrDefault,
-  writeDemoModeBannerDismissed,
   writeLastPlatform,
 } from "./domain/workspace/preferences";
 import { useWorkbenchStore, type WorkbenchAsset, type WorkbenchState } from "./store/workbench-store";
@@ -54,6 +59,24 @@ function initialNavigationItem(): NavigationItemId {
   return readLastPlatformOrDefault(window.localStorage);
 }
 
+const RECENT_RUN_STATUS_LABELS: Record<string, string> = {
+  planned: "已策划",
+  producing: "生产中",
+  ready: "待导出",
+  partial: "部分完成",
+  failed: "失败",
+  canceled: "已取消",
+};
+
+const PLATFORM_LABEL: Record<string, string> = {
+  taobao: "淘宝",
+  amazon: "Amazon",
+};
+
+function getPlatformLabel(platformId: string, _workflowId: string): string {
+  return PLATFORM_LABEL[platformId] ?? platformId;
+}
+
 function Overview({
   projects,
   activeProject,
@@ -61,6 +84,7 @@ function Overview({
   generatedCount,
   runtimeMode,
   preferredPlatform,
+  recentRuns,
   onOpenPlatform,
 }: {
   projects: ProductProject[];
@@ -69,10 +93,12 @@ function Overview({
   generatedCount: number;
   runtimeMode: RuntimeMode;
   preferredPlatform: "taobao" | "amazon";
-  onOpenPlatform: (platformId: "taobao" | "amazon" | "library") => void;
+  recentRuns: Pick<ProductionRun, "id" | "platformId" | "workflowId" | "source" | "status" | "createdAt">[];
+  onOpenPlatform: (platformId: "taobao" | "amazon" | "library" | "history") => void;
 }) {
   const nextAction = resolveOverviewNextAction({
     hasActiveProject: Boolean(activeProject),
+    hasUsableFacts: Boolean(activeProject && hasUsableProductFacts(activeProject.facts)),
     assetCount,
     preferredPlatform,
   });
@@ -157,6 +183,49 @@ function Overview({
           </div>
         ) : null}
       </div>
+
+      {recentRuns.length > 0 ? (
+        <section className="overview-recent" aria-label="最近生产成果">
+          <div className="overview-recent__header">
+            <h2>最近生产成果</h2>
+            <Button
+              variant="quiet"
+              size="compact"
+              onClick={() => onOpenPlatform("history")}
+>
+              查看全部
+            </Button>
+          </div>
+          <div className="overview-recent__list">
+            {recentRuns.slice(0, 5).map((run) => (
+              <button
+                key={run.id}
+                type="button"
+                className="overview-recent-card"
+                onClick={() => onOpenPlatform("history")}
+  >
+                <span className="overview-recent-card__platform">
+                  {getPlatformLabel(run.platformId, run.workflowId)}
+                </span>
+                <span className="overview-recent-card__status" data-status={run.status}>
+                  {RECENT_RUN_STATUS_LABELS[run.status] ?? run.status}
+                </span>
+                <span className="overview-recent-card__source">
+                  {run.source === "api" ? "API" : "Demo"}
+                </span>
+                <span className="overview-recent-card__time">
+                  {new Date(run.createdAt).toLocaleDateString("zh-CN", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {projects.length === 0 ? (
         <EmptyState
@@ -280,9 +349,9 @@ export function App() {
     | { kind: "project"; projectId: string; seedPlatform?: "taobao" | "amazon" }
     | null
   >(null);
-  const [demoBannerDismissed, setDemoBannerDismissed] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return readDemoModeBannerDismissed(window.localStorage);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !isOnboardingDismissed(window.localStorage);
   });
   const openGlobalFilePickerRef = useRef<(() => void) | null>(null);
   const {
@@ -329,6 +398,7 @@ export function App() {
     copilotMessage,
     initialize,
     startAmazonSession,
+    startTaobaoSession,
     analyzeTaobaoProduct,
     reopenTaobaoAnalysis,
     seedPlatformIntakeFromProject,
@@ -487,12 +557,38 @@ export function App() {
   const requestGlobalUpload = () => {
     openGlobalFilePickerRef.current?.();
   };
-  const dismissDemoBanner = () => {
-    setDemoBannerDismissed(true);
+  const dismissOnboardingGuide = useCallback(() => {
+    setShowOnboarding(false);
     if (typeof window !== "undefined") {
-      writeDemoModeBannerDismissed(window.localStorage, true);
+      dismissOnboarding(window.localStorage);
     }
-  };
+  }, []);
+
+  const handleQuickStart = useCallback(async () => {
+    const fixture = demoProductFixtures.find((f) => f.id === "amazon-complete") ??
+      demoProductFixtures[0];
+    if (!fixture) {
+      setActiveItem("library");
+      return;
+    }
+    try {
+      const created = await createProject({
+        name: fixture.projectName,
+        scope: "library",
+        facts: fixture.facts,
+      });
+      if (created) {
+        await seedPlatformIntakeFromProject(created.id, "amazon");
+      }
+    } catch {
+      // If creation fails, just dismiss the guide and let user start manually
+    }
+    setShowOnboarding(false);
+    if (typeof window !== "undefined") {
+      dismissOnboarding(window.localStorage);
+    }
+    setActiveItem("amazon");
+  }, [createProject, seedPlatformIntakeFromProject, setActiveItem]);
 
   const exportLocalBackup = useCallback(async () => {
     const backup = await createLocalBackup({
@@ -521,11 +617,6 @@ export function App() {
     window.setTimeout(() => window.location.reload(), 600);
     return `备份恢复成功：${summary.projectCount} 个商品、${summary.assetCount} 个素材。正在重新加载应用...`;
   }, []);
-  const openSettingsFromBanner = () => {
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("ecom:open-settings", { detail: { open: true } }));
-    }
-  };
   const remove = async (id: string) => {
     await removeAsset(id);
   };
@@ -673,6 +764,22 @@ export function App() {
   const activeTaobaoSession = [...sessions]
     .filter((session) => session.workflowId === "taobao-product")
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+  const syncAmazonToTaobao = async () => {
+    const projectId = activeProject?.id;
+    if (!projectId) return;
+    const existingSession = sessions.find(
+      (session) => session.options.platformId === "taobao" && session.projectId === projectId,
+    );
+    if (!existingSession) {
+      await startTaobaoSession({
+        projectId,
+        productText: activeProject.facts.description ?? "",
+        selectedReferenceAssetIds: activeAmazonSession?.selectedReferenceAssetIds ?? [],
+        stylePresetId: activeAmazonSession?.options.stylePresetId ?? null,
+      });
+    }
+    setActiveItem("taobao");
+  };
   const activeBatchJobFor = (platformId: "taobao" | "amazon") =>
     jobs
       .filter((job) =>
@@ -710,6 +817,10 @@ export function App() {
               ? { getItem: () => null, setItem: () => undefined }
               : window.localStorage,
           )}
+          recentRuns={runs
+            .slice()
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .slice(0, 5)}
           onOpenPlatform={(item) => changeActiveItem(item)}
         />
       ) : null}
@@ -731,7 +842,7 @@ export function App() {
           onUpload={upload}
           onRemove={remove}
           onDirtyChange={(dirty) =>
-            handleWorkspaceDirtyChange(dirty ? "商品资料有未保存修改，请先保存商品资料。" : null)
+            handleWorkspaceDirtyChange(dirty ? "商品资料有未保存修改，请先保存资料。" : null)
           }
         />
       ) : null}
@@ -759,8 +870,10 @@ export function App() {
             onCreateStyleReference={createStyleReference}
             onRemoveAsset={removeAsset}
             onWorkspaceDirtyChange={handleWorkspaceDirtyChange}
+            onSyncToTaobao={() => void syncAmazonToTaobao()}
+            syncingToTaobao={planningPlatformId === "taobao"}
           >
-            <PlatformWorkspace
+            {(contextBar) => <PlatformWorkspace
               platform="amazon"
               activeProject={activeProject}
               assets={assets}
@@ -828,7 +941,8 @@ export function App() {
               }
               onCancelCopilot={cancelCopilot}
               onWorkspaceDirtyChange={handleWorkspaceDirtyChange}
-            />
+              contextBar={contextBar}
+            />}
           </AmazonWorkspace>
         ) : (
           <TaobaoWorkspace
@@ -847,6 +961,12 @@ export function App() {
             onOpenLibrary={() => changeActiveItem("library")}
             onOpenProductPicker={() => setProductPickerPlatform("taobao")}
             onWorkspaceDirtyChange={handleWorkspaceDirtyChange}
+            stylePresetId={
+              activeTaobaoSession?.options &&
+              "stylePresetId" in activeTaobaoSession.options
+                ? (activeTaobaoSession.options as { stylePresetId?: string | null }).stylePresetId
+                : null
+            }
             onReanalyze={() => void reopenTaobaoAnalysis(activeTaobaoSession?.id)}
             reanalyzeDisabled={Boolean(
               loading ||
@@ -863,7 +983,7 @@ export function App() {
                   : undefined
             }
           >
-            <PlatformWorkspace
+            {(contextBar) => <PlatformWorkspace
               platform="taobao"
               activeProject={activeProject}
               assets={assets}
@@ -930,7 +1050,8 @@ export function App() {
               }
               onCancelCopilot={cancelCopilot}
               onWorkspaceDirtyChange={handleWorkspaceDirtyChange}
-            />
+              contextBar={contextBar}
+            />}
           </TaobaoWorkspace>
         )
       ) : null}
@@ -986,6 +1107,13 @@ export function App() {
       onImportLocalBackup={importLocalBackup}
       onCreateProject={openProjectDialog}
       onSelectProject={requestProjectChange}
+      compactRail={
+        activeItem === "amazon"
+          ? Boolean(activeAmazonSession?.plan)
+          : activeItem === "taobao"
+            ? Boolean(activeTaobaoSession?.plan)
+            : false
+      }
     >
       <GlobalAssetUpload
         disabled={loading || !activeProject}
@@ -1017,26 +1145,6 @@ export function App() {
           <StatusMessage tone="success" className="export-feedback-banner" data-testid="export-feedback">
             <span>{exportFeedback}</span>
             <IconButton label="关闭导出反馈" onClick={() => setExportFeedback(null)}>
-              <X size={15} />
-            </IconButton>
-          </StatusMessage>
-        ) : null}
-        {!demoBannerDismissed &&
-        runtimeSettings.mode === "demo" &&
-        (activeItem === "amazon" || activeItem === "taobao") ? (
-          <StatusMessage tone="warning" className="demo-mode-banner" data-testid="demo-mode-banner">
-            <span>
-              当前为演示模式，不会调用外部模型。
-              <Button
-                type="button"
-                variant="secondary"
-                size="compact"
-                onClick={openSettingsFromBanner}
-              >
-                打开设置
-              </Button>
-            </span>
-            <IconButton label="关闭演示模式提示" onClick={dismissDemoBanner}>
               <X size={15} />
             </IconButton>
           </StatusMessage>
@@ -1184,6 +1292,12 @@ export function App() {
           任务已有草稿或策划。载入资料库会用共享商品资料与参考图覆盖任务输入；已有策划将被清除，需重新生成。
         </p>
       </Dialog>
+      {showOnboarding && projects.length === 0 ? (
+        <OnboardingGuide
+          onDismiss={dismissOnboardingGuide}
+          onQuickStart={() => void handleQuickStart()}
+        />
+      ) : null}
     </AppShell>
   );
 }

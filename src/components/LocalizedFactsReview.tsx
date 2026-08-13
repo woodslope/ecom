@@ -31,7 +31,7 @@ function draftFacts(draft: PlatformFactsDraft): ProductFacts {
 export function LocalizedFactsReview({
   draft,
   disabled = false,
-  actionLabel = "确认并生成图片策划",
+  actionLabel = "确认并生成策划",
   onConfirm,
 }: {
   draft: PlatformFactsDraft;

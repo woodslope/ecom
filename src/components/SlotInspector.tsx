@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowRight, Bot, Copy, LoaderCircle, Save, ShieldAlert, Square, WandSparkles } from "lucide-react";
+import { ArrowRight, Bot, Columns3, Copy, Library, LoaderCircle, Save, ShieldAlert, Square, WandSparkles } from "lucide-react";
 
 import {
   activeSlotVersion,
@@ -9,15 +9,24 @@ import type { MaskDraft } from "../domain/generation/mask";
 import type { SlotVersion, SlotVersionState } from "../domain/generation/types";
 import type { ComplianceResult } from "../domain/compliance";
 import type { CopilotCommand } from "../domain/copilot";
-import type { PlannedSlot } from "../domain/planning/types";
-import type { PlatformRulePack } from "../domain/platforms/types";
+import type { PlannedSlot, PlanningSource } from "../domain/planning/types";
+import {
+  industryTemplateSnapshot,
+  listIndustryTemplatePacks,
+  saveIndustryTemplatePack,
+  templateSlotGuidance,
+  type IndustryTemplateSnapshot,
+} from "../domain/prompt-templates/industry-template-packs";
+import type { PlatformRulePack, PlatformWorkflowId } from "../domain/platforms/types";
 import type { RuntimeMode } from "../domain/settings";
 import type { WorkbenchAsset } from "../store/workbench-store";
 import { CompliancePanel } from "./CompliancePanel";
 import { GenerationActions } from "./GenerationActions";
 import { ImageTools } from "./ImageTools";
 import { MaskEditorDialog } from "./MaskEditorDialog";
+import { PromptAssetCenterDialog } from "./PromptAssetCenterDialog";
 import { VersionStrip } from "./VersionStrip";
+import { VersionCompareDialog } from "./VersionCompareDialog";
 import {
   ActionBar,
   Button,
@@ -60,6 +69,9 @@ export function copilotDraftDisabledReason(draftDirty: boolean): string | undefi
 export function SlotInspector({
   rulePack,
   slot,
+  workflowId,
+  industryTemplate,
+  planningSource,
   saving = false,
   versionState,
   assets = [],
@@ -91,6 +103,9 @@ export function SlotInspector({
 }: {
   rulePack: PlatformRulePack;
   slot: PlannedSlot;
+  workflowId?: PlatformWorkflowId;
+  industryTemplate?: IndustryTemplateSnapshot;
+  planningSource?: PlanningSource;
   saving?: boolean;
   versionState?: SlotVersionState;
   assets?: WorkbenchAsset[];
@@ -132,7 +147,10 @@ export function SlotInspector({
   const [activePane, setActivePane] = useState<InspectorPane>("copy");
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [maskEditorSaving, setMaskEditorSaving] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [promptAssetsOpen, setPromptAssetsOpen] = useState(false);
   const [maskEditorError, setMaskEditorError] = useState<string | null>(null);
+  const [industryTemplateMessage, setIndustryTemplateMessage] = useState<string | null>(null);
   const [renderedDimensions, setRenderedDimensions] = useState<{
     width: number;
     height: number;
@@ -174,6 +192,50 @@ export function SlotInspector({
     : true;
   const activeAsset = assets.find((asset) => asset.metadata.id === activeVersion?.assetId);
   const slotRule = rulePack.slots.find((rule) => rule.key === slot.slotKey);
+  const promptAssetWorkflowId: PlatformWorkflowId = workflowId ?? (
+    rulePack.platformId === "amazon"
+      ? slotRule?.group === "a-plus"
+        ? "amazon-aplus"
+        : "amazon-listing"
+      : "taobao-product"
+  );
+  const industryGuidance = templateSlotGuidance(industryTemplate, slot.slotKey);
+
+  const savePromptAsIndustryTemplateVersion = () => {
+    if (
+      typeof window === "undefined" ||
+      !industryTemplate ||
+      industryTemplate.source !== "custom" ||
+      !industryGuidance
+    ) return;
+    const warning = [
+      `将当前 ${slot.slotKey} Prompt 保存为“${industryTemplate.name}”的新版本？`,
+      "请确认其中不包含只适用于当前商品的型号、尺寸、颜色、包装或认证信息。",
+    ].join("\n");
+    if (!window.confirm(warning)) return;
+    const pack = listIndustryTemplatePacks(window.localStorage, industryTemplate.scope)
+      .find((candidate) => candidate.id === industryTemplate.id);
+    if (!pack) {
+      setIndustryTemplateMessage("行业模板已被删除，当前任务快照仍可继续使用。");
+      return;
+    }
+    const latest = industryTemplateSnapshot(pack);
+    const saved = saveIndustryTemplatePack(window.localStorage, {
+      id: pack.id,
+      name: pack.name,
+      description: pack.description,
+      scope: pack.scope,
+      brief: latest.brief,
+      slots: latest.slots.map((templateSlot) =>
+        templateSlot.slotKey === slot.slotKey
+          ? { ...templateSlot, guidance: prompt.trim() }
+          : templateSlot,
+      ),
+    });
+    setIndustryTemplateMessage(
+      `已保存为行业模板 v${saved.revisions.at(-1)?.version ?? latest.version + 1}；当前任务仍使用原快照。`,
+    );
+  };
   const previewAspectRatio = `${activeVersion?.width ?? slotRule?.dimensions.width ?? 1} / ${
     activeVersion?.height ?? slotRule?.dimensions.height ?? 1
   }`;
@@ -292,6 +354,8 @@ export function SlotInspector({
             <StatusChip tone="mode">
               {activeVersion.source === "demo" ? "Demo" : "API"}
             </StatusChip>
+          ) : planningSource ? (
+            <StatusChip tone="mode">{planningSource === "demo" ? "Demo" : "API"}</StatusChip>
           ) : null}
         </div>
       </header>
@@ -423,6 +487,44 @@ export function SlotInspector({
                 />
               </Field>
             )}
+            <div className="slot-inspector__prompt-heading">
+              <div>
+                <strong>模板与复用</strong>
+                <span>按平台、工作流和槽位保存可复用模板。</span>
+              </div>
+              <Button
+                variant="quiet"
+                size="compact"
+                disabled={submitting}
+                onClick={() => setPromptAssetsOpen(true)}
+              >
+                <Library size={14} />
+                Prompt 资产
+              </Button>
+            </div>
+            {industryTemplate && industryGuidance ? (
+              <StatusMessage className="slot-inspector__template-source">
+                <span>
+                  模板来源：{industryTemplate.source === "system"
+                    ? `通用模板 · 系统 v${industryTemplate.version}`
+                    : `通用模板 ＞ ${industryTemplate.name} v${industryTemplate.version}`}
+                </span>
+                {industryTemplate.source === "custom" ? (
+                  <Button
+                    type="button"
+                    variant="quiet"
+                    size="compact"
+                    disabled={submitting || !prompt.trim()}
+                    onClick={savePromptAsIndustryTemplateVersion}
+                  >
+                    保存新版本
+                  </Button>
+                ) : null}
+              </StatusMessage>
+            ) : null}
+            {industryTemplateMessage ? (
+              <StatusMessage tone="success">{industryTemplateMessage}</StatusMessage>
+            ) : null}
             <Field
               label={promptLabel}
               hint={
@@ -463,6 +565,17 @@ export function SlotInspector({
                   ? `${versionState.versions.length} 个历史版本，只导出当前版本。`
                   : "生成首张图片后，可在这里切换、下载或继续编辑。"}
               </span>
+              {versionState && versionState.versions.length >= 2 ? (
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="compact"
+                  onClick={() => setCompareOpen(true)}
+                >
+                  <Columns3 size={14} />
+                  对比
+                </Button>
+              ) : null}
             </div>
             {versionState && versionState.versions.length > 0 ? (
               <VersionStrip
@@ -499,19 +612,25 @@ export function SlotInspector({
             {slot.strategy ? (
               <section className="slot-inspector__strategy" aria-labelledby="slot-strategy-title">
                 <div className="slot-inspector__section-title">
-                  <strong id="slot-strategy-title">策划说明</strong>
+                  <strong id="slot-strategy-title">AI 策略解读</strong>
+                  <span className="slot-inspector__section-hint">
+                    根据商品事实、参考图和{rulePack.label}规则生成
+                  </span>
                 </div>
-                <p>{slot.strategy}</p>
+                <div className="slot-inspector__strategy-card">
+                  <p>{slot.strategy}</p>
+                </div>
               </section>
             ) : null}
             <section className="slot-inspector__evidence" aria-labelledby="slot-evidence-title">
               <div className="slot-inspector__section-title">
                 <ShieldAlert size={15} />
                 <strong id="slot-evidence-title">{evidenceLabel}</strong>
+                <span className="slot-inspector__section-hint">策划决策的关键依据</span>
               </div>
-              <ul>
-                {slot.evidence.map((item) => (
-                  <li key={item}>{item}</li>
+              <ul className="slot-inspector__evidence-list">
+                {slot.evidence.map((item, i) => (
+                  <li key={i}>{item}</li>
                 ))}
               </ul>
             </section>
@@ -678,6 +797,34 @@ export function SlotInspector({
           onSave={saveMaskEdit}
         />
       ) : null}
+      {versionState ? (
+        <VersionCompareDialog
+          open={compareOpen}
+          versions={versionState.versions}
+          assets={assets}
+          onClose={() => setCompareOpen(false)}
+        />
+      ) : null}
+      <PromptAssetCenterDialog
+        open={promptAssetsOpen}
+        scope={{
+          platformId: rulePack.platformId,
+          workflowId: promptAssetWorkflowId,
+          slotKey: slot.slotKey,
+        }}
+        slotLabel={slotRule?.label ?? slot.slotKey}
+        baselinePrompt={slot.prompt}
+        currentPrompt={prompt}
+        aiRewriteDisabledReason={
+          copilotDisabledReason ?? (copilotLocked ? copilotLockReason ?? "Copilot 当前不可用。" : undefined)
+        }
+        onApply={(nextPrompt) => {
+          setPrompt(nextPrompt);
+          setSaveState("idle");
+        }}
+        onAIRewrite={() => onCopilotCommand("rewrite-prompt")}
+        onClose={() => setPromptAssetsOpen(false)}
+      />
     </div>
   );
 }

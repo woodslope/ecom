@@ -176,7 +176,7 @@ describe("platform product picker", () => {
     expect(amazon).toContain("继续当前商品");
     expect(amazon).toContain("恢复该商品");
     expect(amazon).toContain("dialog--sidebar");
-    expect(amazon).toContain("手动填写 / 粘贴");
+    expect(amazon).toContain("手动录入");
     expect(amazon).toContain("云感颈枕");
 
     const sparse = renderToStaticMarkup(
@@ -225,6 +225,6 @@ describe("platform product picker", () => {
     expect(taobaoEmpty).toContain("还没有商品档案");
     expect(taobaoEmpty).toContain("新建商品");
     expect(taobaoEmpty).toContain("打开资料库");
-    expect(taobaoEmpty).not.toContain("手动填写 / 粘贴");
+    expect(taobaoEmpty).not.toContain("手动录入");
   });
 });

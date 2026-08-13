@@ -49,6 +49,9 @@ describe("settings UI", () => {
     expect(markup).toContain('aria-label="运行模式"');
     expect(markup).toContain('aria-label="API Key"');
     expect(markup).toContain('type="password"');
+    expect(markup).toContain('aria-label="显示文本 API Key"');
+    expect(markup).toContain('aria-label="显示图片 API Key"');
+    expect(markup.match(/settings-secret-field/g)).toHaveLength(2);
     expect(markup.match(/sk-password-field-only/g)).toHaveLength(1);
     expect(markup).toContain("测试连接");
     expect(markup).toContain("保存设置");

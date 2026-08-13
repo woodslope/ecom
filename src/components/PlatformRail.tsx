@@ -44,10 +44,12 @@ export function PlatformRail({
   activeItem,
   onChange,
   runtimeBadge,
+  compact = false,
 }: {
   activeItem: NavigationItemId;
   onChange: (item: NavigationItemId) => void;
   runtimeBadge?: ReactNode;
+  compact?: boolean;
 }) {
   const settingsItem = navigationItems.find((item) => item.id === "settings")!;
 
@@ -76,7 +78,11 @@ export function PlatformRail({
   };
 
   return (
-    <aside className="platform-rail" aria-label="平台和全局工具">
+    <aside
+      className={`platform-rail${compact ? " platform-rail--compact" : ""}`}
+      aria-label="平台和全局工具"
+      data-compact={compact || undefined}
+    >
       <div className="rail-brand" title="电商工作台">
         <div className="brand-tile">
           <Boxes size={21} strokeWidth={1.9} />
@@ -98,6 +104,10 @@ export function PlatformRail({
       </nav>
       <div className="platform-rail__footer">
         {runtimeBadge ? <div className="platform-rail__runtime">{runtimeBadge}</div> : null}
+        <div className="platform-rail__privacy" title="你的商品资料和图片仅保存在当前浏览器中，不会上传到任何服务器。API Key 不会被写入备份或静态构建。">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span>本地优先</span>
+        </div>
         {renderItem(settingsItem)}
       </div>
     </aside>

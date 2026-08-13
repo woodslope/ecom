@@ -70,14 +70,15 @@ Digital cobalt represents the active workflow, selection, and primary action. AP
 ### Spacing And Dimensions
 
 - Spacing scale: `4, 8, 12, 16, 20, 24, 32` → CSS `--space-1` … `--space-7`.
-- Desktop workflow rail: `208px` → CSS `--rail-width`; labels stay visible so tooltips are optional.
+- Desktop workflow rail: `208px` → CSS `--rail-width`; planned production workspaces switch to `72px` → CSS `--rail-width-compact`, while overview, library, intake, and history retain readable labels.
 - Top context band: not rendered; the page toolbar owns context and actions.
 - Normal controls: `40px` high → CSS `--control-height`.
 - Compact controls and icon buttons: `32px` high → CSS `--control-height-compact`; icon buttons remain square.
 - Slot thumbnail: stable aspect ratio from its rule pack; no content-driven resizing.
-- Desktop workbench default columns: product source `minmax(290px, 0.82fr)`, slots `minmax(340px, 1.06fr)`, inspector `minmax(320px, 0.96fr)`.
-- Keep three columns at `1100px` and above, with slightly tighter column mins between `1100px` and `1320px`.
-- Between `900px` and `1099px`, use compact desktop mode: slots + inspector stay in two columns, while product source opens as an overlay drawer.
+- Expanded-source columns remain product source `minmax(290px, 0.82fr)`, slots `minmax(340px, 1.06fr)`, inspector `minmax(320px, 0.96fr)`.
+- Once a plan exists, every supported desktop width defaults to the two-column slots + inspector canvas; product source opens only when requested.
+- Once a plan exists, the left navigation also enters compact production mode. Icons remain stable, labels move to tooltips, and leaving the planned platform restores the full `208px` rail.
+- Between `900px` and `1099px`, the same two-column production canvas remains primary and the source uses its compact drawer treatment.
 - Main content max width: about `1600px` inside the full-viewport shell.
 
 ### Surfaces
@@ -110,15 +111,15 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - The application fills the viewport. The cool-grey canvas lives inside the workspace content area, not as a surrounding page mat.
 - The dark rail remains fixed at the left edge of the shell.
 - No global top context bar. Content uses the full height beside the left rail.
-- Runtime mode is shown on the left rail footer, not in a top chrome band.
+- Runtime mode is shown on the left rail footer, not in a top chrome band or persistent workspace banner.
 - Page headings are compact single-line toolbars; no eyebrow marketing copy or permanent helper paragraphs.
 - Field hints are placeholders or validation errors, not permanent helper lines under every input.
 - Panel descriptions are omitted by default.
 - Product source, delivery slots, and inspector each own their internal scrolling in the shared Amazon/Taobao production shell. The platform workspace itself does not page-scroll.
 - Overview and simple pages may page-scroll; platform workspaces use a fixed shell with column-level scroll regions.
 - Overview places “当前下一步” beside the metric strip as the primary action cluster.
-- Amazon and Taobao share one compact four-stage workflow strip: `准备资料 → 检查策划 → 逐图生产 → 交付检查`. Preparation and production surfaces use the same stage language and progress ownership; platform-specific inputs and tools remain local. The strip is not a second content panel and must not repeat the primary action.
-- Amazon and Taobao place one shared product-context bar directly above every preparation and production state. It owns current product identity, platform progress, product switching, and the route to library management. Switching products restores that product's saved platform workspace; only an explicit source reload may replace task-local input.
+- Amazon and Taobao share one compact stage control in the workspace toolbar: `准备资料 → 检查策划 → 逐图生产 → 交付检查`. The current stage remains visible; the complete four-stage path opens on demand and must not occupy a permanent second row.
+- Amazon and Taobao place the shared product context inside the workspace toolbar. It owns current product identity, task details, product switching, and the route to library management without creating a second chrome band. Switching products restores that product's saved platform workspace; only an explicit source reload may replace task-local input.
 - Dense task-input and analysis details open through the shared sidebar `Dialog` variant. Expanding details must not push the production grid or create a second page scroll owner.
 - Amazon with no active plan uses a focused intake surface: session parameters, Listing source, references, and one planning action. It may create a draft product/session atomically and must not render empty production columns.
 - Amazon Listing source belongs to the platform session. Differences from shared facts stay visible and require an explicit `同步到共享商品资料` action.
@@ -136,9 +137,9 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 
 ## 5. Navigation
 
-- Desktop navigation is a readable workflow rail, not an icon-only launcher. It shows three groups: `工作台`, `生产流程`, and `记录`.
+- Desktop navigation is a readable workflow rail on overview, library, intake, and history. A planned Amazon or Taobao workspace may use the compact `72px` icon rail to prioritize production media.
 - `资料库` carries the descriptor `档案 · 资料与参考图`; it is the shared management center, not a mandatory page-navigation first step.
-- Every rail item owns an icon, primary label, and one short scope descriptor. Tooltips may remain as a fallback but cannot be the only explanation.
+- Every rail item owns an icon, primary label, and one short scope descriptor in expanded mode. Compact production mode may hide the copy only when every item exposes the same label through a tooltip and `aria-label`.
 - Active navigation is location only: use one shared active row treatment and a single left accent line. Do not show persistent platform-color markers on inactive items.
 - Runtime mode and settings live in the rail footer; they do not compete with the production order.
 - Below the desktop minimum width, show the desktop-only gate instead of a mobile navigation.
@@ -172,7 +173,9 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 ### Slots and cards
 
 - Delivery slots are repeated cards and may contain one bounded media surface.
-- Each slot shows key, title, purpose, status, current version count, and local action.
+- Each slot shows key, title, status, target dimensions, current version count, and local action.
+- Generated slots use the active version asset as their thumbnail. A stale version remains visible with a stale status instead of falling back to a generic icon.
+- Slot lists use an auto-fitting visual grid: two columns when the slot panel has room and one column at compact widths.
 - Selected, loading, error, success, disabled, and long-copy states share the same outer dimensions.
 - A selected card must not make nested actions unreadable.
 - Do not place cards around entire page regions or nest decorative cards.
@@ -185,6 +188,13 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - Current operation feedback uses shared inline status surfaces. Add a Toast primitive only when transient feedback has a real repeated need and can maintain safe distance from fixed actions.
 - Tooltips name unfamiliar rail and icon actions; required workflow information cannot live only in a tooltip.
 - Menus and popovers share border, radius, shadow, active, disabled, and z-index rules.
+
+### Prompt assets
+
+- The slot inspector owns the `Prompt 资产` entry. It opens the shared sidebar dialog and must not create a nested centered modal.
+- Prompt templates are scoped by platform, workflow, and slot key. Applying one changes only the inspector draft until the user explicitly saves the slot.
+- Each custom template retains numbered revisions, may be marked as the scoped default, and can be deleted without modifying an already saved slot.
+- `恢复策划 Prompt` clears the custom default and restores the current plan's Prompt. `AI 改写当前 Prompt` reuses the existing Copilot lock, error, and cancellation behavior.
 
 ### Media
 
@@ -232,7 +242,7 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - When a module owns its own chrome bands (e.g. filled 槽位检查器), use `Panel` with `hideHeader` rather than a parallel DOM structure.
 - `PlatformRail` owns workflow grouping, visible scope descriptors, active-location treatment, and runtime/settings footer placement.
 - `WorkflowStepper` and `domain/workspace/platform-stage.ts` own the shared four-stage language, current-stage mapping, and completed-slot progress for Amazon and Taobao. Platform pages must not reimplement their own step labels.
-- `ProductContextBar` owns current product identity and product/library actions across Amazon and Taobao preparation and production states. Page headers and source selectors must not duplicate those actions.
+- `ProductContextBar` owns current product identity and product/library actions inside the shared Amazon/Taobao toolbar. Page headers and source selectors must not duplicate those actions.
 - `AmazonSessionControls` owns the stable Listing/A+ parameters and the single A+ module-summary/dialog path. A+ rows must not move between inline and dialog owners based on whether a plan exists; dialog edits commit only through `应用编排`.
 - `StyleReferencePicker` owns optional style-board selection, custom-board preview, and delete confirmation. `StyleReferenceEditorDialog` creates a new current-product board; it must not label that action as editing an existing board. `AmazonSessionControls` continues to own the base text preset.
 - `SlotInspector` owns one fixed four-view switcher for `文案 / 版本 / 检查 / Copilot` between the identity header and scrollable body; only one detail view is active, and the current result remains visible in every view. Strategy, evidence, negative constraints, and compliance belong to `检查`; version selection and image actions belong to `版本`. Do not reintroduce independent accordions for these concerns.
@@ -300,8 +310,8 @@ Still out of scope for this minimal loop (add only when pain is repeated): Story
 ### Completed
 
 - Commerce Ops tokens, typography, spacing, radius, borders, state colors, and the `208px` rail are owned by the single top `:root` block.
-- Amazon and Taobao use the same three-column production shell at `1100px` and above, slots + inspector with a source drawer from `900px` to `1099px`, and the desktop-only gate at `899px` and below.
-- Amazon and Taobao preparation/production states use the same four-stage workflow strip; browser checks protect the Taobao `检查策划 → 逐图生产` transition as a representative cross-platform consumer.
+- After planning, Amazon and Taobao default to slots + inspector at every supported desktop width; product source opens on demand and may temporarily restore the three-column shell where space permits. The desktop-only gate remains at `899px` and below.
+- Amazon and Taobao preparation/production states use the same toolbar stage control with an on-demand four-stage path; browser checks protect the Taobao `检查策划 → 逐图生产` transition as a representative cross-platform consumer.
 - Listing / A+ and settings mode selection use `SegmentedControl`; operating modes use neutral `StatusChip` semantics.
 - A+ module setup now uses one compact summary and one staged dialog before and after planning; base text style and optional hidden style-board attachment have explicit, synchronized ownership and scoped create/delete copy.
 - Generated results use fixed-ratio `MediaSlot`; the inspector footer uses `ActionBar` and keeps save / generate actions visible without covering Prompt content.

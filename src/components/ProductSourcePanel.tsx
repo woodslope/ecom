@@ -172,7 +172,7 @@ export function ProductSourcePanel({
     setSaveState("idle");
     setListingPasteTone("success");
     setListingPasteMessage(
-      `${parsed.summary}。已写入草稿，请检查后点「保存商品资料」。`,
+      `${parsed.summary}。已写入草稿，请检查后点「保存资料」。`,
     );
   };
 
@@ -317,7 +317,7 @@ export function ProductSourcePanel({
           ) : null}
           <Button type="submit" variant="secondary" disabled={controlsDisabled || !dirty}>
             <Save size={15} />
-            {saveState === "saving" || loading ? "保存中" : "保存商品资料"}
+            {saveState === "saving" || loading ? "保存中" : "保存资料"}
           </Button>
         </form>
       </div>

@@ -39,6 +39,7 @@ export function AppShell({
   onExportLocalBackup,
   onImportLocalBackup,
   onSettingsOpenChange,
+  compactRail = false,
   children,
 }: {
   activeItem: NavigationItemId;
@@ -66,6 +67,7 @@ export function AppShell({
   onImportLocalBackup?: (file: File) => Promise<string>;
   /** Notify parent when settings dialog opens/closes (e.g. demo banner → open settings). */
   onSettingsOpenChange?: (open: boolean) => void;
+  compactRail?: boolean;
   children: ReactNode;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -137,7 +139,10 @@ export function AppShell({
   }, [desktopSupported]);
 
   return (
-    <div className="app-frame" data-testid="app-frame">
+    <div
+      className={`app-frame${compactRail ? " app-frame--compact-rail" : ""}`}
+      data-testid="app-frame"
+    >
       <div
         className="app-desktop-content"
         data-testid="app-desktop-content"
@@ -147,6 +152,7 @@ export function AppShell({
         <PlatformRail
           activeItem={activeItem}
           onChange={changeDestination}
+          compact={compactRail}
           runtimeBadge={
             <button
               type="button"

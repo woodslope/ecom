@@ -132,17 +132,17 @@ export function DepositToLibraryDialog({
   return (
     <Dialog
       open
-      title="沉淀到资料库"
+      title="保存到资料库"
       eyebrow="保存跨平台商品事实"
       className="deposit-dialog"
       onClose={loading ? () => undefined : onClose}
-      footer={<><Button variant="secondary" disabled={loading} onClick={onClose}>取消</Button><Button type="submit" form="deposit-form" disabled={loading}><ArchiveRestore size={15} />{loading ? "正在沉淀" : "确认沉淀"}</Button></>}
+      footer={<><Button variant="secondary" disabled={loading} onClick={onClose}>取消</Button><Button type="submit" form="deposit-form" disabled={loading}><ArchiveRestore size={15} />{loading ? "保存中" : "确认保存"}</Button></>}
     >
       <form id="deposit-form" className="deposit-form" onSubmit={submit}>
         {validationError ? <StatusMessage tone="danger">{validationError}</StatusMessage> : null}
         <div className="deposit-mode" role="group" aria-label="沉淀模式">
-          <Button type="button" variant={mode === "create" ? "primary" : "secondary"} onClick={() => setMode("create")}>新建商品档案</Button>
-          <Button type="button" variant={mode === "merge" ? "primary" : "secondary"} disabled={projects.length === 0} onClick={() => setMode("merge")}>合并到已有商品</Button>
+          <Button type="button" variant={mode === "create" ? "primary" : "secondary"} onClick={() => setMode("create")}>新建档案</Button>
+          <Button type="button" variant={mode === "merge" ? "primary" : "secondary"} disabled={projects.length === 0} onClick={() => setMode("merge")}>合并商品</Button>
         </div>
         {mode === "create" ? <Field label="档案名称"><input value={name} onChange={(event) => setName(event.target.value)} /></Field> : <Field label="目标商品"><Select value={targetProjectId} onChange={(event) => setTargetProjectId(event.target.value)}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</Select></Field>}
 

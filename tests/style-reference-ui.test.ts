@@ -48,7 +48,7 @@ describe("style reference UI ownership", () => {
 
     expect(markup).toContain('aria-label="附加风格板"');
     expect(markup).toContain("叠加在基础风格上");
-    expect(markup).toContain("新建自定义风格");
+    expect(markup).toContain("新建风格");
     expect(markup).toContain("当前商品的自定义风格板");
     expect(markup).toContain("删除当前自定义风格");
     expect(markup).not.toContain("编辑为我的风格");

@@ -15,6 +15,7 @@ export interface OverviewNextAction {
  */
 export function resolveOverviewNextAction(input: {
   hasActiveProject: boolean;
+  hasUsableFacts: boolean;
   assetCount: number;
   preferredPlatform: PlatformId;
 }): OverviewNextAction {
@@ -27,9 +28,9 @@ export function resolveOverviewNextAction(input: {
   }
 
   if (input.preferredPlatform === "taobao") {
-    if (input.assetCount === 0) {
+    if (!input.hasUsableFacts && input.assetCount === 0) {
       return {
-        title: "补参考图后进入淘宝商品生产",
+        title: "补商品资料或参考图后进入淘宝生产",
         actionLabel: "进入淘宝 / 天猫",
         destination: "taobao",
       };
@@ -41,9 +42,9 @@ export function resolveOverviewNextAction(input: {
     };
   }
 
-  if (input.assetCount === 0) {
+  if (!input.hasUsableFacts && input.assetCount === 0) {
     return {
-      title: "补参考图后进入 Amazon 出图",
+      title: "补商品资料或参考图后进入 Amazon",
       actionLabel: "进入 Amazon",
       destination: "amazon",
     };

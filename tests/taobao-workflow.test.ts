@@ -113,6 +113,7 @@ describe("Taobao product workflow", () => {
       productText: "商品名：旅行颈枕 Pro\n卖点：可折叠收纳",
       files: [],
       selectedReferenceAssetIds: [asset.metadata.id],
+      stylePresetId: "soft-lifestyle",
     });
 
     expect(session?.sourceInput.taobaoProduct).toEqual({
@@ -122,6 +123,10 @@ describe("Taobao product workflow", () => {
     expect(session?.taobaoAnalysis).toMatchObject({
       suggestedProductName: "旅行颈枕 Pro",
       sellingPoints: ["慢回弹", "可折叠收纳"],
+    });
+    expect(session?.options).toEqual({
+      platformId: "taobao",
+      stylePresetId: "soft-lifestyle",
     });
     expect(store.getState().activeProject?.facts).toEqual(facts);
     // Analysis now continues into planning (Amazon-like one-shot entry).
@@ -134,6 +139,10 @@ describe("Taobao product workflow", () => {
     expect(restored.getState().sessions[0]?.taobaoAnalysis?.suggestedProductName).toBe(
       "旅行颈枕 Pro",
     );
+    expect(restored.getState().sessions[0]?.options).toEqual({
+      platformId: "taobao",
+      stylePresetId: "soft-lifestyle",
+    });
     expect(restored.getState().plans.taobao?.slots).toHaveLength(12);
     expect(store.getState().sessions[0]?.taobaoAnalysis?.suggestedProductName).toBe(
       "旅行颈枕 Pro",

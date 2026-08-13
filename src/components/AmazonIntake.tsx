@@ -20,6 +20,8 @@ import type {
 } from "../domain/workspace/project-workspace";
 import type { StartAmazonSessionInput, WorkbenchAsset } from "../store/workbench-store";
 import type { StyleReferenceDraft } from "../domain/assets/style-reference";
+import { resolvePlanningRulePack } from "../domain/planning/resolve-planning-pack";
+import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
 import {
   AmazonSessionControls,
   amazonOptionsFromControls,
@@ -30,6 +32,7 @@ import { ProductContextBar } from "./ProductContextBar";
 import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
 import { Button, Field, Panel, StatusMessage } from "./ui";
 import { StyleReferencePicker } from "./StyleReferencePicker";
+import { IndustryTemplateSelector } from "./IndustryTemplateSelector";
 
 function controlsFromSession(
   session?: PlatformSession,
@@ -118,6 +121,9 @@ export function AmazonIntake({
   const [selectedStyleReferenceId, setSelectedStyleReferenceId] = useState<string | null>(
     session?.selectedStyleReferenceId ?? `preset:${controlsFromSession(session, plannerMode).stylePresetId}`,
   );
+  const [industryTemplate, setIndustryTemplate] = useState<IndustryTemplateSnapshot | undefined>(
+    session?.industryTemplate,
+  );
   const [syncStatus, setSyncStatus] = useState<"idle" | "saved" | "error">("idle");
   const [dirty, setDirty] = useState(false);
   const submittingDraft = useRef(false);
@@ -141,6 +147,7 @@ export function AmazonIntake({
       session?.selectedStyleReferenceId ??
         `preset:${controlsFromSession(session, plannerMode).stylePresetId}`,
     );
+    setIndustryTemplate(session?.industryTemplate);
     setFiles([]);
     setSyncStatus("idle");
     setDirty(false);
@@ -154,7 +161,17 @@ export function AmazonIntake({
     session?.sourceInput.listingText,
     session?.selectedReferenceAssetIds,
     session?.selectedStyleReferenceId,
+    session?.industryTemplate,
   ]);
+
+  const templateScope = useMemo(() => ({
+    platformId: "amazon" as const,
+    workflowId: controls.plannerMode === "aplus" ? "amazon-aplus" as const : "amazon-listing" as const,
+  }), [controls.plannerMode]);
+  const templateRulePack = useMemo(
+    () => resolvePlanningRulePack("amazon", amazonOptionsFromControls(controls)).rulePack,
+    [controls],
+  );
 
   useEffect(() => {
     onDirtyChange?.(dirty ? "Amazon 任务输入有未提交修改。" : null);
@@ -218,6 +235,7 @@ export function AmazonIntake({
         files,
         selectedReferenceAssetIds,
         selectedStyleReferenceId,
+        ...(industryTemplate ? { industryTemplate } : {}),
         options: amazonOptionsFromControls(controls),
       });
       if (result) {
@@ -318,6 +336,14 @@ export function AmazonIntake({
         }
       />
 
+      <IndustryTemplateSelector
+        scope={templateScope}
+        rulePack={templateRulePack}
+        value={industryTemplate}
+        disabled={disabled}
+        onChange={setIndustryTemplate}
+      />
+
       <div className="amazon-intake__grid">
         <Panel title="Listing 原文" className="amazon-intake__listing">
           <Field
@@ -352,7 +378,7 @@ export function AmazonIntake({
                   setSyncStatus(await onSyncListingFacts(listingText) ? "saved" : "error")
                 }
               >
-                同步到共享商品资料
+                同步商品资料
               </Button>
             </StatusMessage>
           ) : null}

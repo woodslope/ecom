@@ -12,6 +12,8 @@ import type { PlatformRulePack, PlatformSlotRule } from "../domain/platforms/typ
 import type { PlanningInputAssessment } from "../domain/planning/input-assessment";
 import { getAmazonMarketplaceByLocale } from "../domain/platforms/amazon-marketplaces";
 import { isAPlusExternalTextSlotRule } from "../domain/platforms/amazon-catalog";
+import { resolvePromptProfile } from "../domain/prompt-profiles/prompt-profiles";
+import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
@@ -414,6 +416,7 @@ function englishPromptFor(
   rule: PlatformSlotRule,
   visibleCopy: string,
   evidence: readonly string[],
+  profileStrategy?: string | null,
 ): string {
   const missingEvidence = evidence.filter((item) => item.startsWith("待补资料"));
   const missingInstruction = missingEvidence.length > 0
@@ -434,6 +437,9 @@ function englishPromptFor(
     `Verified product evidence (preserve supplied values): ${evidence.map(englishEvidenceItem).join("; ")}.`,
     missingInstruction,
     copyInstruction,
+    profileStrategy
+      ? `Style & composition direction: ${profileStrategy}`
+      : "",
     "Write model instructions in natural English and show only product appearance, material, structure, accessories, and usage supported by the provided facts.",
   ]
     .filter(Boolean)
@@ -446,9 +452,14 @@ function promptFor(
   rule: PlatformSlotRule,
   visibleCopy: string,
   evidence: readonly string[],
+  profileStrategy?: string | null,
+  templateGuidance?: string,
 ): string {
   if (rulePack.promptLanguage === "en") {
-    return englishPromptFor(project, rulePack, rule, visibleCopy, evidence);
+    const prompt = englishPromptFor(project, rulePack, rule, visibleCopy, evidence, profileStrategy);
+    return templateGuidance
+      ? `${prompt} Apply the selected reusable industry direction for this slot, but preserve only facts verified for the current product.`
+      : prompt;
   }
 
   const copyInstruction = visibleCopy
@@ -470,6 +481,10 @@ function promptFor(
     `事实依据：${evidence.join("；")}。`,
     missingInstruction,
     copyInstruction,
+    profileStrategy
+      ? `风格与构图方向：${profileStrategy}`
+      : "",
+    templateGuidance ? `行业模板方向：${templateGuidance}` : "",
     "只根据已提供的商品事实表现外观、材质、结构、配件和使用结果。",
   ]
     .filter(Boolean)
@@ -480,6 +495,7 @@ function negativePromptFor(
   project: PlanningProjectFacts,
   rulePack: PlatformRulePack,
   rule: PlatformSlotRule,
+  templateNegativeGuidance?: string,
 ): string {
   if (rulePack.promptLanguage === "en") {
     const forbiddenClaims = (project.forbiddenClaims ?? []).map(
@@ -500,11 +516,19 @@ function negativePromptFor(
       "Do not invent product facts, unsupported parameters, accessories, certifications, or usage results",
       ...slotGuardrails,
       ...forbiddenClaims,
+      ...(templateNegativeGuidance
+        ? ["Do not introduce any industry-template detail that is unsupported by the current product evidence"]
+        : []),
     ].join("; ");
   }
 
   const forbiddenClaims = (project.forbiddenClaims ?? []).map((claim) => `禁用声明：${claim}`);
-  return [...rulePack.promptGuardrails, ...rule.complianceReminders, ...forbiddenClaims].join("；");
+  return [
+    ...rulePack.promptGuardrails,
+    ...rule.complianceReminders,
+    ...forbiddenClaims,
+    ...(templateNegativeGuidance ? [templateNegativeGuidance] : []),
+  ].join("；");
 }
 
 function throwIfAborted(signal: AbortSignal): void {
@@ -550,6 +574,7 @@ export class DemoPlanner implements PlannerEngine {
     _referenceImages?: readonly PlanningReferenceImage[],
     amazonOptions?: AmazonPlanningRequestOptions,
     _inputAssessment?: PlanningInputAssessment,
+    industryTemplate?: IndustryTemplateSnapshot,
   ): Promise<PlatformPlan> {
     throwIfAborted(signal);
     await waitForDelay(this.delayMs, signal);
@@ -567,11 +592,20 @@ export class DemoPlanner implements PlannerEngine {
       amazonSession = legacy.amazonSession;
     }
 
+    const promptProfile = resolvePromptProfile(amazonOptions?.stylePresetId);
+    const profileStrategyPrefix = promptProfile
+      ? `[方案：${promptProfile.label}] `
+      : "";
+    const profileStrategyHint = promptProfile
+      ? promptProfile.planningStrategy.direction
+      : null;
+
     const evidenceGroups = classifyProjectEvidence(project);
     const candidate: PlatformPlanCandidate = {
       platformId: effectivePack.platformId,
       source: "demo",
       slots: effectivePack.slots.map((rule) => {
+        const industrySlot = industryTemplate?.slots.find((slot) => slot.slotKey === rule.key);
         const slotEvidence = evidenceForRule(project, rule, evidenceGroups);
         const visibleCopy = visibleCopyFor(project, effectivePack, rule, slotEvidence[0]);
         const externalText = effectivePack.platformId === "amazon" && isAPlusExternalTextSlotRule(rule)
@@ -588,10 +622,28 @@ export class DemoPlanner implements PlannerEngine {
           slotKey: rule.key,
           visibleCopy,
           ...(externalText ? { externalText } : {}),
-          strategy: strategyFor(effectivePack, rule),
+          strategy: [
+            profileStrategyPrefix + strategyFor(effectivePack, rule),
+            industryTemplate && industrySlot
+              ? `行业模板：${industryTemplate.name} v${industryTemplate.version}。${industrySlot.guidance}`
+              : "",
+          ].filter(Boolean).join(" "),
           evidence: slotEvidence,
-          prompt: promptFor(project, effectivePack, rule, visibleCopy, slotEvidence),
-          negativePrompt: negativePromptFor(project, effectivePack, rule),
+          prompt: promptFor(
+            project,
+            effectivePack,
+            rule,
+            visibleCopy,
+            slotEvidence,
+            profileStrategyHint,
+            industrySlot?.guidance,
+          ),
+          negativePrompt: negativePromptFor(
+            project,
+            effectivePack,
+            rule,
+            industrySlot?.negativeGuidance,
+          ),
         };
       }),
       ...(amazonSession ? { amazonSession } : {}),

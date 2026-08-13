@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   FileText,
   ImagePlus,
@@ -55,13 +55,14 @@ import type { GenerationTarget } from "./GenerationActions";
 import { Button, EmptyState, IconButton, Panel, StatusChip, StatusMessage } from "./ui";
 
 export function workspaceDraftReason(sourceDirty: boolean, slotDirty: boolean): string | null {
-  if (sourceDirty) return "商品资料有未保存修改，请先保存商品资料。";
+  if (sourceDirty) return "商品资料有未保存修改，请先保存资料。";
   if (slotDirty) return "当前槽位有未保存修改，请先保存文案与提示词。";
   return null;
 }
 
 export function shouldDefaultCollapseSource(viewportWidth: number, hasPlan: boolean): boolean {
-  return hasPlan && viewportWidth < 1100;
+  void viewportWidth;
+  return hasPlan;
 }
 
 export function PlatformWorkspace({
@@ -116,6 +117,7 @@ export function PlatformWorkspace({
   onStartBatch,
   onOpenHistory,
   batchJob,
+  contextBar,
 }: {
   platform: PlatformId;
   activeProject: ProductProject | null;
@@ -178,6 +180,7 @@ export function PlatformWorkspace({
   onStartBatch?: () => void;
   onOpenHistory?: () => void;
   batchJob?: ExecutionJob;
+  contextBar?: ReactNode;
 }) {
   const rulePack = resolveRulePackForPlan(platform, plan);
   const isAmazon = platform === "amazon";
@@ -531,11 +534,9 @@ export function PlatformWorkspace({
 
   const displayedStage = planNeedsRefresh ? "review" : platformStage;
   const inspectorPrimaryAction = isAmazon ? amazonPrimaryAction : platformPrimaryAction;
-  const shellBadge = plan ? (
-    <StatusChip tone="mode">{plan.source === "demo" ? "Demo" : "API"}</StatusChip>
-  ) : (
+  const shellBadge = !plan ? (
     <StatusChip tone="neutral">{isAmazon ? "主路径" : "商品生产包"}</StatusChip>
-  );
+  ) : undefined;
   const shellControls = isAmazon ? (
     <AmazonSessionControls
       value={amazonSession}
@@ -589,7 +590,7 @@ export function PlatformWorkspace({
                     ? "排队"
                     : "已暂停"
               }`
-            : `批量生成剩余槽位（${pendingSlotCount}）`}
+            : `批量生成（${pendingSlotCount}）`}
         </Button>
       ) : null}
       {batchJob && onOpenHistory ? (
@@ -635,6 +636,7 @@ export function PlatformWorkspace({
       stage={displayedStage}
       completedSlots={completedSlots}
       totalSlots={plan?.slots.length ?? 0}
+      contextBar={contextBar}
       badge={shellBadge}
       controls={shellControls}
       actions={shellActions}
@@ -785,6 +787,7 @@ export function PlatformWorkspace({
             <SlotBoard
               rulePack={rulePack}
               plan={plan}
+              assets={assets}
               selectedSlotKey={selectedSlotKey}
               versionStates={slotVersionStates}
               planningInputSignature={currentPlanInputSignature}
@@ -847,6 +850,9 @@ export function PlatformWorkspace({
             <SlotInspector
               rulePack={rulePack}
               slot={selectedSlot}
+              workflowId={productionSession?.workflowId}
+              industryTemplate={productionSession?.industryTemplate}
+              planningSource={plan?.source}
               saving={planning || loading}
               versionState={slotVersionStates?.[selectedSlot.slotKey]}
               assets={assets}
@@ -918,6 +924,16 @@ export function PlatformWorkspace({
           </Panel>
         )}
       </div>
+
+      {/* Production complete banner: shown when all slots are done */}
+      {plan && completedSlots === plan.slots.length && plan.slots.length > 0 ? (
+        <div className="production-complete-banner" role="status">
+          <div className="production-complete-banner__content">
+            <strong>🎉 所有 {plan.slots.length} 个槽位已生成完毕</strong>
+            <p>在下方导出 ZIP 包或切换到「生产记录」查看完整 Run 历史。</p>
+          </div>
+        </div>
+      ) : null}
 
       {/* UI_STYLE_GUIDE: delivery strip hidden until first usable output; single-line unless error. */}
       {(completedSlots > 0 || Boolean(exportError)) ? (

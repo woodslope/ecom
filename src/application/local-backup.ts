@@ -3,6 +3,9 @@ import { DEFAULT_ASSET_DATABASE_NAME } from "../domain/assets/repository";
 import { DEFAULT_EXECUTION_JOB_DATABASE_NAME } from "../domain/jobs/repository";
 import { DEFAULT_PROJECT_STORAGE_KEY } from "../domain/projects/repository";
 import { DEFAULT_RUN_DATABASE_NAME } from "../domain/runs/repository";
+import { CUSTOM_PROMPT_PROFILES_STORAGE_KEY } from "../domain/prompt-profiles/prompt-profiles";
+import { SLOT_PROMPT_ASSETS_STORAGE_KEY } from "../domain/prompt-profiles/slot-prompt-assets";
+import { INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY } from "../domain/prompt-templates/industry-template-packs";
 import { RUNTIME_SETTINGS_STORAGE_KEY } from "../domain/settings/runtime-settings";
 import { PROJECT_WORKSPACE_STORAGE_PREFIX } from "../domain/workspace/project-workspace";
 import {
@@ -84,6 +87,9 @@ const PREFERENCE_STORAGE_KEYS = new Set([
 ]);
 const EXACT_STORAGE_KEYS = new Set([
   DEFAULT_PROJECT_STORAGE_KEY,
+  CUSTOM_PROMPT_PROFILES_STORAGE_KEY,
+  SLOT_PROMPT_ASSETS_STORAGE_KEY,
+  INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY,
   ...PREFERENCE_STORAGE_KEYS,
 ]);
 

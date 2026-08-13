@@ -108,7 +108,7 @@ describe("project and asset UI contract", () => {
     expect(libraryMarkup).toContain("multiple");
     expect(libraryMarkup).toContain('alt="front.png"');
     expect(libraryMarkup).toContain('aria-label="删除素材 front.png"');
-    expect(sourceMarkup).toContain("保存商品资料");
+    expect(sourceMarkup).toContain("保存资料");
     expect(savingSourceMarkup).toContain("保存中");
     expect((savingSourceMarkup.match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(11);
   });

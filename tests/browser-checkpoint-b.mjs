@@ -68,7 +68,7 @@ async function openAmazonPage(browser, baseUrl) {
   });
   if (await productPicker.isVisible().catch(() => false)) {
     await productPicker
-      .getByRole("button", { name: "手动填写 / 粘贴", exact: true })
+      .getByRole("button", { name: "手动录入", exact: true })
       .click();
     await productPicker.waitFor({ state: "hidden" });
   }
@@ -111,7 +111,7 @@ async function startAmazonPlanning(page) {
   }
   if (outcome === "review") {
     await localizedFactsReview
-      .getByRole("button", { name: "确认并生成图片策划", exact: true })
+      .getByRole("button", { name: "确认并生成策划", exact: true })
       .click();
     const confirmedOutcome = await Promise.race([
       slotCard.waitFor({ state: "visible" }).then(() => "planned"),
