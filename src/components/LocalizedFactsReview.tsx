@@ -72,7 +72,7 @@ export function LocalizedFactsReview({
         </StatusChip>
       </header>
 
-      <StatusMessage tone={draft.status === "pending" ? "warning" : "neutral"}>
+      <StatusMessage tone={draft.status === "pending" ? "warning" : "neutral"} live="polite">
         {draft.status === "pending"
           ? "自动本地化未完成。请检查并手动补充站点语言，品牌、型号、SKU 与数字会继续保持原值。"
           : "确认后，图片策划会固定使用这份站点语言版本；之后修改主档不会自动覆盖当前任务。"}
@@ -88,28 +88,28 @@ export function LocalizedFactsReview({
       </details>
 
       <div className="localized-facts-review__form">
-        <Field label="商品名称">
+        <Field label="商品名称" name="productName">
           <input
             value={facts.productName}
             disabled={disabled || saving}
             onChange={(event) => setFacts({ ...facts, productName: event.target.value })}
           />
         </Field>
-        <Field label="品类">
+        <Field label="品类" name="category">
           <input
             value={facts.category}
             disabled={disabled || saving}
             onChange={(event) => setFacts({ ...facts, category: event.target.value })}
           />
         </Field>
-        <Field label="目标人群">
+        <Field label="目标人群" name="targetAudience">
           <input
             value={facts.targetAudience}
             disabled={disabled || saving}
             onChange={(event) => setFacts({ ...facts, targetAudience: event.target.value })}
           />
         </Field>
-        <Field label="商品描述" className="localized-facts-review__wide">
+        <Field label="商品描述" name="description" className="localized-facts-review__wide">
           <textarea
             rows={4}
             value={facts.description}
@@ -117,7 +117,7 @@ export function LocalizedFactsReview({
             onChange={(event) => setFacts({ ...facts, description: event.target.value })}
           />
         </Field>
-        <Field label="卖点（每行一条）">
+        <Field label="卖点（每行一条）" name="sellingPoints">
           <textarea
             rows={6}
             value={facts.sellingPoints.join("\n")}
@@ -128,7 +128,7 @@ export function LocalizedFactsReview({
             })}
           />
         </Field>
-        <Field label="规格（名称: 值）">
+        <Field label="规格（名称: 值）" name="specifications">
           <textarea
             rows={6}
             value={specifications}

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const guide = readFileSync(new URL("../UI_STYLE_GUIDE.md", import.meta.url), "utf8");
+const indexHtml = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const platformWorkspace = readFileSync(
   new URL("../src/components/PlatformWorkspace.tsx", import.meta.url),
   "utf8",
@@ -20,12 +21,32 @@ const commerceOpsTokens = {
   "primary-hover": "#1d4ed8",
   "primary-soft": "#eaf1ff",
   success: "#0f8b6e",
+  "success-text": "#0b735c",
   warning: "#c88719",
   danger: "#d0443a",
+  "danger-text": "#b8322a",
+  "focus-ring": "#3b82f6",
 };
 
 function cssToken(name: string): string | undefined {
   return styles.match(new RegExp(`--${name}:\\s*([^;]+);`, "i"))?.[1].trim().toLowerCase();
+}
+
+function relativeLuminance(hex: string): number {
+  const channels = hex.slice(1).match(/.{2}/g)?.map((channel) => Number.parseInt(channel, 16) / 255);
+  if (!channels || channels.length !== 3 || channels.some(Number.isNaN)) {
+    throw new Error(`Expected a six-digit hex color, received ${hex}`);
+  }
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrast(foreground: string, background: string): number {
+  const first = relativeLuminance(foreground);
+  const second = relativeLuminance(background);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 }
 
 describe("Commerce Ops visual contract", () => {
@@ -39,7 +60,10 @@ describe("Commerce Ops visual contract", () => {
     }
     expect(cssToken("radius-panel")).toBe("8px");
     expect(cssToken("radius-control")).toBe("6px");
-    expect(cssToken("rail-width")).toBe("208px");
+    expect(cssToken("rail-width")).toBe("72px");
+    expect(styles).toContain("color-scheme: light");
+    expect(styles).not.toContain("--rail-width-compact");
+    expect(indexHtml).toContain('<meta name="theme-color" content="#20252b"');
   });
 
   it("contains no malformed var declarations or legacy override sections", () => {
@@ -54,10 +78,24 @@ describe("Commerce Ops visual contract", () => {
     }
   });
 
+  it("keeps state text and keyboard focus above the contrast gates", () => {
+    expect(contrast(cssToken("success-text")!, cssToken("success-soft")!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(cssToken("danger-text")!, cssToken("danger-soft")!)).toBeGreaterThanOrEqual(4.5);
+    for (const background of ["surface", "page", "rail", "ink-soft"]) {
+      expect(contrast(cssToken("focus-ring")!, cssToken(background)!), background).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it("keeps the core workbench geometry at a single owner", () => {
     expect(styles.match(/^\.workbench-grid\s*\{/gm)).toHaveLength(1);
     expect(styles.match(/^\.slot-inspector\.slot-inspector--shell\s*\{/gm)).toHaveLength(1);
     expect(styles.match(/^\.amazon-session-controls\s*\{/gm)).toHaveLength(1);
+    expect(styles.match(/^\.amazon-intake\s*\{/gm)).toHaveLength(1);
+    expect(styles.match(/^\.workbench-grid--source-collapsed\s*\{/gm)).toHaveLength(1);
+    expect(styles).toMatch(
+      /\.workbench-grid--source-collapsed\s*\{[^}]*grid-template-columns:\s*minmax\(420px,\s*0\.82fr\)\s+minmax\(520px,\s*1\.18fr\)/s,
+    );
+    expect(styles).not.toMatch(/\.(?:overview|library)(?:[-_]|(?=[\s:{>,]))/);
   });
 
   it("does not reference undeclared visual tokens", () => {

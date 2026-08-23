@@ -446,10 +446,11 @@ export function areAPlusModuleSpecsEquivalent(
 }
 
 const LISTING_SLOT_META: Readonly<
-  Record<string, { label: string; purpose: string; planningHints: readonly string[] }>
+  Record<string, { label: string; uiLabel: string; purpose: string; planningHints: readonly string[] }>
 > = Object.freeze({
   MAIN: Object.freeze({
     label: "Main image",
+    uiLabel: "主图",
     purpose: "准确展示一个完整、可识别的在售商品主体。",
     planningHints: Object.freeze([
       "使用纯白背景",
@@ -460,31 +461,37 @@ const LISTING_SLOT_META: Readonly<
   }),
   PT01: Object.freeze({
     label: "Core benefit",
+    uiLabel: "核心卖点",
     purpose: "用清晰的信息图说明最重要的产品利益点。",
     planningHints: Object.freeze(["只突出一个核心利益点", "使用短标题和可验证证据"]),
   }),
   PT02: Object.freeze({
     label: "Feature proof",
+    uiLabel: "功能证明",
     purpose: "解释关键结构、功能或材质如何产生用户收益。",
     planningHints: Object.freeze(["用局部细节支撑功能", "将功能与用户收益配对"]),
   }),
   PT03: Object.freeze({
     label: "Lifestyle",
+    uiLabel: "使用场景",
     purpose: "展示目标用户在真实环境中的典型使用场景。",
     planningHints: Object.freeze(["场景与目标市场匹配", "商品仍需清楚可见"]),
   }),
   PT04: Object.freeze({
     label: "Size and fit",
+    uiLabel: "尺寸与适配",
     purpose: "帮助买家理解尺寸、容量、适配关系或使用边界。",
     planningHints: Object.freeze(["标明单位", "使用清楚的尺寸参照"]),
   }),
   PT05: Object.freeze({
     label: "Detail and material",
+    uiLabel: "细节与材质",
     purpose: "通过细节、材质或工艺证据降低购买疑虑。",
     planningHints: Object.freeze(["使用真实质感的近景", "解释可见差异"]),
   }),
   PT06: Object.freeze({
     label: "Package and trust",
+    uiLabel: "包装与信任",
     purpose: "说明包装清单、使用准备或有依据的品牌信任信息。",
     planningHints: Object.freeze(["展示当前 SKU 实际包含内容", "仅使用已确认的品牌事实"]),
   }),
@@ -493,6 +500,7 @@ const LISTING_SLOT_META: Readonly<
 function listingSlotRule(key: string, order: number): PlatformSlotRule {
   const meta = LISTING_SLOT_META[key] ?? {
     label: key === "MAIN" ? "Main image" : `Listing image ${key}`,
+    uiLabel: key === "MAIN" ? "主图" : `Listing 图片 ${key}`,
     purpose: "展示与 Listing 序列互补的产品信息。",
     planningHints: ["保持与已有 Listing 图差异化", "事实来自商品资料"],
   };
@@ -507,6 +515,7 @@ function listingSlotRule(key: string, order: number): PlatformSlotRule {
   return Object.freeze({
     key,
     label: meta.label,
+    uiLabel: meta.uiLabel,
     group: "listing" as PlatformSlotGroup,
     order,
     required: true as const,
@@ -521,6 +530,7 @@ function aPlusSlotRule(spec: AmazonAPlusModuleSpec, order: number): PlatformSlot
   return Object.freeze({
     key: spec.slot,
     label: spec.label,
+    uiLabel: spec.displayLabel,
     group: "a-plus" as PlatformSlotGroup,
     order,
     required: true as const,

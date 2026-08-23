@@ -117,6 +117,15 @@ export function expectedSlotCount(state: AmazonSessionControlsState): number {
   return effectiveAPlusModuleSpecs(state).length;
 }
 
+export function amazonControlsSummary(value: AmazonSessionControlsState): string {
+  const market = AMAZON_MARKETPLACES.find((item) => item.id === value.marketplaceId);
+  const profile = allProfiles().find((item) => item.id === value.stylePresetId);
+  const output = value.plannerMode === "listing"
+    ? `${value.listingImageCount} 张`
+    : `${getAPlusContentTypeLabel(value.aPlusType)} · ${expectedSlotCount(value)} 个模块`;
+  return `${market?.label ?? value.marketplaceId} · ${output} · ${value.sizeTier} · ${profile?.label ?? "干净零售"}`;
+}
+
 export function amazonControlsMatchPlan(
   state: AmazonSessionControlsState,
   plan?: PlatformPlan | null,
@@ -177,7 +186,7 @@ function APlusModuleArrange({
       </div>
       <ol className="aplus-module-arrange__list">
         {specs.map((spec, index) => (
-          <li key={`${spec.slot}-${index}`} className="aplus-module-arrange__row">
+          <li key={spec.slot} className="aplus-module-arrange__row">
             <div className="aplus-module-arrange__meta">
               <strong>
                 {index + 1}. {spec.displayLabel || spec.label}
@@ -216,25 +225,19 @@ export function AmazonSessionControls({
   value,
   disabled = false,
   hasPlan = false,
-  preferCollapsed = false,
-  collapseKey,
-  embedded = false,
   additionalSettings,
+  industrySettings,
   planAction,
   onChange,
 }: {
   value: AmazonSessionControlsState;
   disabled?: boolean;
   hasPlan?: boolean;
-  /** When true (e.g. a plan already exists), start with params folded so the slot board stays primary. */
-  preferCollapsed?: boolean;
-  /** Resets the folded state when a different task/session becomes active. */
-  collapseKey?: string;
-  /** Render as part of edge-to-edge workbench chrome (no outer card chrome). */
-  embedded?: boolean;
   /** Advanced settings that belong to this same planning decision domain. */
   additionalSettings?: ReactNode;
-  /** Primary plan CTA embedded in chrome (shell v1). */
+  /** Industry guidance rendered as a full-width strategy row. */
+  industrySettings?: ReactNode;
+  /** Primary plan/replan action displayed beside the current mode summary. */
   planAction?: {
     label: string;
     disabled?: boolean;
@@ -246,12 +249,8 @@ export function AmazonSessionControls({
   };
   onChange: (next: AmazonSessionControlsState) => void;
 }) {
-  const [paramsOpen, setParamsOpen] = useState(!preferCollapsed);
   const [moduleDialogOpen, setModuleDialogOpen] = useState(false);
   const [moduleDraft, setModuleDraft] = useState<AmazonAPlusModuleSpec[] | null>(null);
-  useEffect(() => {
-    setParamsOpen(!preferCollapsed);
-  }, [collapseKey, hasPlan, preferCollapsed]);
   useEffect(() => {
     setModuleDialogOpen(false);
     setModuleDraft(null);
@@ -297,7 +296,7 @@ export function AmazonSessionControls({
   return (
     <>
     <section
-      className={`amazon-session-controls amazon-session-controls--chrome${embedded ? " amazon-session-controls--embedded" : ""}`}
+      className="amazon-session-controls amazon-session-controls--chrome"
       aria-label="Amazon 策划模式"
     >
       <div className="amazon-session-controls__bar">
@@ -316,16 +315,6 @@ export function AmazonSessionControls({
           {modeDescription} · {marketShort} · {value.sizeTier} · {styleShort}
         </p>
         <div className="amazon-session-controls__bar-actions">
-          <Button
-            variant="secondary"
-            size="compact"
-            className="amazon-session-controls__toggle"
-            aria-expanded={paramsOpen}
-            disabled={disabled}
-            onClick={() => setParamsOpen((open) => !open)}
-          >
-            {paramsOpen ? "收起参数" : "调整参数"}
-          </Button>
           {planAction ? (
             <Button
               variant={planAction.variant ?? "primary"}
@@ -344,10 +333,14 @@ export function AmazonSessionControls({
         </div>
       </div>
 
-      {paramsOpen ? (
-        <div className="amazon-session-controls__params">
-          <div className="amazon-session-controls__fields">
-            <Field label="目标站点" className="amazon-session-controls__field">
+      <div className="amazon-session-controls__params">
+          <section className="planning-settings-group planning-settings-group--platform">
+            <div className="planning-settings-group__heading">
+              <strong>输出设置</strong>
+              <span>决定站点、交付数量和生成画布规格。</span>
+            </div>
+            <div className="amazon-session-controls__fields">
+            <Field label="目标站点" name="marketplaceId" className="amazon-session-controls__field">
               <Select
                 aria-label="目标站点"
                 value={value.marketplaceId}
@@ -368,7 +361,7 @@ export function AmazonSessionControls({
             </Field>
 
             {value.plannerMode === "listing" ? (
-              <Field label="Listing 张数" className="amazon-session-controls__field">
+              <Field label="Listing 张数" name="listingImageCount" className="amazon-session-controls__field">
                 <Select
                   aria-label="Listing 张数"
                   value={value.listingImageCount}
@@ -388,7 +381,7 @@ export function AmazonSessionControls({
                 </Select>
               </Field>
             ) : (
-              <Field label="A+ 类型" className="amazon-session-controls__field">
+              <Field label="A+ 类型" name="aPlusType" className="amazon-session-controls__field">
                 <Select
                   aria-label="A+ 类型"
                   value={value.aPlusType}
@@ -413,7 +406,7 @@ export function AmazonSessionControls({
               </Field>
             )}
 
-            <Field label="生成尺寸档" className="amazon-session-controls__field">
+            <Field label="生成尺寸档" name="sizeTier" className="amazon-session-controls__field">
               <Select
                 aria-label="生成尺寸档"
                 value={value.sizeTier}
@@ -431,14 +424,23 @@ export function AmazonSessionControls({
               </Select>
             </Field>
 
+          </div>
+          </section>
+
+          <section className="planning-settings-group planning-settings-group--profile">
+            <div className="planning-settings-group__heading">
+              <strong>生成策略</strong>
+              <span>选择策划风格，并按需补充视觉参考和行业方向。</span>
+            </div>
             <Field
-              label="提示词方案"
-              hint="控制策划策略和视觉风格。干净零售适合大多数品类，营销转化强调卖点说服力。"
+              label="生成方案"
+              hint="干净零售适合大多数品类，营销转化强调卖点说服力。"
+              name="stylePresetId"
               className="amazon-session-controls__field"
             >
               <div className="prompt-profile-select-row">
                 <Select
-                  aria-label="提示词方案"
+                  aria-label="生成方案"
                   value={value.stylePresetId}
                   disabled={disabled}
                   onChange={(event) =>
@@ -456,36 +458,29 @@ export function AmazonSessionControls({
                   ))}
                 </Select>
                 <div className="prompt-profile-select-row__actions">
-                  <Button
-                    type="button"
-                    variant="quiet"
-                    size="compact"
+                  <IconButton
                     disabled={disabled}
-                    title="新建提示词方案"
+                    label="新建生成方案"
                     onClick={profilePicker.openNew}
                   >
-                    + 新建
-                  </Button>
+                    <Plus size={14} />
+                  </IconButton>
                   {selectedProfile?.source === "custom" ? (
-                    <Button
-                      type="button"
-                      variant="quiet"
-                      size="compact"
+                    <IconButton
                       disabled={disabled}
-                      title="编辑此方案"
+                      label="编辑此方案"
                       onClick={() => profilePicker.openEdit(selectedProfile)}
                     >
-                      编辑
-                    </Button>
+                      <Pencil size={14} />
+                    </IconButton>
                   ) : null}
                 </div>
               </div>
             </Field>
-          </div>
+          </section>
 
-          {additionalSettings ? (
-            <div className="amazon-session-controls__additional">{additionalSettings}</div>
-          ) : null}
+          {additionalSettings ? <div className="amazon-session-controls__additional">{additionalSettings}</div> : null}
+          {industrySettings ? <div className="amazon-session-controls__industry">{industrySettings}</div> : null}
 
           {value.plannerMode === "aplus" ? (
             <>
@@ -543,13 +538,7 @@ export function AmazonSessionControls({
             </>
           ) : null}
 
-          <p className="amazon-session-controls__summary">
-            站点 {marketShort} · {value.sizeTier} 生成画布 · 风格 {styleShort}
-            {value.plannerMode === "listing" ? " · MAIN 不套用风格" : " · 改模块后请重新策划"}
-            。左侧可粘贴 Listing；完整档案在「资料库」。
-          </p>
         </div>
-      ) : null}
     </section>
       <PromptProfileDialog
         open={profilePicker.dialogOpen}

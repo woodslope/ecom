@@ -210,6 +210,7 @@ export interface StartAmazonSessionInput {
   sourceMode?: PlanningInputSourceMode;
   workflowId: Extract<PlatformWorkflowId, "amazon-listing" | "amazon-aplus">;
   listingText: string;
+  facts?: ProductFacts;
   files: File[];
   selectedReferenceAssetIds: string[];
   selectedStyleReferenceId?: string | null;
@@ -221,6 +222,7 @@ export interface StartTaobaoSessionInput {
   projectId?: string;
   sourceMode?: PlanningInputSourceMode;
   productText?: string;
+  facts?: ProductFacts;
   selectedReferenceAssetIds: string[];
   planningInput?: PlanningInputSnapshot;
   /** Prompt profile id carried into the session options. */
@@ -232,6 +234,7 @@ export interface AnalyzeTaobaoProductInput {
   projectId?: string;
   sourceMode?: PlanningInputSourceMode;
   productText: string;
+  facts?: ProductFacts;
   files: File[];
   selectedReferenceAssetIds: string[];
   stylePresetId?: string | null;
@@ -1022,7 +1025,7 @@ export function createWorkbenchStore(
           const draft = await get().createProject({
             name: `${project.name} · Amazon任务`,
             scope: "task-draft",
-            facts: project.facts,
+            facts: input.facts ?? project.facts,
           });
           if (!draft) throw new Error("任务草稿创建失败");
           project = draft;
@@ -1080,11 +1083,9 @@ export function createWorkbenchStore(
           set({ planningError: "参考图总大小超过 8 MiB，请删除部分图片或换更小文件。" });
           return null;
         }
-        const initialFacts = resolveAmazonPlanningFacts(
-          project?.facts,
-          input.listingText,
-          sourceMode,
-        );
+        const initialFacts = input.facts
+          ? resolveAmazonPlanningFacts(input.facts, input.listingText, "library")
+          : resolveAmazonPlanningFacts(project?.facts, input.listingText, sourceMode);
         if (
           assessPlanningInput({
             facts: initialFacts,
@@ -1095,7 +1096,9 @@ export function createWorkbenchStore(
           return null;
         }
         if (!project) {
-          const facts = emptyFactsFromAmazonListing(input.listingText);
+          const facts = input.facts
+            ? resolveAmazonPlanningFacts(input.facts, input.listingText, "library")
+            : emptyFactsFromAmazonListing(input.listingText);
           project = await get().createProject({
             name: facts.productName || "Amazon 草稿商品",
             scope: "task-draft",
@@ -1180,7 +1183,9 @@ export function createWorkbenchStore(
           sizeTier: resolved.sizeTier,
           stylePresetId: resolved.stylePresetId,
         };
-        const planningFacts = resolveAmazonPlanningFacts(project.facts, input.listingText, sourceMode);
+        const planningFacts = input.facts
+          ? resolveAmazonPlanningFacts(input.facts, input.listingText, "library")
+          : resolveAmazonPlanningFacts(project.facts, input.listingText, sourceMode);
         const assessment = assessPlanningInput({
           facts: planningFacts,
           productImageCount: selectedReferenceAssetIds.length,
@@ -1283,7 +1288,7 @@ export function createWorkbenchStore(
           const draft = await get().createProject({
             name: `${activeProject.name} · 淘宝任务`,
             scope: "task-draft",
-            facts: activeProject.facts,
+            facts: input.facts ?? activeProject.facts,
           });
           if (!draft) throw new Error("任务草稿创建失败");
           activeProject = draft;
@@ -1307,7 +1312,7 @@ export function createWorkbenchStore(
           await get().refreshAssets();
         }
         if (!activeProject) {
-          const baseFacts = createEmptyProductFacts();
+          const baseFacts = input.facts ? cloneProductFacts(input.facts) : createEmptyProductFacts();
           const seededAnalysis = analyzeTaobaoProduct({
             facts: baseFacts,
             productText: input.productText ?? "",
@@ -1336,7 +1341,9 @@ export function createWorkbenchStore(
             .filter((candidate) => candidate.workflowId === "taobao-product")
             .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
           const productText = input.productText ?? existing?.sourceInput.taobaoProduct?.productText ?? "";
-          const baseFacts = sourceMode === "manual" ? createEmptyProductFacts() : activeProject!.facts;
+          const baseFacts = input.facts
+            ? cloneProductFacts(input.facts)
+            : sourceMode === "manual" ? createEmptyProductFacts() : activeProject!.facts;
           const draftAnalysis = analyzeTaobaoProduct({
             facts: baseFacts,
             productText,
@@ -1446,9 +1453,11 @@ export function createWorkbenchStore(
           : sourceMode === "library"
             ? get().activeProject
             : null;
-        const previewBaseFacts = sourceMode === "library" && sourceProject
-          ? sourceProject.facts
-          : createEmptyProductFacts();
+        const previewBaseFacts = input.facts
+          ? cloneProductFacts(input.facts)
+          : sourceMode === "library" && sourceProject
+            ? sourceProject.facts
+            : createEmptyProductFacts();
         const previewAnalysis = analyzeTaobaoProduct({
           facts: previewBaseFacts,
           productText: input.productText,
@@ -1467,6 +1476,7 @@ export function createWorkbenchStore(
           ...(input.projectId ? { projectId: input.projectId } : {}),
           sourceMode,
           productText: input.productText,
+          ...(input.facts ? { facts: cloneProductFacts(input.facts) } : {}),
           selectedReferenceAssetIds: input.selectedReferenceAssetIds,
           stylePresetId: input.stylePresetId ?? null,
           ...(input.industryTemplate
@@ -1501,7 +1511,9 @@ export function createWorkbenchStore(
           const asset = get().assets.find((candidate) => candidate.metadata.id === id);
           return asset ? [{ id, name: asset.metadata.name }] : [];
         });
-        const analysisBaseFacts = sourceMode === "manual" ? createEmptyProductFacts() : project.facts;
+        const analysisBaseFacts = input.facts
+          ? cloneProductFacts(input.facts)
+          : sourceMode === "manual" ? createEmptyProductFacts() : project.facts;
         const analysis = analyzeTaobaoProduct({
           facts: analysisBaseFacts,
           productText: input.productText,
@@ -1630,7 +1642,7 @@ export function createWorkbenchStore(
       try {
         const sourceProject = await dependencies.projectRepository.get(projectId);
         if (!sourceProject || sourceProject.scope !== "library") {
-          set({ planningError: "找不到要载入的商品档案。" });
+          set({ planningError: "找不到要载入的已保存商品。" });
           return "failed";
         }
 
@@ -4304,7 +4316,7 @@ export function createWorkbenchStore(
         located.project.scope !== "task-draft" ||
         located.run.contextSnapshot.planningInput?.sourceMode === "library"
       ) {
-        set({ error: "只有手动任务草稿可以保存到资料库。" });
+        set({ error: "只有手动任务草稿可以保存为商品。" });
         return null;
       }
 
@@ -4316,16 +4328,16 @@ export function createWorkbenchStore(
         let mergedFacts: ProductFacts | null = null;
         if (input.mode === "create") {
           target = await dependencies.projectRepository.create({
-            name: input.name?.trim() || input.facts.productName.trim() || "未命名商品档案",
+            name: input.name?.trim() || input.facts.productName.trim() || "未命名商品",
             scope: "library",
             facts: input.facts,
           });
           createdProjectId = target.id;
           await dependencies.projectRepository.setActiveId(previousActiveId);
         } else {
-          if (!input.targetProjectId) throw new Error("请选择要合并的商品档案");
+          if (!input.targetProjectId) throw new Error("请选择要合并的已保存商品");
           const current = await dependencies.projectRepository.get(input.targetProjectId);
-          if (!current || current.scope !== "library") throw new Error("目标商品档案不存在");
+          if (!current || current.scope !== "library") throw new Error("目标商品不存在");
           const merged = mergeProductFacts(
             current.facts,
             input.facts,
@@ -4360,7 +4372,7 @@ export function createWorkbenchStore(
 
         if (mergedFacts) {
           const updated = await dependencies.projectRepository.update(target.id, { facts: mergedFacts });
-          if (!updated) throw new Error("目标商品档案保存失败");
+          if (!updated) throw new Error("目标商品保存失败");
           target = updated;
         }
 
@@ -5200,6 +5212,26 @@ export function createWorkbenchStore(
   });
 }
 
+function withFailOnceHistoryQuery(
+  repository: RunRepository,
+  failure: "initial" | "older-page",
+): RunRepository {
+  // React development StrictMode intentionally runs the initial mount effect twice.
+  const initialFailureCount = failure === "initial" ? 2 : 1;
+  let remainingFailures = initialFailureCount;
+  return {
+    ...repository,
+    async query(filters, cursor, limit) {
+      const matchesFailure = failure === "initial" ? !cursor : Boolean(cursor);
+      if (remainingFailures > 0 && filters?.platformId && matchesFailure) {
+        remainingFailures -= 1;
+        throw new Error(failure === "initial" ? "模拟历史读取失败" : "模拟加载更早记录失败");
+      }
+      return repository.query(filters, cursor, limit);
+    },
+  };
+}
+
 export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies {
   const warnings: string[] = [];
   let projectRepository: ProjectRepository;
@@ -5266,7 +5298,12 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
     }
 
     try {
-      runRepository = createIndexedDbRunRepository({ indexedDB: window.indexedDB });
+      const persistentRunRepository = createIndexedDbRunRepository({ indexedDB: window.indexedDB });
+      runRepository = fixture === "history-fail-once"
+        ? withFailOnceHistoryQuery(persistentRunRepository, "initial")
+        : fixture === "history-page-fail-once"
+          ? withFailOnceHistoryQuery(persistentRunRepository, "older-page")
+          : persistentRunRepository;
     } catch {
       runRepository = createMemoryRunRepository();
       warnings.push("IndexedDB 不可用，生产记录仅在当前会话保存在内存中。");

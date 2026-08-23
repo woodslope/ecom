@@ -18,6 +18,7 @@ import {
   PREMIUM_A_PLUS_MODULE_SPECS,
   MOBILE_A_PLUS_MODULE_SPECS,
   buildLegacyCombinedAmazonSlotRules,
+  buildAmazonListingSlotRules,
   formatAmazonListingSlotRange,
   getAPlusContentTypeLabel,
   getAPlusModuleSpecs,
@@ -83,6 +84,28 @@ describe("amazon listing / A+ catalog (AIS-aligned)", () => {
       "PT08",
     ]);
     expect(formatAmazonListingSlotRange(7)).toBe("MAIN + PT01-PT06");
+  });
+
+  it("keeps canonical Amazon labels stable while exposing localized UI labels", () => {
+    const slots = buildAmazonListingSlotRules(7);
+    expect(slots.map((slot) => slot.label)).toEqual([
+      "Main image",
+      "Core benefit",
+      "Feature proof",
+      "Lifestyle",
+      "Size and fit",
+      "Detail and material",
+      "Package and trust",
+    ]);
+    expect(slots.map((slot) => slot.uiLabel)).toEqual([
+      "主图",
+      "核心卖点",
+      "功能证明",
+      "使用场景",
+      "尺寸与适配",
+      "细节与材质",
+      "包装与信任",
+    ]);
   });
 
   it("defaults A+ content type to standard-large (普通A+), not standard", () => {

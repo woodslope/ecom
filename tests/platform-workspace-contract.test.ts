@@ -43,17 +43,23 @@ function buttonAttributes(markup: string, label: string): string {
 
 describe("platform workspace contract", () => {
   it("routes the Amazon workspace through the active production session", () => {
-    expect(appSource).toContain("productionSession={activeAmazonSession}");
-    expect(appSource).toContain("selectSessionSlot(activeAmazonSession.id, slotKey)");
-    expect(appSource).toContain("generateSessionSlot(activeAmazonSession.id, slotKey)");
+    expect(appSource).toContain("productionSession={currentAmazonSession}");
+    expect(appSource).toContain("selectSessionSlot(currentAmazonSession.id, slotKey)");
+    expect(appSource).toContain("generateSessionSlot(currentAmazonSession.id, slotKey)");
   });
 
   it("restores an existing Taobao session without overwriting its selected analysis inputs", () => {
-    // Cross-platform sync banner may legitimately call startTaobaoSession from Amazon context.
-    expect(appSource).toContain("startTaobaoSession");
-    expect(appSource).toContain("productionSession={activeTaobaoSession}");
-    expect(appSource).toContain("onOpenLibrary={() => changeActiveItem(\"library\")}");
-    expect(appSource).toContain("resolveOverviewNextAction");
+    expect(appSource).not.toContain("startTaobaoSession");
+    expect(appSource).toContain("productionSession={currentTaobaoSession}");
+    expect(appSource).not.toContain("setProductPickerPlatform");
+    expect(appSource).toContain("platform-page-layout");
+  });
+
+  it("keeps platform history on demand instead of permanently compressing production", () => {
+    expect(appSource).toContain("historyOpen");
+    expect(appSource).toContain('className="platform-history-trigger"');
+    expect(appSource).toContain("历史记录");
+    expect(appSource).toContain('closeLabel="关闭历史记录"');
   });
 
   it("blocks silent slot switches while the selected slot draft is dirty", () => {
@@ -71,6 +77,13 @@ describe("platform workspace contract", () => {
     expect(shouldDefaultCollapseSource(1099, true)).toBe(true);
     expect(shouldDefaultCollapseSource(900, true)).toBe(true);
     expect(shouldDefaultCollapseSource(1099, false)).toBe(false);
+  });
+
+  it("keeps replanning secondary inside task settings for both platforms", () => {
+    expect(platformWorkspaceSource).toContain('!isAmazon ? (');
+    expect(platformWorkspaceSource).toContain('<RotateCcw size={14} />重新策划');
+    expect(platformWorkspaceSource).toContain('title="平台交付槽位"');
+    expect(platformWorkspaceSource).not.toContain('action={<StatusChip tone={plan ? "success" : "neutral"}>{plan?.slots.length ?? 0} 个槽位</StatusChip>}');
   });
 
   it("keeps the selected Amazon mode visible when that mode has no saved plan yet", () => {
@@ -99,7 +112,6 @@ describe("platform workspace contract", () => {
         loading: false,
         planning: false,
         planningError: null,
-        onCreate: () => undefined,
         onSave: async () => true,
         onUpload: async () => undefined,
         onRemove: async () => undefined,
@@ -112,10 +124,9 @@ describe("platform workspace contract", () => {
       }),
     );
 
-    expect(buttonAttributes(markup, "A+ 图")).toContain('aria-selected="true"');
-    expect(buttonAttributes(markup, "Listing 图")).toContain('aria-selected="false"');
-    expect(markup).toContain("普通A+");
-    expect(markup).toContain("5 个模块");
+    expect(markup).not.toContain('aria-label="Amazon 策划模式"');
+    expect(markup).toContain("生成平台策划");
+    expect(markup).not.toContain("生成图片策划");
   });
 
   it("names the unsaved workspace state that must block planning and navigation", () => {
@@ -156,7 +167,6 @@ describe("platform workspace contract", () => {
         selectedSlotKey: "MAIN",
         planning: false,
         planningError: null,
-        onCreate: () => undefined,
         onSave: async () => true,
         onUpload: async () => undefined,
         onRemove: async () => undefined,
@@ -171,7 +181,7 @@ describe("platform workspace contract", () => {
     expect(markup).toContain("重新策划");
     expect(markup).toContain("15 个槽位");
     expect(markup).toContain("Demo");
-    expect(markup).toContain('role="tablist"');
+    expect(markup).toContain('role="group"');
     expect(markup).toContain("当前资料");
     expect(markup).toContain("交付槽位");
     expect(markup).toContain("槽位检查器");
@@ -223,7 +233,6 @@ describe("platform workspace contract", () => {
         selectedSlotKey: "MAIN",
         planning: false,
         planningError: null,
-        onCreate: () => undefined,
         onSave: async () => true,
         onUpload: async () => undefined,
         onRemove: async () => undefined,
@@ -279,7 +288,6 @@ describe("platform workspace contract", () => {
         selectedSlotKey: "PT01",
         planning: false,
         planningError: null,
-        onCreate: () => undefined,
         onSave: async () => true,
         onUpload: async () => undefined,
         onRemove: async () => undefined,
@@ -294,7 +302,7 @@ describe("platform workspace contract", () => {
     expect(markup).toContain(
       "商品资料或参考素材已更新，当前策划仍基于旧输入。请重新策划后再编辑槽位、生成或导出。",
     );
-    expect(buttonAttributes(markup, "重新策划") || buttonAttributes(markup, "AI 策划")).not.toContain('disabled=""');
+    expect(markup).toContain("重新策划");
     for (const label of ["保存文案与提示词", "生成图片"]) {
       expect(buttonAttributes(markup, label)).toContain('disabled=""');
     }
@@ -316,7 +324,6 @@ describe("platform workspace contract", () => {
         planningError: null,
         generatingSlot: { platformId: "amazon", slotKey: "PT01" },
         generationErrorTarget: null,
-        onCreate: () => undefined,
         onSave: async () => true,
         onUpload: async () => undefined,
         onRemove: async () => undefined,
@@ -357,7 +364,6 @@ describe("platform workspace contract", () => {
         generatingSlot: null,
         generationRecoveryRequired: true,
         generationErrorTarget: { platformId: "amazon", slotKey: "PT01" },
-        onCreate: () => undefined,
         onSave: async () => true,
         onUpload: async () => undefined,
         onRemove: async () => undefined,
@@ -399,7 +405,6 @@ describe("platform workspace contract", () => {
         planning: false,
         planningPlatformId: "amazon",
         planningError: "上一次策划失败，可重试。",
-        onCreate: () => undefined,
         onSave: async () => true,
         onUpload: async () => undefined,
         onRemove: async () => undefined,
@@ -414,12 +419,10 @@ describe("platform workspace contract", () => {
     expect(markup).toContain("Amazon 正在生成平台策划，请先等待或取消。");
     expect(markup).toContain("Amazon 正在生成平台策划");
     expect(markup.match(/取消策划/g)).toHaveLength(1);
-    for (const label of ["生成图片策划", "重试策划", "生成平台策划"]) {
+    for (const label of ["重试策划", "生成平台策划"]) {
       expect(buttonAttributes(markup, label)).toContain('disabled=""');
-      expect(buttonAttributes(markup, label)).toContain(
-        'aria-describedby="planning-task-status"',
-      );
     }
+    expect(markup).not.toContain("生成图片策划");
   });
 
   it("keeps planning, generation, Copilot, and export controls locked while loading", async () => {
@@ -434,7 +437,6 @@ describe("platform workspace contract", () => {
         selectedSlotKey: "PT01",
         planning: false,
         planningError: null,
-        onCreate: () => undefined,
         onSave: async () => true,
         onUpload: async () => undefined,
         onRemove: async () => undefined,
@@ -499,7 +501,6 @@ describe("platform workspace contract", () => {
             ],
           },
         },
-        onCreate: () => undefined,
         onSave: async () => true,
         onUpload: async () => undefined,
         onRemove: async () => undefined,
@@ -593,7 +594,6 @@ describe("platform workspace contract", () => {
         planning: false,
         planningError: null,
         slotVersionStates: session.slotVersions,
-        onCreate: () => undefined,
         onSave: async () => true,
         onUpload: async () => undefined,
         onRemove: async () => undefined,

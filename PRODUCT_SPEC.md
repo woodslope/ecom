@@ -1,7 +1,7 @@
 # Ecom Product Specification
 
 > Status: aligned baseline
-> Updated: 2026-07-21
+> Updated: 2026-08-24
 > Primary alignment target: Amazon Image Studio @ `bca89d728e415c453db363dcba30ac8ea243edaf`
 
 ## 1. Product Positioning
@@ -23,17 +23,19 @@ The interface always identifies the runtime mode:
 - **Demo**: deterministic local planning, mock images, and no external model call.
 - **API**: user-provided text and image services, with provider/model status visible but keys never shown in feedback or screenshots.
 
+The compact left rail always shows `Demo` or `API` and opens settings. The product has one declared light theme; operating-system dark preference does not switch to a separate palette.
+
 Settings support dual configuration for text planning and image generation, or single connection when the provider supports both. OpenRouter and DeepSeek capability differences are checked before requests; unsupported image editing never silently falls back to ordinary generation.
 
 ## 4. Information Architecture
 
 ### 4.1 Shared navigation
 
-- `资料库`: shared ProductProject facts, reference assets, and platform progress.
-- `淘宝 / 天猫`: secondary platform workflow.
-- `Amazon`: Listing/A+ session workbench.
-- `生产记录`: ProductionRun list and filters.
-- `设置`: runtime mode, provider connection, and connection tests.
+- `淘宝 / 天猫`: product intake, fixed gallery/detail planning, production, preview, export, and platform-scoped history.
+- `Amazon`: Listing/A+ intake, planning, production, export, and platform-scoped history.
+- `设置`: runtime mode, provider connection, connection tests, and local backup.
+
+Shared ProductProject facts and reference assets are selected or created inside the active platform task. ProductionRun records and local batch jobs open from that platform's history drawer; there is no standalone library, overview, or global-history navigation destination.
 
 ### 4.2 Product workspace
 
@@ -43,9 +45,11 @@ The product has three domain layers:
 2. PlatformSession: one platform/workflow's editable source, options, plan, selected slot, versions, and active run.
 3. ProductionRun: immutable snapshot and event history for a complete production attempt.
 
-Amazon workspaces expose Listing/A+ mode, marketplace, count/type, module options, size tier, style, Listing source, reference assets, plan, slot board, inspector, generation, compliance, and export. Taobao exposes product analysis input, fixed gallery/detail slots, the same slot inspector and version workflow, phone product-page preview, and partial/full delivery export. The shared production shell owns column scroll; at `900–1099px` the source panel is a drawer; at `899px` and below the desktop-only gate is shown.
+Amazon workspaces expose Listing/A+ mode, marketplace, count/type, module options, size tier, style, Listing source, reference assets, plan, slot board, inspector, generation, compliance, and export. Taobao exposes product analysis input, fixed gallery/detail slots, the same slot inspector and version workflow, phone product-page preview, and partial/full delivery export. The shared production shell is desktop-only; at `1199px` and below the desktop-only gate is shown.
 
-Production history is a filter row plus Run list. Events, recovery, fork, image reuse, and re-export belong to an expanded Run; history is not a flat per-product task log.
+In production, the toolbar owns progress, current-task identity, history, and new-task entry. The selected-slot inspector owns image generation, and the delivery panel owns export, so only one primary action exists for each operation. With task input collapsed, the slot board and inspector keep a stable `0.82fr / 1.18fr` order across all supported desktop widths.
+
+Production history is a filter row plus paged Run list (50 per page). Events, recovery, fork, image reuse, and re-export belong to an expanded Run; history is not a flat per-product task log. A failed read or older-page request preserves already loaded records where available and exposes an explicit retry.
 
 ## 5. Core Domain Objects
 
@@ -112,7 +116,7 @@ Amazon accepts Listing title, bullets, description, product facts, forbidden cla
 
 ### Shared planning intake
 
-Amazon and Taobao / Tmall use the same planning-intake contract. The user chooses either `从资料库选择` or `手动填写`; only the library path opens the product picker. Manual intake may start with text, product images, or both. Submitting without a saved ProductProject creates a local draft project atomically with the session.
+Amazon and Taobao / Tmall use the same direct planning-intake contract. A new task may start with text, structured product facts, product images, or any usable combination. Submitting without a saved ProductProject creates a local draft project atomically with the session; existing work is resumed or forked from the active platform's history drawer.
 
 Input quality is evaluated before planning:
 
@@ -137,18 +141,18 @@ Both platforms expose one stable primary action, `生成图片策划`, and the s
 
 ### Shared production workflow
 
-1. Choose a library product or start manual intake for either platform.
+1. Start a new platform task, or resume/fork an existing task from that platform's history drawer.
 2. Provide product facts, selected product-reference images, or both; an empty input cannot continue.
 3. Adjust optional platform parameters or style only when needed.
 4. Run Demo or API planning through `生成图片策划`.
 5. Review the plan, choose a slot, and inspect Chinese strategy/evidence beside the English model prompt.
 6. Edit and save visible copy or prompt, then generate one slot at a time.
-7. Optionally batch-generate the remaining slots for the current platform workflow, then monitor or cancel the local task from 生产记录.
+7. Optionally batch-generate the remaining slots for the current platform workflow, then monitor or cancel it from the platform history drawer.
 8. Review compliance findings and the need for manual marketplace review.
 9. Regenerate, activate an older version, open the mask editor, or reuse a completed image as a new reference asset.
 10. Export current active results or recover/fork/re-export from ProductionRun history.
 
-Every asynchronous operation has visible loading, success, failure, cancellation, and recovery behavior where applicable. Failed generation or edit preserves the previous active version.
+Every asynchronous operation has visible loading, success, failure, cancellation, and recovery behavior where applicable. Dynamic progress and success feedback uses polite live announcements; blocking failures use assertive announcements; static guidance is not exposed as a live region. Failed generation or edit preserves the previous active version.
 
 ## 8. Images, Mask Editing, And Provider Boundaries
 
@@ -178,7 +182,7 @@ Current export is a platform ZIP with manifest, Prompt snapshot, active version 
 
 ## 10. Required States
 
-- First run with no project: one create-project action owned by 资料库.
+- First run with no project: each platform exposes one focused intake action; submitting usable manual facts or product images creates the local draft project and platform session atomically.
 - Existing project with no plan: explain missing facts/references and expose one planning action.
 - No saved project: allow manual facts or product-image intake and create a local draft only on submit.
 - Image-only input: label the result as a planning draft and require planner image capability.
@@ -188,7 +192,7 @@ Current export is a platform ZIP with manifest, Prompt snapshot, active version 
 - History restore/fork: identify project, platform, workflow, Run and source.
 - Local batch task: show queued/running/paused/completed/failed/canceled state, progress, cancel/retry actions, and refresh recovery.
 - API settings: show dual/single mode, connection feedback, provider restrictions, and no key echo.
-- Narrow viewport: 900px compact desktop; 899px desktop-only gate.
+- Narrow viewport: 1200px minimum desktop; 1199px and below shows the desktop-only gate.
 
 ## 11. Non-Goals And External Risks
 
@@ -203,7 +207,7 @@ External provider availability, CORS, quotas, model quality, generated-image fac
 - A solo operator can complete Listing default 7 and A+ default `standard-large` paths in Demo mode.
 - Six Amazon marketplaces, Listing 7–12, A+ types/modules, Listing parsing, slot editing, version recovery, production history, export, and mask editing are reachable where listed above.
 - A solo operator can analyze a Taobao product, create the fixed 5+7 plan, generate/edit/version individual slots, preview the phone product page, and export partial/full or historical results.
-- Browser evidence covers `1600/1280/1100/900/899`, empty/loading/success/failure/recovery, settings modes, production filters, and mask states under `artifacts/cross-platform-ais/`.
+- Browser evidence covers the supported desktop matrix, the `1199px` gate, system preference/accessibility conditions, empty/loading/success/failure/recovery, paged history, modal isolation, settings modes, production filters, and mask states under a timestamped `artifacts/cross-platform-ais/runs/` batch with a manifest.
 
 ### Engineering
 
@@ -211,6 +215,9 @@ External provider availability, CORS, quotas, model quality, generated-image fac
 - `pnpm typecheck`
 - `pnpm test`
 - `pnpm build`
+- `pnpm check:bundle`
 - `pnpm test:browser`
+- `pnpm test:browser:governance`
+- `pnpm test:ui:acceptance`
 
-The latest full run is 74 test files and 387 passing tests. The GitHub Pages contract also passes with `VITE_BASE_PATH=/ecom/ pnpm build`. A non-blocking bundle-size warning and one filtered 404 resource note from the browser smoke fixture remain documented risks. External Provider behavior, marketplace back-office acceptance, and large-history performance remain outside deterministic local verification.
+The authoritative result for the latest full run is the `manifest.json` batch referenced by `artifacts/cross-platform-ais/latest.json`; test counts and bundle bytes must be read from that manifest rather than duplicated here. A passing full-acceptance batch includes the GitHub Pages contract with `VITE_BASE_PATH=/ecom/ pnpm build` and enforces a 500 kB budget for the Vite business entry chunk. External Provider behavior, marketplace back-office acceptance, and large-history performance remain outside deterministic local verification.

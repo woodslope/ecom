@@ -167,6 +167,22 @@ export function MaskEditorDialog({
     setRedoStrokes([]);
     setLocalError(null);
   };
+  const handleCanvasKeyDown = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setDrawing(false);
+      return;
+    }
+    if (event.key === "Backspace" || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z")) {
+      event.preventDefault();
+      undo();
+      return;
+    }
+    if (event.key === "Delete") {
+      event.preventDefault();
+      reset();
+    }
+  };
   const save = async () => {
     const canvas = canvasRef.current;
     if (!canvas || strokes.length === 0 || !prompt.trim()) return;
@@ -200,13 +216,19 @@ export function MaskEditorDialog({
         <canvas
           ref={canvasRef}
           aria-label="遮罩编辑画布"
+          aria-describedby="mask-editor-canvas-hint"
+          tabIndex={0}
           className="mask-editor__canvas"
           onPointerDown={startDrawing}
           onPointerMove={continueDrawing}
           onPointerUp={finishDrawing}
           onPointerCancel={finishDrawing}
+          onKeyDown={handleCanvasKeyDown}
         />
       </div>
+      <p id="mask-editor-canvas-hint" className="visually-hidden">
+        画布获得焦点后可使用 Esc 结束操作、Backspace 撤销、Delete 重置；涂抹仍使用指针完成。
+      </p>
       <div className="mask-editor__toolbar">
         <SegmentedControl
           ariaLabel="遮罩工具"
@@ -217,6 +239,7 @@ export function MaskEditorDialog({
         />
         <Field label="画笔大小">
           <input
+            name="brushSize"
             aria-label="画笔大小"
             type="range"
             min="8"
@@ -234,10 +257,10 @@ export function MaskEditorDialog({
         </div>
       </div>
       <Field label="局部编辑要求" hint="只描述需要替换或修正的区域，未涂抹部分会尽量保留。">
-        <textarea value={prompt} rows={3} disabled={saving} onChange={(event) => setPrompt(event.target.value)} />
+        <textarea name="editPrompt" value={prompt} rows={3} disabled={saving} onChange={(event) => setPrompt(event.target.value)} />
       </Field>
-      {error ? <StatusMessage tone="danger">{error}</StatusMessage> : null}
-      {localError ? <StatusMessage tone="danger">{localError}</StatusMessage> : null}
+      {error ? <StatusMessage tone="danger" live="assertive">{error}</StatusMessage> : null}
+      {localError ? <StatusMessage tone="danger" live="assertive">{localError}</StatusMessage> : null}
     </Dialog>
   );
 }

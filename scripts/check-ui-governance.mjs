@@ -7,7 +7,7 @@
  * Exit 0 = pass, 1 = fail (prints every violation).
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,6 +16,7 @@ const stylesPath = join(root, "src/styles.css");
 const componentsDir = join(root, "src/components");
 const appTsx = join(root, "src/App.tsx");
 const guidePath = join(root, "UI_STYLE_GUIDE.md");
+const indexPath = join(root, "index.html");
 
 /** @type {string[]} */
 const failures = [];
@@ -26,6 +27,27 @@ function fail(message) {
 
 function read(path) {
   return readFileSync(path, "utf8");
+}
+
+function tokenValue(block, name) {
+  return block.match(new RegExp(`--${name}:\\s*([^;]+);`, "i"))?.[1].trim().toLowerCase();
+}
+
+function relativeLuminance(hex) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return null;
+  const channels = hex.slice(1).match(/.{2}/g).map((channel) => Number.parseInt(channel, 16) / 255);
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(first, second) {
+  const firstLuminance = relativeLuminance(first);
+  const secondLuminance = relativeLuminance(second);
+  if (firstLuminance === null || secondLuminance === null) return null;
+  return (Math.max(firstLuminance, secondLuminance) + 0.05) /
+    (Math.min(firstLuminance, secondLuminance) + 0.05);
 }
 
 function walkTsx(dir, out = []) {
@@ -82,11 +104,40 @@ function walkTsx(dir, out = []) {
   if (!/--primary:\s*#2563eb/i.test(tokenBlock)) {
     fail("styles.css top :root must set --primary: #2563eb (UI_STYLE_GUIDE §3).");
   }
-  if (!/--rail-width:\s*208px/.test(tokenBlock)) {
-    fail("styles.css top :root must set --rail-width: 208px (UI_STYLE_GUIDE §3).");
+  if (!/--rail-width:\s*72px/.test(tokenBlock)) {
+    fail("styles.css top :root must set --rail-width: 72px (UI_STYLE_GUIDE §3).");
+  }
+  if (!/color-scheme:\s*light/.test(tokenBlock)) {
+    fail("styles.css top :root must declare the single supported color-scheme: light.");
+  }
+  if (/--rail-width-compact\s*:/.test(css)) {
+    fail("styles.css must use one 72px rail token; --rail-width-compact is a retired variant.");
+  }
+  if (/\.(?:app-frame|platform-rail)--compact(?:-rail)?\b/.test(css)) {
+    fail("styles.css must not restore compact/non-compact rail variants.");
   }
   if (!/--font-page-title:\s*22px/.test(tokenBlock)) {
     fail("styles.css top :root must set --font-page-title: 22px (UI_STYLE_GUIDE §3).");
+  }
+
+  for (const [foreground, background, threshold, label] of [
+    ["success-text", "success-soft", 4.5, "success status text"],
+    ["danger-text", "danger-soft", 4.5, "danger status text"],
+    ["focus-ring", "surface", 3, "focus ring on surface"],
+    ["focus-ring", "page", 3, "focus ring on page"],
+    ["focus-ring", "rail", 3, "focus ring on rail"],
+    ["focus-ring", "ink-soft", 3, "focus ring on dark hover surface"],
+  ]) {
+    const foregroundValue = tokenValue(tokenBlock, foreground);
+    const backgroundValue = tokenValue(tokenBlock, background);
+    const ratio = foregroundValue && backgroundValue
+      ? contrastRatio(foregroundValue, backgroundValue)
+      : null;
+    if (ratio === null || ratio < threshold) {
+      fail(
+        `styles.css ${label} must reach ${threshold}:1 (${foreground} on ${background}; received ${ratio?.toFixed(2) ?? "non-hex or missing token"}).`,
+      );
+    }
   }
 
   if (/:\s*var\(--[\w-]+\)\)\s*;/.test(css)) {
@@ -108,11 +159,43 @@ function walkTsx(dir, out = []) {
     ".workbench-grid",
     ".slot-inspector.slot-inspector--shell",
     ".amazon-session-controls",
+    ".amazon-intake",
   ]) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const count = [...css.matchAll(new RegExp(`^${escaped}\\s*\\{`, "gm"))].length;
     if (count !== 1) {
       fail(`styles.css selector "${selector}" must have one core owner (found ${count}).`);
+    }
+  }
+
+  const collapsedRules = css.match(/^\.workbench-grid--source-collapsed\s*\{[^}]*\}/gms) ?? [];
+  if (
+    collapsedRules.length !== 1 ||
+    !/grid-template-columns:\s*minmax\(420px,\s*0\.82fr\)\s+minmax\(520px,\s*1\.18fr\)/.test(
+      collapsedRules[0] ?? "",
+    )
+  ) {
+    fail("styles.css must own one stable collapsed grid: slots 420px/0.82fr + inspector 520px/1.18fr.");
+  }
+
+  if (/\.(?:overview|library)(?:[-_]|(?=[\s:{>,]))/.test(css)) {
+    fail("styles.css still contains retired overview/library selector families.");
+  }
+  for (const selectorFamily of [
+    "amazon-workflow",
+    "platform-product-picker",
+    "platform-progress",
+    "onboarding-overlay",
+    "onboarding-card",
+    "history-archive",
+    "deposit-dialog",
+    "deposit-form",
+    "amazon-session-controls--embedded",
+    "workbench-chrome__controls",
+    "workbench-chrome__onboarding",
+  ]) {
+    if (css.includes(`.${selectorFamily}`)) {
+      fail(`styles.css still contains retired selector family ".${selectorFamily}".`);
     }
   }
 
@@ -134,8 +217,11 @@ function walkTsx(dir, out = []) {
     "primary-hover": "#1d4ed8",
     "primary-soft": "#eaf1ff",
     success: "#0f8b6e",
+    "success-text": "#0b735c",
     warning: "#c88719",
     danger: "#d0443a",
+    "danger-text": "#b8322a",
+    "focus-ring": "#3b82f6",
   })) {
     if (!guide.includes(`\`--${name}\`: \`${value}\``)) {
       fail(`UI_STYLE_GUIDE.md token --${name} must match styles.css (${value}).`);
@@ -162,6 +248,7 @@ function walkTsx(dir, out = []) {
 // --- 3. Workbench module columns must use Panel, not hand-written panel shells ---
 {
   const workspace = read(join(componentsDir, "PlatformWorkspace.tsx"));
+  const shell = read(join(componentsDir, "AppShell.tsx"));
   if (/<section[^>]*className=["'`][^"'`]*\bpanel\b/.test(workspace)) {
     fail(
       "PlatformWorkspace.tsx: hand-written <section class=\"panel…\"> is forbidden; use <Panel> (UI_STYLE_GUIDE §9).",
@@ -207,7 +294,7 @@ function walkTsx(dir, out = []) {
   for (const legacyHook of ["mobilePane", "data-mobile-pane", "mobile-workbench-tabs"]) {
     if (workspace.includes(legacyHook) || css.includes(legacyHook)) {
       fail(
-        `Legacy mobile workbench hook "${legacyHook}" must stay removed; 899px and below use the desktop-only gate.`,
+        `Legacy mobile workbench hook "${legacyHook}" must stay removed; 1199px and below use the desktop-only gate.`,
       );
     }
   }
@@ -256,6 +343,20 @@ function walkTsx(dir, out = []) {
   }
   if (!css.includes(".dialog.dialog--sidebar")) {
     fail("styles.css must own shared sidebar Dialog geometry.");
+  }
+  for (const needle of [
+    "createPortal(layer, root)",
+    "desktopContent.inert = gateActive || modalActive",
+    "layer.inert = !active",
+    'live = "off"',
+  ]) {
+    if (!ui.includes(needle)) {
+      fail(`ui.tsx missing shared modal/live-region governance hook ${JSON.stringify(needle)}.`);
+    }
+  }
+  const app = read(appTsx);
+  if (!app.includes('variant="sidebar"') || app.includes("platform-history-backdrop")) {
+    fail("App.tsx history must use the shared sidebar Dialog without a private backdrop owner.");
   }
 }
 
@@ -309,7 +410,7 @@ function walkTsx(dir, out = []) {
     fail("AmazonSessionControls.tsx must not switch A+ module ownership to a plan-only inline variant.");
   }
 
-  for (const needle of ["basePresetId", "onBasePresetChange", 'aria-label="附加风格板"']) {
+  for (const needle of ["basePresetId", "onBasePresetChange", 'aria-label="视觉参考"']) {
     if (!stylePicker.includes(needle)) {
       fail(`StyleReferencePicker.tsx missing style ownership hook ${JSON.stringify(needle)}.`);
     }
@@ -324,6 +425,74 @@ function walkTsx(dir, out = []) {
   }
   if (!styleEditor.includes("保存到当前商品")) {
     fail("StyleReferenceEditorDialog.tsx must name the persistence scope in its save action.");
+  }
+}
+
+// --- 8. Current UI owners remain explicit and non-duplicated ---
+{
+  const shell = read(join(componentsDir, "AppShell.tsx"));
+  const rail = read(join(componentsDir, "PlatformRail.tsx"));
+  const workspace = read(join(componentsDir, "PlatformWorkspace.tsx"));
+  const amazonIntake = read(join(componentsDir, "AmazonIntake.tsx"));
+  const taobaoIntake = read(join(componentsDir, "TaobaoIntake.tsx"));
+  const slotBoard = read(join(componentsDir, "SlotBoard.tsx"));
+  const platformTypes = read(join(root, "src/domain/platforms/types.ts"));
+  const index = read(indexPath);
+
+  for (const needle of ["runtimeMode", "runtime-badge", 'onChange("settings")']) {
+    if (!rail.includes(needle)) {
+      fail(`PlatformRail.tsx missing always-visible runtime ownership hook ${JSON.stringify(needle)}.`);
+    }
+  }
+  if (!shell.includes("runtimeMode={runtimeSettings.mode}")) {
+    fail("AppShell.tsx must pass the active runtime mode to PlatformRail.");
+  }
+  if (workspace.includes("workflowAction")) {
+    fail("PlatformWorkspace.tsx must not duplicate generation/export as a top-chrome workflowAction.");
+  }
+  for (const [name, source] of [
+    ["AmazonIntake.tsx", amazonIntake],
+    ["TaobaoIntake.tsx", taobaoIntake],
+  ]) {
+    if (source.includes('className="planning-input-requirement visually-hidden"')) {
+      fail(`${name} must keep its empty-input requirement visible beside the disabled action.`);
+    }
+  }
+  if (!platformTypes.includes("readonly uiLabel?: string")) {
+    fail("PlatformSlotRule must expose optional uiLabel without replacing its canonical label.");
+  }
+  if (slotBoard.includes("<small>{rule.key}</small>")) {
+    fail("SlotBoard.tsx must not duplicate the slot key inside an empty thumbnail.");
+  }
+  if (!index.includes('<meta name="theme-color" content="#20252b"')) {
+    fail("index.html must keep the single light-theme browser chrome color at #20252b.");
+  }
+}
+
+// --- 9. Retired zero-consumer UI surfaces must stay removed ---
+{
+  for (const fileName of ["PlatformProgress.tsx", "GlobalAssetUpload.tsx"]) {
+    if (existsSync(join(componentsDir, fileName))) {
+      fail(`${fileName} is a retired zero-consumer component and must stay removed.`);
+    }
+  }
+  const shell = read(join(componentsDir, "AppShell.tsx"));
+  const workspace = read(join(componentsDir, "PlatformWorkspace.tsx"));
+  const amazonWorkspace = read(join(componentsDir, "AmazonWorkspace.tsx"));
+  const amazonIntake = read(join(componentsDir, "AmazonIntake.tsx"));
+  const taobaoIntake = read(join(componentsDir, "TaobaoIntake.tsx"));
+  for (const legacyProp of [
+    "onOpenHistory",
+    "onOpenLibrary",
+    "onOpenProductPicker",
+    "onSyncListingFacts",
+    "onCreateProject",
+    "onSelectProject",
+    "onSettingsOpenChange",
+  ]) {
+    if ([shell, workspace, amazonWorkspace, amazonIntake, taobaoIntake].some((source) => source.includes(legacyProp))) {
+      fail(`Retired zero-consumer compatibility prop ${legacyProp} must stay removed.`);
+    }
   }
 }
 

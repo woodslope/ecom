@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type { PlatformId } from "../domain/platforms/types";
 import type { WorkflowStage } from "./WorkflowStepper";
@@ -26,10 +26,8 @@ export function PlatformWorkflowShell({
   completedSlots,
   totalSlots,
   contextBar,
-  badge,
-  controls,
+  historyAction,
   actions,
-  onboarding,
   children,
   className = "",
 }: {
@@ -39,14 +37,25 @@ export function PlatformWorkflowShell({
   completedSlots: number;
   totalSlots: number;
   contextBar?: ReactNode;
-  badge?: ReactNode;
-  controls?: ReactNode;
+  historyAction?: ReactNode;
   actions?: ReactNode;
-  onboarding?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   const progressLabel = totalSlots > 0 ? `${completedSlots}/${totalSlots}` : "等待策划";
+  const [progressMenuOpen, setProgressMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!progressMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setProgressMenuOpen(false);
+      }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [progressMenuOpen]);
 
   return (
     <div className={`platform-workflow-shell${className ? ` ${className}` : ""}`}>
@@ -57,8 +66,11 @@ export function PlatformWorkflowShell({
         <div className="workbench-chrome__main">
           <div className="workbench-chrome__brand">
             <h1>{title}</h1>
-            {badge}
-            <details className="workbench-chrome__progress-menu">
+            <details
+              className="workbench-chrome__progress-menu"
+              open={progressMenuOpen}
+              onToggle={(event) => setProgressMenuOpen(event.currentTarget.open)}
+            >
               <summary aria-label={`当前步骤 ${WORKFLOW_STAGE_INDEX[stage]} / 4，展开完整流程`}>
                 <span className="workbench-chrome__progress-marker" aria-hidden="true">
                   {WORKFLOW_STAGE_INDEX[stage]}
@@ -78,12 +90,13 @@ export function PlatformWorkflowShell({
             </details>
           </div>
           {contextBar ? <div className="workbench-chrome__context">{contextBar}</div> : null}
-          {controls ? <div className="workbench-chrome__controls">{controls}</div> : null}
-          {actions ? <div className="workbench-chrome__tools">{actions}</div> : null}
+          {historyAction || actions ? (
+            <div className="workbench-chrome__tools">
+              {historyAction}
+              {actions}
+            </div>
+          ) : null}
         </div>
-        {onboarding ? (
-          <div className="workbench-chrome__onboarding">{onboarding}</div>
-        ) : null}
       </header>
       <div className="platform-workflow-shell__content">{children}</div>
     </div>

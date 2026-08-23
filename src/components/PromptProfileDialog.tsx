@@ -9,7 +9,7 @@ import {
   saveCustomProfile,
   deleteCustomProfile,
 } from "../domain/prompt-profiles/prompt-profiles";
-import { Button, Dialog, Field, IconButton, Select, StatusMessage } from "./ui";
+import { Button, ConfirmDialog, Dialog, Field, IconButton, Select, StatusMessage } from "./ui";
 
 const COPY_TONE_OPTIONS = [
   { value: "product", label: "产品导向" },
@@ -60,6 +60,7 @@ export function PromptProfileDialog({
   const [saving, setSaving] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const storage = typeof window !== "undefined" ? window.localStorage : null;
 
@@ -102,8 +103,13 @@ export function PromptProfileDialog({
 
   const handleDelete = () => {
     if (!editProfile || !storage) return;
-    if (!window.confirm(`删除方案"${editProfile.label}"？此操作不可撤销。`)) return;
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (!editProfile || !storage) return;
     deleteCustomProfile(storage, editProfile.id);
+    setDeleteConfirmOpen(false);
     onClose();
   };
 
@@ -173,9 +179,10 @@ export function PromptProfileDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      title={isEditing ? "编辑提示词方案" : "新建提示词方案"}
+    <>
+      <Dialog
+      open={open && !deleteConfirmOpen}
+      title={isEditing ? "编辑生成方案" : "新建生成方案"}
       eyebrow="自定义 Prompt Profile"
       className="prompt-profile-dialog"
       onClose={onClose}
@@ -211,6 +218,7 @@ export function PromptProfileDialog({
       <div className="prompt-profile-editor">
         <Field label="方案名称">
           <input
+            name="profileName"
             aria-label="方案名称"
             value={name}
             placeholder="例如：我的3C产品方案"
@@ -219,14 +227,16 @@ export function PromptProfileDialog({
         </Field>
         <Field label="简述" hint="用于方案列表中的识别。">
           <input
+            name="profileDescription"
             aria-label="简述"
             value={description}
             placeholder="例如：适合消费电子品类的转化导向方案"
             onChange={(e) => setDescription(e.target.value)}
           />
         </Field>
-        <Field label="视觉风格基础" hint="选择内置风格作为视觉基调，可在风格板中进一步微调。">
+        <Field label="视觉风格基础" hint="选择内置风格作为视觉基调，可在视觉参考中进一步微调。">
           <Select
+            name="sourcePresetId"
             aria-label="视觉风格基础"
             value={sourcePresetId}
             onChange={(e) => setSourcePresetId(e.target.value)}
@@ -253,6 +263,7 @@ export function PromptProfileDialog({
           <h4>策划策略</h4>
           <Field label="策略方向" hint="描述策划的侧重点，将注入到 AI 策划模型的 system prompt 中。">
             <textarea
+              name="strategyDirection"
               aria-label="策略方向"
               rows={3}
               value={strategy.direction}
@@ -263,6 +274,7 @@ export function PromptProfileDialog({
           <div className="prompt-profile-editor__grid">
             <Field label="文案基调">
               <Select
+                name="copyTone"
                 aria-label="文案基调"
                 value={strategy.copyTone}
                 onChange={(e) =>
@@ -276,6 +288,7 @@ export function PromptProfileDialog({
             </Field>
             <Field label="构图偏好">
               <Select
+                name="compositionBias"
                 aria-label="构图偏好"
                 value={strategy.compositionBias}
                 onChange={(e) =>
@@ -292,6 +305,7 @@ export function PromptProfileDialog({
             </Field>
             <Field label="文案密度">
               <Select
+                name="copyDensity"
                 aria-label="文案密度"
                 value={strategy.copyDensity}
                 onChange={(e) =>
@@ -342,14 +356,23 @@ export function PromptProfileDialog({
             </Button>
           </div>
           {importMessage ? (
-            <StatusMessage tone="success">{importMessage}</StatusMessage>
+            <StatusMessage tone="success" live="polite">{importMessage}</StatusMessage>
           ) : null}
           {importError ? (
-            <StatusMessage tone="danger">{importError}</StatusMessage>
+            <StatusMessage tone="danger" live="assertive">{importError}</StatusMessage>
           ) : null}
         </section>
       </div>
-    </Dialog>
+      </Dialog>
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title="删除生成方案？"
+        description={`将删除“${editProfile?.label ?? "当前方案"}”，此操作不可撤销。`}
+        confirmLabel="删除方案"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
+    </>
   );
 }
 

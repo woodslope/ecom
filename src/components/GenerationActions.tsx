@@ -31,7 +31,7 @@ export function GenerationTaskStatus({
   const owner = `${getPlatformRulePack(target.platformId).label} · ${target.slotKey}`;
 
   return (
-    <StatusMessage className="generation-task-status">
+    <StatusMessage live="polite" className="generation-task-status">
       <span className="generation-task-status__copy">
         <LoaderCircle className="spin" size={16} />
         <span>
@@ -61,7 +61,7 @@ export function CopilotTaskStatus({
   const owner = `${getPlatformRulePack(target.platformId).label} · ${target.slotKey}`;
 
   return (
-    <StatusMessage className="generation-task-status copilot-task-status">
+    <StatusMessage live="polite" className="generation-task-status copilot-task-status">
       <span className="generation-task-status__copy">
         <Bot size={16} />
         <span>
@@ -91,7 +91,7 @@ export function GenerationFailureStatus({
   const owner = `${getPlatformRulePack(target.platformId).label} · ${target.slotKey}`;
 
   return (
-    <StatusMessage tone="danger" className="generation-task-status generation-task-status--error">
+    <StatusMessage tone="danger" live="assertive" className="generation-task-status generation-task-status--error">
       <span className="generation-task-status__copy">
         <CircleAlert size={16} />
         <span>

@@ -33,10 +33,18 @@ export function resolveSessionEffectiveFacts(
       : project.facts;
     sourceFacts = applyTaobaoAnalysisToFacts(baseFacts, session.taobaoAnalysis);
   } else {
+    // Manual Amazon input is copied into a task-owned draft project before planning.
+    // Keep manual sessions isolated from library facts, but do not discard the
+    // facts that belong to that draft itself when downstream consumers resolve
+    // the effective project again.
+    const factsSourceMode =
+      session.planningInput?.sourceMode === "manual" && project.scope !== "task-draft"
+        ? "manual"
+        : "library";
     sourceFacts = resolveAmazonPlanningFacts(
       project.facts,
       session.sourceInput.listingText,
-      session.planningInput?.sourceMode ?? "library",
+      factsSourceMode,
     );
   }
   if (

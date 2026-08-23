@@ -75,7 +75,7 @@ export function createAmazonPreviewModel(input: {
 
     return {
       slotKey: rule.key,
-      label: rule.label,
+      label: rule.uiLabel ?? rule.label,
       order: rule.order,
       width: rule.dimensions.width,
       height: rule.dimensions.height,

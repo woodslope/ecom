@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { FileText, ImagePlus, LoaderCircle, Sparkles, Square, Upload } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ChevronDown, FileText, ImagePlus, LoaderCircle, Pencil, Plus, Sparkles, Square, Upload } from "lucide-react";
 
-import type { ProductProject } from "../domain/projects/types";
+import type { ProductFacts, ProductProject } from "../domain/projects/types";
 import {
   assessPlanningInput,
   createEmptyProductFacts,
@@ -9,11 +9,8 @@ import {
   planningInputQualityMessage,
   type PlanningInputSnapshot,
 } from "../domain/planning/input-assessment";
-import {
-  hasUsableProductFacts,
-  productFactsToTaobaoText,
-  type ProductIntakeSourceMode,
-} from "../domain/projects/product-source-text";
+import type { ProductIntakeSourceMode } from "../domain/projects/product-source-text";
+import { productFactsToTaobaoText } from "../domain/projects/product-source-text";
 import {
   analyzeTaobaoProduct,
   applyTaobaoAnalysisToFacts,
@@ -26,11 +23,13 @@ import { getPlatformRulePack } from "../domain/platforms/registry";
 import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
 import { ProductContextBar } from "./ProductContextBar";
 import { IndustryTemplateSelector } from "./IndustryTemplateSelector";
-import { Button, Dialog, EmptyState, Field, Panel, Select, StatusChip, StatusMessage } from "./ui";
+import { ProductFactsForm } from "./ProductFactsForm";
+import { Button, Dialog, EmptyState, Field, IconButton, Panel, Select, StatusChip, StatusMessage } from "./ui";
 import {
   allProfiles,
   DEFAULT_PROMPT_PROFILE_ID,
 } from "../domain/prompt-profiles/prompt-profiles";
+import { PromptProfileDialog, usePromptProfilePicker } from "./PromptProfileDialog";
 
 export function taobaoAnalysisHasReference(input: {
   selectedReferenceCount: number;
@@ -40,7 +39,7 @@ export function taobaoAnalysisHasReference(input: {
 }
 
 const citationSourceLabel = {
-  "shared-product": "共享商品",
+  "shared-product": "历史任务",
   "analysis-input": "补充资料",
   "reference-asset": "参考图",
 } as const;
@@ -96,7 +95,7 @@ export function TaobaoAnalysisSummary({
       </div>
       {planningInput ? (
         <StatusMessage tone={planningInput.quality === "standard" ? "success" : "warning"}>
-          {planningInput.sourceMode === "library" ? "资料库来源" : "手动来源"} · {planningInputQualityLabel(planningInput.quality)}
+          {planningInput.sourceMode === "library" ? "已保存任务资料" : "当前任务填写"} · {planningInputQualityLabel(planningInput.quality)}
           {planningInput.missingFacts.length > 0
             ? ` · 待补：${planningInput.missingFacts.join("、")}`
             : " · 输入完整"}
@@ -157,11 +156,11 @@ export function TaobaoIntake({
   onCancelLockedTask,
   error,
   onAnalyze,
+  onStartNewTask,
   onDirtyChange,
-  onOpenLibrary,
-  onOpenProductPicker,
   onOpenAnalysisDetails,
   stylePresetId,
+  historyAction,
 }: {
   activeProject: ProductProject | null;
   assets: WorkbenchAsset[];
@@ -171,24 +170,27 @@ export function TaobaoIntake({
   onCancelLockedTask?: () => void;
   error: string | null;
   onAnalyze: (input: AnalyzeTaobaoProductInput) => Promise<unknown>;
+  onStartNewTask?: () => void;
   onDirtyChange?: (reason: string | null) => void;
-  onOpenLibrary?: () => void;
-  onOpenProductPicker?: () => void;
   onOpenAnalysisDetails?: () => void;
   stylePresetId?: string | null;
+  historyAction?: ReactNode;
 }) {
   const referenceAssets = useMemo(
     () => assets.filter((asset) => asset.metadata.kind === "reference"),
     [assets],
   );
   const sessionDraft = session?.sourceInput.taobaoProduct;
-  const hasLibraryFacts = Boolean(activeProject && hasUsableProductFacts(activeProject.facts));
   const [sourceMode, setSourceMode] = useState<ProductIntakeSourceMode>(
-    () => session?.planningInput?.sourceMode ?? (session ? "library" : "manual"),
+    () => session?.planningInput?.sourceMode ?? "manual",
   );
   const [productText, setProductText] = useState(() => {
     if (sessionDraft?.productText?.trim()) return sessionDraft.productText;
     return "";
+  });
+  const [facts, setFacts] = useState<ProductFacts>(() => {
+    const base = activeProject && session ? activeProject.facts : createEmptyProductFacts();
+    return applyTaobaoAnalysisToFacts(base, analyzeTaobaoProduct({ facts: base, productText, referenceAssets: [] }));
   });
   const [selectedIds, setSelectedIds] = useState<string[]>(
     sessionDraft?.selectedReferenceAssetIds ?? [],
@@ -201,16 +203,22 @@ export function TaobaoIntake({
   const [industryTemplate, setIndustryTemplate] = useState<IndustryTemplateSnapshot | undefined>(
     session?.industryTemplate,
   );
+  const profilePicker = usePromptProfilePicker();
+  const availableProfiles = profilePicker.profiles.length > 0 ? profilePicker.profiles : allProfiles();
+  const selectedProfile = availableProfiles.find((profile) => profile.id === selectedStylePresetId);
 
   useEffect(() => {
     const draft = session?.sourceInput.taobaoProduct;
-    const nextMode = session?.planningInput?.sourceMode ?? (session ? "library" : "manual");
+    const nextMode = session?.planningInput?.sourceMode ?? "manual";
     setSourceMode(nextMode);
     if (draft?.productText?.trim()) {
       setProductText(draft.productText);
     } else {
       setProductText("");
     }
+    const nextText = draft?.productText ?? "";
+    const base = activeProject && session ? activeProject.facts : createEmptyProductFacts();
+    setFacts(applyTaobaoAnalysisToFacts(base, analyzeTaobaoProduct({ facts: base, productText: nextText, referenceAssets: [] })));
     setSelectedIds(
       draft?.selectedReferenceAssetIds ?? [],
     );
@@ -220,7 +228,6 @@ export function TaobaoIntake({
     setIndustryTemplate(session?.industryTemplate);
   }, [
     activeProject,
-    referenceAssets,
     session?.planningInput?.sourceMode,
     session?.sourceInput.taobaoProduct?.productText,
     session?.sourceInput.taobaoProduct?.selectedReferenceAssetIds,
@@ -233,39 +240,12 @@ export function TaobaoIntake({
     return () => onDirtyChange?.(null);
   }, [dirty, onDirtyChange]);
 
-  const applyLibrarySource = () => {
-    if (!activeProject) return;
-    setSourceMode("library");
-    setProductText(productFactsToTaobaoText(activeProject.facts));
-    setSelectedIds(referenceAssets.map((asset) => asset.metadata.id));
-    setDirty(true);
-  };
-
-  const applyManualSource = () => {
-    setSourceMode("manual");
-    setProductText("");
-    setSelectedIds([]);
-    setFiles([]);
-    setDirty(true);
-  };
-
-  const planningFacts = useMemo(() => {
-    const baseFacts = sourceMode === "library" && activeProject
-      ? activeProject.facts
-      : createEmptyProductFacts();
-    const analysis = analyzeTaobaoProduct({
-      facts: baseFacts,
-      productText,
-      referenceAssets: [],
-    });
-    return applyTaobaoAnalysisToFacts(baseFacts, analysis);
-  }, [activeProject, productText, sourceMode]);
   const assessment = useMemo(
     () => assessPlanningInput({
-      facts: planningFacts,
+      facts,
       productImageCount: selectedIds.length + files.length,
     }),
-    [files.length, planningFacts, selectedIds.length],
+    [facts, files.length, selectedIds.length],
   );
   const assessmentLabel = planningInputQualityLabel(assessment.quality);
   const assessmentMessage = planningInputQualityMessage(assessment);
@@ -276,6 +256,12 @@ export function TaobaoIntake({
     setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
     setDirty(true);
   };
+  const applyProductText = () => {
+    const base = facts;
+    const analysis = analyzeTaobaoProduct({ facts: base, productText, referenceAssets: [] });
+    setFacts(applyTaobaoAnalysisToFacts(base, analysis));
+    setDirty(true);
+  };
   const submit = async () => {
     if (assessment.quality === "empty") return;
     const result = await onAnalyze({
@@ -283,7 +269,8 @@ export function TaobaoIntake({
         ? { projectId: activeProject.id }
         : {}),
       sourceMode,
-      productText,
+      productText: productFactsToTaobaoText(facts),
+      facts,
       files,
       selectedReferenceAssetIds: selectedIds,
       stylePresetId: selectedStylePresetId,
@@ -310,49 +297,31 @@ export function TaobaoIntake({
           statusTone="neutral"
           detailLabel={session?.taobaoAnalysis ? "分析详情" : undefined}
           disabled={loading}
-          sourceMode={sourceMode}
-          onSourceModeChange={(mode) => {
-            if (mode === "library") {
-              if (onOpenProductPicker) onOpenProductPicker();
-              else applyLibrarySource();
-            } else applyManualSource();
-          }}
-          onReloadSource={activeProject ? applyLibrarySource : undefined}
-          reloadSourceDisabled={!hasLibraryFacts && referenceAssets.length === 0}
           onOpenDetails={session?.taobaoAnalysis ? onOpenAnalysisDetails : undefined}
-          onOpenLibrary={onOpenLibrary}
         />
       }
+      historyAction={historyAction}
       actions={
-        <div className="taobao-intake__actions">
-        <Field label="方案" className="taobao-intake__profile-field">
-          <Select
-            aria-label="提示词方案"
-            value={selectedStylePresetId}
-            disabled={loading}
-            onChange={(event) => setSelectedStylePresetId(event.target.value)}
+        <>
+          {onStartNewTask && (activeProject || session) ? (
+            <Button variant="secondary" size="normal" onClick={onStartNewTask}>
+              <Sparkles size={15} />新任务
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            className="planning-primary-action"
+            disabled={loading || Boolean(lockedReason) || assessment.quality === "empty"}
+            loading={loading}
+            loadingLabel="生成图片策划中..."
+            title={analyzeDisabledReason}
+            aria-describedby={assessment.quality === "empty" ? "taobao-planning-requirement" : undefined}
+            onClick={() => void submit()}
           >
-            {allProfiles().map((profile) => (
-              <option key={profile.id} value={profile.id} title={profile.description}>
-                {profile.label}{profile.source === "custom" ? "（自定义）" : ""}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Button
-          type="button"
-          className="planning-primary-action"
-          disabled={loading || Boolean(lockedReason) || assessment.quality === "empty"}
-          loading={loading}
-          loadingLabel="生成图片策划中..."
-          title={analyzeDisabledReason}
-          aria-describedby={assessment.quality === "empty" ? "taobao-planning-requirement" : undefined}
-          onClick={() => void submit()}
-        >
-          <Sparkles size={16} />
-          生成图片策划
-        </Button>
-        </div>
+            <Sparkles size={16} />
+            生成图片策划
+          </Button>
+        </>
       }
     >
       <form className="taobao-intake" onSubmit={(event) => {
@@ -365,7 +334,7 @@ export function TaobaoIntake({
         </StatusMessage>
       ) : null}
       {lockedReason ? (
-        <StatusMessage className="planning-task-status">
+        <StatusMessage live="polite" className="planning-task-status">
           <span className="generation-task-status__copy">
             <LoaderCircle className="spin" size={16} />
             <strong>{lockedReason}</strong>
@@ -378,36 +347,87 @@ export function TaobaoIntake({
           ) : null}
         </StatusMessage>
       ) : null}
-      <IndustryTemplateSelector
-        scope={{ platformId: "taobao", workflowId: "taobao-product" }}
-        rulePack={getPlatformRulePack("taobao")}
-        value={industryTemplate}
-        disabled={loading || Boolean(lockedReason)}
-        onChange={setIndustryTemplate}
+      <details className="task-advanced-settings">
+        <summary><span>策划参数</span><small>{selectedProfile?.label ?? "干净零售"} · {industryTemplate?.name ?? "通用模板"}</small><ChevronDown size={15} /></summary>
+        <div className="task-advanced-settings__body">
+          <section className="planning-settings-group">
+            <div className="planning-settings-group__heading">
+              <strong>生成策略</strong>
+              <span>控制策划策略、文案密度、视觉风格和行业方向。</span>
+            </div>
+            <Field label="生成方案" className="taobao-intake__profile-field">
+              <div className="prompt-profile-select-row">
+                <Select
+                  name="stylePresetId"
+                  aria-label="生成方案"
+                  value={selectedStylePresetId}
+                  disabled={loading}
+                  onChange={(event) => {
+                    setSelectedStylePresetId(event.target.value);
+                    setDirty(true);
+                  }}
+                >
+                  {availableProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id} title={profile.description}>
+                      {profile.label}{profile.source === "custom" ? "（自定义）" : ""}
+                    </option>
+                  ))}
+                </Select>
+                <div className="prompt-profile-select-row__actions">
+                  <IconButton label="新建生成方案" disabled={loading} onClick={profilePicker.openNew}>
+                    <Plus size={14} />
+                  </IconButton>
+                  {selectedProfile?.source === "custom" ? (
+                    <IconButton label="编辑此方案" disabled={loading} onClick={() => profilePicker.openEdit(selectedProfile)}>
+                      <Pencil size={14} />
+                    </IconButton>
+                  ) : null}
+                </div>
+              </div>
+            </Field>
+            <IndustryTemplateSelector
+              scope={{ platformId: "taobao", workflowId: "taobao-product" }}
+              rulePack={getPlatformRulePack("taobao")}
+              value={industryTemplate}
+              disabled={loading || Boolean(lockedReason)}
+              onChange={(next) => {
+                if (industryTemplate && (next.id !== industryTemplate.id || next.version !== industryTemplate.version)) {
+                  setDirty(true);
+                }
+                setIndustryTemplate(next);
+              }}
+            />
+          </section>
+        </div>
+      </details>
+      <PromptProfileDialog
+        open={profilePicker.dialogOpen}
+        editProfile={profilePicker.editingProfile}
+        onClose={profilePicker.closeDialog}
+        onSaved={profilePicker.handleSaved}
       />
-      {error ? <StatusMessage tone="danger">{error}</StatusMessage> : null}
+      {error ? <StatusMessage tone="danger" live="assertive">{error}</StatusMessage> : null}
 
       <div className="taobao-intake__grid">
         <Panel title="商品资料" className="taobao-intake__copy-panel">
-          <Field
-            label="淘宝商品资料"
-            hint={
-              sourceMode === "library"
-                ? "来自资料库的任务副本，改这里只影响本次 session。"
-                : "粘贴或手写本次任务文案。"
-            }
-          >
-            <textarea
-              aria-label="淘宝商品资料"
-              rows={14}
-              value={productText}
-              onChange={(event) => {
-                setProductText(event.target.value);
-                setDirty(true);
-              }}
-              placeholder="可粘贴商品名称、卖点、规格和禁用声明"
-            />
-          </Field>
+          <ProductFactsForm facts={facts} disabled={loading || Boolean(lockedReason)} onChange={(next) => { setFacts(next); setDirty(true); }} />
+          <details className="planning-source-paste">
+            <summary>粘贴淘宝商品资料（可选）</summary>
+            <Field label="商品资料原文" hint="解析后可填入上方结构化字段，不会自动覆盖已填写内容。">
+              <textarea
+                name="productText"
+                aria-label="淘宝商品资料"
+                rows={6}
+                value={productText}
+                disabled={loading || Boolean(lockedReason)}
+                placeholder="商品名：云感旅行颈枕\n卖点：慢回弹\n规格：材质：记忆棉"
+                onChange={(event) => { setProductText(event.target.value); setDirty(true); }}
+              />
+            </Field>
+            <div className="planning-source-paste__actions">
+              <Button type="button" variant="secondary" size="compact" disabled={loading || Boolean(lockedReason) || !productText.trim()} onClick={applyProductText}>填入结构化字段</Button>
+            </div>
+          </details>
         </Panel>
         <Panel title="商品参考图" className="taobao-intake__asset-panel">
           <label className="taobao-intake__upload">
@@ -416,6 +436,7 @@ export function TaobaoIntake({
             <input
               aria-label="淘宝分析图片"
               type="file"
+              name="referenceFiles"
               accept="image/*"
               multiple
               onChange={(event) => {
@@ -436,6 +457,7 @@ export function TaobaoIntake({
                 <label className="taobao-intake__asset" key={asset.metadata.id}>
                   <input
                     type="checkbox"
+                    name="selectedReferenceAssetIds"
                     checked={selectedIds.includes(asset.metadata.id)}
                     onChange={() => toggleAsset(asset.metadata.id)}
                   />

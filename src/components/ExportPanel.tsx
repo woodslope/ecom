@@ -75,7 +75,7 @@ export function ExportPanel({
         {buttonLabel}
       </Button>
       {error ? (
-        <StatusMessage tone="danger" className="export-panel__error">
+        <StatusMessage tone="danger" live="assertive" className="export-panel__error">
           <span>{error}</span>
           <IconButton label="关闭导出提示" onClick={onClearError}>
             <X size={14} />

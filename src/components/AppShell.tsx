@@ -1,27 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Cloud, CloudOff, Monitor } from "lucide-react";
+import { Monitor } from "lucide-react";
 
 import type { NavigationItemId } from "../domain/platforms/types";
-import type { ProductProject } from "../domain/projects/types";
 import { defaultRuntimeSettings, type ConnectionTestResult, type RuntimeSettings } from "../domain/settings";
 import { PlatformRail } from "./PlatformRail";
 import { SettingsDialog } from "./SettingsDialog";
-import { StatusChip } from "./ui";
+import { syncModalEnvironment } from "./ui";
 
-export type AppShellHandle = {
-  openSettings: () => void;
-};
-
-export const DESKTOP_MIN_WIDTH = 900;
+export const DESKTOP_MIN_WIDTH = 1200;
 
 export function AppShell({
   activeItem,
   onActiveItemChange,
-  projects = [],
-  activeProject = null,
-  loading = false,
-  onCreateProject = () => undefined,
-  onSelectProject = () => undefined,
   runtimeSettings = defaultRuntimeSettings,
   settingsLoading = false,
   settingsError = null,
@@ -38,17 +28,10 @@ export function AppShell({
   onTestImageConnection,
   onExportLocalBackup,
   onImportLocalBackup,
-  onSettingsOpenChange,
-  compactRail = false,
   children,
 }: {
   activeItem: NavigationItemId;
   onActiveItemChange: (item: NavigationItemId) => void;
-  projects?: ProductProject[];
-  activeProject?: ProductProject | null;
-  loading?: boolean;
-  onCreateProject?: () => void;
-  onSelectProject?: (id: string) => void;
   runtimeSettings?: RuntimeSettings;
   settingsLoading?: boolean;
   settingsError?: string | null;
@@ -65,9 +48,6 @@ export function AppShell({
   onTestImageConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onExportLocalBackup?: () => Promise<string>;
   onImportLocalBackup?: (file: File) => Promise<string>;
-  /** Notify parent when settings dialog opens/closes (e.g. demo banner → open settings). */
-  onSettingsOpenChange?: (open: boolean) => void;
-  compactRail?: boolean;
   children: ReactNode;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -76,15 +56,8 @@ export function AppShell({
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === "undefined" ? DESKTOP_MIN_WIDTH : window.innerWidth,
   );
-  const setSettingsOpenAndNotify = useCallback(
-    (open: boolean) => {
-      setSettingsOpen(open);
-      onSettingsOpenChange?.(open);
-    },
-    [onSettingsOpenChange],
-  );
-  const openSettings = useCallback(() => setSettingsOpenAndNotify(true), [setSettingsOpenAndNotify]);
-  const closeSettings = useCallback(() => setSettingsOpenAndNotify(false), [setSettingsOpenAndNotify]);
+  const openSettings = useCallback(() => setSettingsOpen(true), []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   useEffect(() => {
     const updateWidth = () => setViewportWidth(window.innerWidth);
@@ -92,17 +65,6 @@ export function AppShell({
     window.addEventListener("resize", updateWidth);
     return () => window.removeEventListener("resize", updateWidth);
   }, []);
-
-  // Parent can open settings without mounting a settings nav item (demo banner, runtime badge).
-  useEffect(() => {
-    const handle = (event: Event) => {
-      const detail = (event as CustomEvent<{ open?: boolean }>).detail;
-      if (detail?.open === false) closeSettings();
-      else openSettings();
-    };
-    window.addEventListener("ecom:open-settings", handle);
-    return () => window.removeEventListener("ecom:open-settings", handle);
-  }, [closeSettings, openSettings]);
 
   const changeDestination = (item: NavigationItemId) => {
     if (item === "settings") {
@@ -112,16 +74,13 @@ export function AppShell({
     onActiveItemChange(item);
   };
 
-  // Create/select/project identity belong to 资料库 pages, not a global chrome bar.
-  void projects;
-  void activeProject;
-  void loading;
-  void onCreateProject;
-  void onSelectProject;
-
-  const usesApi = runtimeSettings.mode === "api";
-  const runtimeLabel = usesApi ? "API 引擎" : "演示引擎";
   const desktopSupported = viewportWidth >= DESKTOP_MIN_WIDTH;
+
+  useEffect(() => {
+    if (!desktopSupported && settingsOpen) {
+      closeSettings();
+    }
+  }, [closeSettings, desktopSupported, settingsOpen]);
 
   useEffect(() => {
     if (!desktopSupported) {
@@ -138,11 +97,12 @@ export function AppShell({
     if (previous?.isConnected) previous.focus();
   }, [desktopSupported]);
 
+  useEffect(() => {
+    syncModalEnvironment();
+  }, [desktopSupported]);
+
   return (
-    <div
-      className={`app-frame${compactRail ? " app-frame--compact-rail" : ""}`}
-      data-testid="app-frame"
-    >
+    <div className="app-frame" data-testid="app-frame">
       <div
         className="app-desktop-content"
         data-testid="app-desktop-content"
@@ -152,21 +112,7 @@ export function AppShell({
         <PlatformRail
           activeItem={activeItem}
           onChange={changeDestination}
-          compact={compactRail}
-          runtimeBadge={
-            <button
-              type="button"
-              className="runtime-badge-button"
-              onClick={openSettings}
-              aria-label={`当前运行模式：${runtimeLabel}。打开设置切换 Demo / API`}
-              title="打开设置 · 切换 Demo / API"
-            >
-              <StatusChip tone="mode" className="runtime-badge">
-                {usesApi ? <Cloud size={12} /> : <CloudOff size={12} />}
-                <span className="runtime-badge__text">{usesApi ? "API" : "演示"}</span>
-              </StatusChip>
-            </button>
-          }
+          runtimeMode={runtimeSettings.mode}
         />
         <div className="app-surface">
           <main className="workspace" data-testid="workspace">
@@ -195,7 +141,7 @@ export function AppShell({
           </div>
           <strong id="desktop-only-gate-title">当前只支持电脑端浏览</strong>
           <p id="desktop-only-gate-description">
-            电商工作台需要足够宽度同时查看资料、槽位和检查器。请将窗口调整到至少{" "}
+            电商工作台需要足够宽度同时查看平台制作区与历史记录。请将窗口调整到至少{" "}
             {DESKTOP_MIN_WIDTH}px。
           </p>
           <span className="desktop-only-gate__meta">

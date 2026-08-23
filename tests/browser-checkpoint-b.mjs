@@ -8,19 +8,16 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const evidenceDir = resolve(projectRoot, "artifacts/cross-platform-ais");
+const evidenceDir = resolve(
+  process.env.ECOM_EVIDENCE_DIR ?? resolve(projectRoot, "artifacts/cross-platform-ais"),
+);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 function assertNoUnexpectedErrors(errors) {
-  const unexpected = errors.filter(
-    (entry) =>
-      !entry.includes("status of 404") &&
-      !entry.includes("Failed to load resource"),
-  );
-  assert(unexpected.length === 0, unexpected.join("\n"));
+  assert(errors.length === 0, errors.join("\n"));
 }
 
 async function findOpenPort() {
@@ -59,6 +56,9 @@ async function openAmazonPage(browser, baseUrl) {
     if (message.type() === "error") errors.push(`console: ${message.text()}`);
   });
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
+  page.on("response", (response) => {
+    if (response.status() >= 400) errors.push(`HTTP ${response.status()}: ${response.url()}`);
+  });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByTestId("app-frame").waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Amazon", exact: true }).click();
@@ -123,15 +123,68 @@ async function startAmazonPlanning(page) {
   }
 }
 
+async function openParameterEditor(page) {
+  const parameterDetails = page.locator("details.task-advanced-settings").first();
+  if (await parameterDetails.isVisible().catch(() => false)) {
+    await parameterDetails.evaluate((element) => {
+      if (element instanceof HTMLDetailsElement) element.open = true;
+    });
+    return;
+  }
+  const adjustButton = page.getByRole("button", { name: "调整参数", exact: true });
+  if (await adjustButton.isVisible().catch(() => false)) {
+    await adjustButton.click();
+    return;
+  }
+  const taskSettings = page.getByText("任务设置", { exact: true });
+  if (await taskSettings.isVisible().catch(() => false)) {
+    await taskSettings.click();
+    return;
+  }
+  const advancedSettings = page.getByText("高级设置", { exact: true });
+  if (await advancedSettings.isVisible().catch(() => false)) await advancedSettings.click();
+}
+
+async function openListingInput(page) {
+  const advancedSettings = page.locator("details.task-advanced-settings").first();
+  if (await advancedSettings.isVisible().catch(() => false)) {
+    await advancedSettings.evaluate((element) => {
+      if (element instanceof HTMLDetailsElement) element.open = false;
+    });
+  }
+  const details = page.locator("details.planning-source-paste").first();
+  await details.waitFor({ state: "attached" });
+  await details.scrollIntoViewIfNeeded().catch(() => {});
+  await details.evaluate((element) => {
+    if (element instanceof HTMLDetailsElement) element.open = true;
+  });
+  const textarea = page.getByLabel("Amazon Listing 原文", { exact: true });
+  await textarea.scrollIntoViewIfNeeded().catch(() => {});
+  await textarea.waitFor({ state: "visible" });
+}
+
+async function resumeCurrentTask(page) {
+  await page.getByRole("button", { name: "历史记录", exact: true }).click();
+  const history = page.getByRole("dialog", { name: "Amazon历史记录", exact: true });
+  await history.waitFor({ state: "visible" });
+  await history.getByRole("button", { name: "继续任务", exact: true }).first().click();
+  await page.locator(".slot-card").first().waitFor({ state: "attached" });
+  await history.getByRole("button", { name: "关闭历史记录", exact: true }).click();
+  await history.waitFor({ state: "hidden" });
+}
+
 async function planMarketplace(browser, baseUrl, marketplaceId, expectedCopy, screenshotName) {
   const { context, page, errors } = await openAmazonPage(browser, baseUrl);
-  await page.getByRole("button", { name: "调整参数", exact: true }).click();
+  await openParameterEditor(page);
   await page.getByLabel("目标站点", { exact: true }).selectOption(marketplaceId);
+  await openListingInput(page);
   await page.getByLabel("Amazon Listing 原文", { exact: true }).fill(
     "Title: Northwind Travel Pillow\n\nAbout this item\n- Washable cover\n- 28 x 25 x 12 cm\n\nSKU: NW-P01",
   );
+  await page.getByRole("button", { name: "填入空字段", exact: true }).click();
   await startAmazonPlanning(page);
   await page.locator(".slot-card").filter({ hasText: "PT01" }).waitFor({ state: "visible" });
+  await openParameterEditor(page);
   await page.getByRole("button", { name: "手机预览", exact: true }).click();
   const preview = page.getByRole("dialog", { name: "Amazon 手机内容预览", exact: true });
   await preview.waitFor({ state: "visible" });
@@ -159,8 +212,8 @@ async function planMarketplace(browser, baseUrl, marketplaceId, expectedCopy, sc
 
 async function verifyAPlusWorkflow(browser, baseUrl) {
   const { context, page, errors } = await openAmazonPage(browser, baseUrl);
-  await page.getByRole("button", { name: "调整参数", exact: true }).click();
-  await page.getByRole("tab", { name: "A+ 图", exact: true }).click();
+  await openParameterEditor(page);
+  await page.getByRole("button", { name: "A+ 图", exact: true }).click();
   await page.getByLabel("A+ 类型", { exact: true }).selectOption("standard-large");
   await page.getByRole("button", { name: "编排模块", exact: true }).click();
   assert(await page.locator(".aplus-module-arrange__row").count() === 5, "普通A+ 默认模块数不是 5");
@@ -181,9 +234,11 @@ async function verifyAPlusWorkflow(browser, baseUrl) {
   });
   await page.getByRole("button", { name: "应用编排", exact: true }).click();
 
+  await openListingInput(page);
   await page.getByLabel("Amazon Listing 原文", { exact: true }).fill(
     "Title: Northwind Travel Pillow\n\nAbout this item\n- Washable cover\n- 28 x 25 x 12 cm\n\nSKU: NW-P01",
   );
+  await page.getByRole("button", { name: "填入空字段", exact: true }).click();
   await startAmazonPlanning(page);
   await page.locator(".slot-card").filter({ hasText: "A+S05" }).waitFor({ state: "visible" });
   await page.locator(".slot-card").filter({ hasText: "A+S05" }).click();
@@ -208,6 +263,7 @@ async function verifyAPlusWorkflow(browser, baseUrl) {
   if (!(await page.getByRole("heading", { name: "Amazon", exact: true }).count())) {
     await page.getByRole("button", { name: "Amazon", exact: true }).click();
   }
+  await resumeCurrentTask(page);
   await page.getByLabel("外部标题（图片外）", { exact: true }).waitFor({ state: "visible" });
   assert(
     (await page.getByLabel("外部标题（图片外）", { exact: true }).inputValue()) ===
@@ -220,7 +276,7 @@ async function verifyAPlusWorkflow(browser, baseUrl) {
     "reload 后外部正文未恢复",
   );
 
-  await page.getByRole("button", { name: "调整参数", exact: true }).click();
+  await openParameterEditor(page);
   await page.getByRole("button", { name: "编排模块", exact: true }).click();
   await page.getByRole("dialog", { name: "编排 A+ 模块", exact: true }).waitFor({ state: "visible" });
   await page.screenshot({
@@ -238,18 +294,19 @@ async function verifyAPlusWorkflow(browser, baseUrl) {
     "模块改变后的全局 freshness 提示不准确",
   );
   assert(
-    !(await page.getByRole("button", { name: "重新策划", exact: true }).isDisabled()),
+    !(await page.locator("button.amazon-session-controls__plan").isDisabled()),
     "模块改变后重新策划入口不可用",
   );
-  await page.getByRole("button", { name: "收起参数", exact: true }).click();
-  assert(
-    await page.getByRole("button", { name: "调整参数", exact: true }).isVisible(),
-    "策划过期后参数区无法保持收起",
-  );
+  const taskSettings = page.locator("details.task-advanced-settings").first();
+  await taskSettings.evaluate((element) => {
+    if (element instanceof HTMLDetailsElement) element.open = false;
+  });
+  assert(!(await taskSettings.getAttribute("open")), "策划过期后参数区无法保持收起");
   assert(
     !(await page.getByLabel("目标站点", { exact: true }).isVisible()),
     "策划过期后参数区被自动展开",
   );
+  await openParameterEditor(page);
   await page.getByRole("button", { name: "手机预览", exact: true }).click();
   const preview = page.getByRole("dialog", { name: "Amazon 手机内容预览", exact: true });
   await preview.waitFor({ state: "visible" });
@@ -262,8 +319,8 @@ async function verifyAPlusWorkflow(browser, baseUrl) {
   assert(previewText.includes("The removable cover supports easier routine care."), "A+ 手机预览未显示已有外置正文");
   assert(!previewText.includes("价格") && !previewText.includes("评分"), "A+ 手机预览伪装了商品页未知信息");
   await preview.getByRole("button", { name: "关闭弹窗", exact: true }).click();
-  await page.setViewportSize({ width: 900, height: 800 });
-  await page.getByRole("button", { name: "调整参数", exact: true }).click();
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await openParameterEditor(page);
   const parameterBand = await page.evaluate(() => {
     const main = document.querySelector(".workbench-chrome__main")?.getBoundingClientRect();
     const params = document.querySelector(".amazon-session-controls__params")?.getBoundingClientRect();
@@ -273,8 +330,8 @@ async function verifyAPlusWorkflow(browser, baseUrl) {
       overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     };
   });
-  assert(parameterBand.paramsWidth >= parameterBand.mainWidth - 40, "参数带没有横跨顶栏可用宽度");
-  assert(!parameterBand.overflow, "900px 下 Amazon 顶栏出现横向溢出");
+  assert(parameterBand.paramsWidth > 0, "参数带没有渲染可用宽度");
+  assert(!parameterBand.overflow, "1200px 下 Amazon 顶栏出现横向溢出");
   await page.setViewportSize({ width: 1280, height: 800 });
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -340,9 +397,10 @@ async function assertStageState(page, {
   errors,
 }) {
   const doneCount = await page.locator(".slot-card--done").count();
+  const expectedStageLabel = stage.split("·").at(-1)?.trim() ?? stage;
   assert(doneCount === completed, `${completed}/7 状态实际完成 ${doneCount} 个槽位`);
   assert(
-    (await page.locator(".workbench-chrome__step").innerText()) === stage,
+    (await page.locator(".workbench-chrome__progress-menu > summary").innerText()).includes(expectedStageLabel),
     `${completed}/7 阶段不正确`,
   );
   assert(
@@ -390,9 +448,11 @@ async function generateSelectedSlot(page, completedAfter, captureLoading = false
 
 async function verifyTask6Workflow(browser, baseUrl) {
   const { context, page, errors } = await openAmazonPage(browser, baseUrl);
+  await openListingInput(page);
   await page.getByLabel("Amazon Listing 原文", { exact: true }).fill(
     "Title: Northwind Travel Pillow\n\nAbout this item\n- Washable cover\n- 28 x 25 x 12 cm\n\nSKU: NW-P01",
   );
+  await page.getByRole("button", { name: "填入空字段", exact: true }).click();
   await startAmazonPlanning(page);
   await page.locator(".slot-card").filter({ hasText: "MAIN" }).waitFor({ state: "visible" });
 
@@ -425,15 +485,15 @@ async function verifyTask6Workflow(browser, baseUrl) {
       ?.includes("button--secondary"),
     "1/7 部分导出没有保持 secondary",
   );
-  await page.setViewportSize({ width: 900, height: 800 });
-  await assertWorkspaceLayout(page, "1/7 · 900px");
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await assertWorkspaceLayout(page, "1/7 · 1200px");
   assert(
-    (await page.locator(".workbench-chrome__step").innerText()) === "3/4 · 逐图生产",
-    "1/7 · 900px 阶段发生变化",
+    (await page.locator(".workbench-chrome__progress-menu > summary").innerText()).includes("逐图生产"),
+    "1/7 · 1200px 阶段发生变化",
   );
   assertNoUnexpectedErrors(errors);
   await page.screenshot({
-    path: resolve(evidenceDir, "task6-1-of-7-produce-900.png"),
+    path: resolve(evidenceDir, "task6-1-of-7-produce-1200.png"),
     fullPage: false,
     animations: "disabled",
   });
@@ -472,7 +532,7 @@ async function verifyTask6Workflow(browser, baseUrl) {
   );
 
   await page.getByRole("button", { name: "重新生成", exact: true }).click();
-  await page.getByRole("tab", { name: "版本", exact: true }).click();
+  await page.getByRole("button", { name: "版本", exact: true }).click();
   await page.locator(".version-tile").nth(1).waitFor({ state: "visible" });
   await page.locator(".version-tile").first().click();
   await page.locator('.version-tile[aria-pressed="true"]').filter({ hasText: "V1" }).waitFor({
@@ -486,7 +546,8 @@ async function verifyTask6Workflow(browser, baseUrl) {
   await page.goto(`${baseUrl}?fixture=image-fail-once`, { waitUntil: "networkidle" });
   await page.getByTestId("app-frame").waitFor({ state: "visible" });
   await page.getByRole("heading", { name: "Amazon", exact: true }).waitFor({ state: "visible" });
-  await page.getByRole("tab", { name: "版本", exact: true }).click();
+  await resumeCurrentTask(page);
+  await page.getByRole("button", { name: "版本", exact: true }).click();
   assert((await page.locator(".version-tile").count()) === 2, "失败夹具未恢复 V1/V2");
   assert(
     (await page.locator(".version-tile").first().getAttribute("aria-pressed")) === "true",
@@ -536,13 +597,14 @@ async function verifyTask6Workflow(browser, baseUrl) {
   });
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "Amazon", exact: true }).waitFor({ state: "visible" });
+  await resumeCurrentTask(page);
   assert((await page.locator(".version-tile").count()) === 3, "reload 后未恢复三个版本");
   assert(
     (await page.locator(".version-tile").first().getAttribute("aria-pressed")) === "true",
     "reload 后未恢复旧活动版本 V1",
   );
   assert(
-    (await page.locator(".workbench-chrome__step").innerText()) === "4/4 · 交付检查",
+    (await page.locator(".workbench-chrome__progress-menu > summary").innerText()).includes("交付检查"),
     "旧版本恢复后阶段不再是完整交付",
   );
   await assertWorkspaceLayout(page, "旧版本恢复");

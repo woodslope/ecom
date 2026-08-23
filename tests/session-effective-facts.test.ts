@@ -63,4 +63,62 @@ describe("session effective product context", () => {
     const session = { ...taobaoSession, platformId: "amazon", workflowId: "amazon-listing" as const };
     expect(resolveSessionEffectiveProject(project, session).facts).toEqual(project.facts);
   });
+
+  it("keeps manual Amazon facts that were copied into a task draft", () => {
+    const draftProject: ProductProject = {
+      ...project,
+      id: "project_amazon_draft",
+      scope: "task-draft",
+      facts: {
+        ...project.facts,
+        productName: "手动填写的保温杯",
+        description: "316L 不锈钢内胆，容量 500ml",
+        sellingPoints: ["便携防漏", "杯盖可拆洗"],
+      },
+    };
+    const session: PlatformSession = {
+      ...taobaoSession,
+      id: "session_amazon_manual",
+      projectId: draftProject.id,
+      platformId: "amazon",
+      workflowId: "amazon-listing",
+      sourceInput: { listingText: "" },
+      planningInput: {
+        sourceMode: "manual",
+        quality: "facts-only",
+        missingFacts: ["商品参考图"],
+        productText: "",
+        selectedReferenceAssetIds: [],
+      },
+      taobaoAnalysis: undefined,
+    };
+
+    expect(resolveSessionEffectiveProject(draftProject, session).facts).toEqual(
+      draftProject.facts,
+    );
+  });
+
+  it("does not leak library facts into a manual Amazon session", () => {
+    const session: PlatformSession = {
+      ...taobaoSession,
+      id: "session_amazon_isolated",
+      platformId: "amazon",
+      workflowId: "amazon-listing",
+      sourceInput: { listingText: "" },
+      planningInput: {
+        sourceMode: "manual",
+        quality: "empty",
+        missingFacts: ["商品名称", "可验证卖点或商品描述", "商品参考图"],
+        productText: "",
+        selectedReferenceAssetIds: [],
+      },
+      taobaoAnalysis: undefined,
+    };
+
+    expect(resolveSessionEffectiveProject(project, session).facts).toMatchObject({
+      productName: "",
+      description: "",
+      sellingPoints: [],
+    });
+  });
 });

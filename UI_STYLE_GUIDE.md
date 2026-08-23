@@ -30,7 +30,7 @@ For ecommerce operators and designers, the workspace turns product facts and ref
 - `--text-muted`: `#6B7785`
 - `--border`: `#D8DEE5`
 - `--border-strong`: `#BCC6D1`
-- `--focus-ring`: `rgba(37, 99, 235, 0.24)`
+- `--focus-ring`: `#3B82F6`
 - `--disabled-text`: `#8A96A3`
 - `--disabled-surface`: `#E7EBEF`
 - `--disabled-border`: `#D3DAE2`
@@ -38,10 +38,12 @@ For ecommerce operators and designers, the workspace turns product facts and ref
 - `--primary-hover`: `#1D4ED8`
 - `--primary-soft`: `#EAF1FF`
 - `--primary-border`: `#B8CCFF`
+- `--on-primary`: `#FFFFFF`
 - `--ai`: `#475569`
 - `--ai-soft`: `#F0F3F6`
 - `--ai-border`: `#D8DEE5`
 - `--success`: `#0F8B6E`
+- `--success-text`: `#0B735C`
 - `--success-soft`: `#E5F5F0`
 - `--success-border`: `#A9DACA`
 - `--warning`: `#C88719`
@@ -49,6 +51,7 @@ For ecommerce operators and designers, the workspace turns product facts and ref
 - `--warning-soft`: `#FFF5DC`
 - `--warning-border`: `#EAD19A`
 - `--danger`: `#D0443A`
+- `--danger-text`: `#B8322A`
 - `--danger-soft`: `#FDECEA`
 - `--danger-border`: `#EFBBB5`
 - `--taobao`: `#E85D22`
@@ -59,26 +62,31 @@ Digital cobalt represents the active workflow, selection, and primary action. AP
 ### Typography
 
 - Font family: `Avenir Next`, `PingFang SC`, `Microsoft YaHei`, system sans-serif.
-- Page title: `22px / 30px`, weight `750` → CSS `--font-page-title` / `--line-page-title`.
-- Section title: `15px / 22px`, weight `750` → CSS `--font-section` / `--line-section`.
+- Page title: `22px / 30px`, weight `700` → CSS `--font-page-title` / `--line-page-title`.
+- Section title: `15px / 22px`, weight `700` → CSS `--font-section` / `--line-section`.
 - Body: `13px / 20px`, weight `400` → CSS `--font-body` / `--line-body`.
 - Compact labels: `12px / 18px`, weight `600–700` → CSS `--font-label` / `--line-label`.
 - Helper text: `12px / 18px`, weight `400` → CSS `--font-helper` / `--line-helper`.
 - Caption / dense meta: `11px / 16px` → CSS `--font-caption` / `--line-caption`. Prefer this over ad-hoc `9–10px` text.
+- Metric values: `28px / 34px` → CSS `--font-metric` / `--line-metric`.
+- Dialog titles: `18px / 26px` → CSS `--font-dialog-title` / `--line-dialog-title`.
+- Micro markers: `10px / 14px` → CSS `--font-micro` / `--line-micro`; reserve for compact numeric markers only.
+- Context labels: `14px / 20px` → CSS `--font-context` / `--line-context`.
+- Toolbar titles: `16px / 22px` → CSS `--font-toolbar` / `--line-toolbar`.
+- Command headings: `20px / 28px` → CSS `--font-command` / `--line-command`.
+- Value and stat exceptions: `22px / 28px` and `20px / 26px` → CSS `--font-value` / `--line-value` and `--font-stat` / `--line-stat`.
 - No viewport-based font scaling, no negative letter spacing, and no forced uppercase on Chinese eyebrows.
 
 ### Spacing And Dimensions
 
 - Spacing scale: `4, 8, 12, 16, 20, 24, 32` → CSS `--space-1` … `--space-7`.
-- Desktop workflow rail: `208px` → CSS `--rail-width`; planned production workspaces switch to `72px` → CSS `--rail-width-compact`, while overview, library, intake, and history retain readable labels.
+- Desktop platform rail stays at `72px` → CSS `--rail-width`; it only switches Taobao / Amazon, while the always-visible Demo/API mode and settings remain in the footer. There is no second compact-width token or rail variant.
 - Top context band: not rendered; the page toolbar owns context and actions.
-- Normal controls: `40px` high → CSS `--control-height`.
-- Compact controls and icon buttons: `32px` high → CSS `--control-height-compact`; icon buttons remain square.
+- All controls: `32px` high → CSS `--control-height` and `--control-height-compact`; normal and compact buttons, inputs, selects, and icon buttons share one height, with icon buttons remaining square.
 - Slot thumbnail: stable aspect ratio from its rule pack; no content-driven resizing.
 - Expanded-source columns remain product source `minmax(290px, 0.82fr)`, slots `minmax(340px, 1.06fr)`, inspector `minmax(320px, 0.96fr)`.
-- Once a plan exists, every supported desktop width defaults to the two-column slots + inspector canvas; product source opens only when requested.
-- Once a plan exists, the left navigation also enters compact production mode. Icons remain stable, labels move to tooltips, and leaving the planned platform restores the full `208px` rail.
-- Between `900px` and `1099px`, the same two-column production canvas remains primary and the source uses its compact drawer treatment.
+- Once a plan exists, every supported desktop width defaults to the two-column slots `minmax(420px, 0.82fr)` + inspector `minmax(520px, 1.18fr)` canvas; product source opens only when requested. The column order and ratio do not reverse at narrower supported desktop widths.
+- The page gives the production workspace the full available width by default. The current platform's history opens on demand as a right-side drawer and must not permanently compress production.
 - Main content max width: about `1600px` inside the full-viewport shell.
 
 ### Surfaces
@@ -89,6 +97,7 @@ Digital cobalt represents the active workflow, selection, and primary action. AP
 - Repeated cards use borders, not stacked shadows.
 - Metric and status surfaces use the shared border token, not near-invisible one-off borders.
 - No gradient or decorative orb backgrounds.
+- The product ships one light visual theme. CSS declares `color-scheme: light`, the document theme color is `#20252B`, and system dark-mode preference must not create an undeclared second token set.
 
 ### Charcoal chrome (rail / workflow strips)
 
@@ -103,6 +112,7 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - `--accent-warm`: `#F59E0B` (reserved platform or promotion accent)
 - `--accent-warm-text`: `#14191F`
 - `--brand-mark-bg`: `#EAF1FF`
+- `--overlay-soft`, `--media-scrim`, `--white-surface-overlay`, `--shadow-subtle`, `--shadow-card`, `--shadow-drawer`, `--shadow-dialog`, `--gate-backdrop`, and `--shadow-gate` own local overlays and elevation values. Component rules must reference these tokens instead of repeating rgba shadows or scrims.
 
 ## 4. Layout Ownership
 
@@ -116,32 +126,32 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - Field hints are placeholders or validation errors, not permanent helper lines under every input.
 - Panel descriptions are omitted by default.
 - Product source, delivery slots, and inspector each own their internal scrolling in the shared Amazon/Taobao production shell. The platform workspace itself does not page-scroll.
-- Overview and simple pages may page-scroll; platform workspaces use a fixed shell with column-level scroll regions.
-- Overview places “当前下一步” beside the metric strip as the primary action cluster.
+- Platform workspaces use a fixed shell with column-level scroll regions; there is no standalone overview page.
 - Amazon and Taobao share one compact stage control in the workspace toolbar: `准备资料 → 检查策划 → 逐图生产 → 交付检查`. The current stage remains visible; the complete four-stage path opens on demand and must not occupy a permanent second row.
-- Amazon and Taobao place the shared product context inside the workspace toolbar. It owns current product identity, task details, product switching, and the route to library management without creating a second chrome band. Switching products restores that product's saved platform workspace; only an explicit source reload may replace task-local input.
+- Amazon and Taobao place the shared product context inside the workspace toolbar. It owns current product identity, task details, and switching to an existing product without creating a second chrome band.
 - Dense task-input and analysis details open through the shared sidebar `Dialog` variant. Expanding details must not push the production grid or create a second page scroll owner.
 - Amazon with no active plan uses a focused intake surface: session parameters, Listing source, references, and one planning action. It may create a draft product/session atomically and must not render empty production columns.
-- Amazon Listing source belongs to the platform session. Differences from shared facts stay visible and require an explicit `同步到共享商品资料` action.
+- Amazon Listing source belongs to the platform session and must never silently overwrite shared facts. The current UI keeps parsed values inside the task; a future sync action would require a separate product decision and explicit user confirmation.
 - Amazon A+ keeps one compact module summary in both preparation and planned states. `编排模块` always opens the same dialog; changes remain dialog-local until `应用编排`, while cancel/close discards them. The applied list defines the current task's slot count and order, and changing an existing plan marks it for replanning.
-- Amazon style input has two explicit layers: `基础风格` owns text guidance, while `附加风格板` optionally supplies a hidden visual reference for secondary Listing images and A+ (never MAIN). Choosing an internal or custom board synchronizes its source preset back to the base style. Custom-style creation and deletion state that they affect the current product; deleting a board does not delete existing plans or images.
+- Amazon style input has two explicit layers: `生成方案` owns planning strategy and base visual guidance, while `视觉参考` optionally supplies a hidden visual reference for secondary Listing images and A+ (never MAIN). Choosing an internal or custom reference synchronizes its source preset back to the base style. Custom-reference creation and deletion state that they affect the current product; deleting a reference does not delete existing plans or images.
 - Delivery readiness stays hidden before the first usable output. Once output exists, the delivery strip remains single-line unless it is showing an error or recovery decision.
 - Partial slot completion remains part of `逐图生成`; `交付检查` means all required slots are complete or the operator explicitly enters a partial-delivery review.
-- `生产记录` is owned by a filter row plus production-run list. Events, recovery, fork, reuse, and re-export belong inside the selected run; it is not a flat per-product task log.
+- Each platform owns its history pane. Events, recovery, fork, reuse, and re-export remain inside the selected Run and never mix across platforms.
 
 ### Desktop minimum width
 
-- This product is desktop-only. Minimum supported viewport width is `900px` (`--desktop-min-width`); `1100px` and above is the preferred three-column experience.
+- This product is desktop-only. Minimum supported viewport width is `1200px` (`--desktop-min-width`).
 - Below that width, show a full-screen gate: “当前只支持电脑端浏览”, and do not offer a mobile workbench layout.
 - Do not ship a bottom navigation or mobile pane switcher for the production workbench.
 
 ## 5. Navigation
 
-- Desktop navigation is a readable workflow rail on overview, library, intake, and history. A planned Amazon or Taobao workspace may use the compact `72px` icon rail to prioritize production media.
-- `资料库` carries the descriptor `档案 · 资料与参考图`; it is the shared management center, not a mandatory page-navigation first step.
-- Every rail item owns an icon, primary label, and one short scope descriptor in expanded mode. Compact production mode may hide the copy only when every item exposes the same label through a tooltip and `aria-label`.
+- Desktop navigation is a compact `72px` platform rail. Only Taobao / Amazon are primary destinations; settings stays in the footer.
+- Overview, library, and global history are not rail destinations. Existing work resumes or forks from the active platform's history drawer.
+- Every rail item exposes the same label through a tooltip and `aria-label`.
 - Active navigation is location only: use one shared active row treatment and a single left accent line. Do not show persistent platform-color markers on inactive items.
 - Runtime mode and settings live in the rail footer; they do not compete with the production order.
+- The runtime badge is always visible as `Demo` or `API` and opens settings; mode details and connection configuration remain inside the settings dialog.
 - Below the desktop minimum width, show the desktop-only gate instead of a mobile navigation.
 - Unimplemented platforms do not appear as selectable active items.
 
@@ -174,6 +184,8 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 
 - Delivery slots are repeated cards and may contain one bounded media surface.
 - Each slot shows key, title, status, target dimensions, current version count, and local action.
+- Amazon may expose a localized `uiLabel` in product UI while retaining the canonical English `label` for Prompt, marketplace rules, manifests, and export naming.
+- Empty slot thumbnails show only the state icon; the full slot key remains once in the card identity and accessible button content.
 - Generated slots use the active version asset as their thumbnail. A stale version remains visible with a stale status instead of falling back to a generic icon.
 - Slot lists use an auto-fitting visual grid: two columns when the slot panel has room and one column at compact widths.
 - Selected, loading, error, success, disabled, and long-copy states share the same outer dimensions.
@@ -183,9 +195,11 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 ### Dialogs, feedback, tooltips
 
 - Dialogs have header, scrollable body when needed, and separate footer.
+- Every modal and history drawer renders in the shared overlay root. While any dialog is open, the desktop workbench is `inert` and hidden from assistive technology; for nested dialogs only the topmost layer is active, and close returns focus to the trigger when it still exists.
 - Dense workspace details and product switching use the shared sidebar dialog variant; centered dialogs remain for short confirmations and forms.
 - Blocking validation errors stay inside the dialog.
 - Current operation feedback uses shared inline status surfaces. Add a Toast primitive only when transient feedback has a real repeated need and can maintain safe distance from fixed actions.
+- `StatusMessage` is static by default. Set `live="polite"` only for dynamic progress/success and `live="assertive"` for blocking failures; do not make explanatory copy a live region.
 - Tooltips name unfamiliar rail and icon actions; required workflow information cannot live only in a tooltip.
 - Menus and popovers share border, radius, shadow, active, disabled, and z-index rules.
 
@@ -212,9 +226,10 @@ Dark operational chrome reuses these tokens instead of one-off hex:
   - `asset`: a bounded media slot asks for a reference image and preserves its aspect ratio.
   - `loading`: preserve the final module geometry and name the current operation.
   - `result`: the input exists but no output has been produced; explain what event will populate the module.
-- `资料库` owns shared product facts, reference images, platform progress, and the main create-product action.
-- Platform workspaces consume shared data but may create a draft product and platform session from a direct intake flow; they must not silently overwrite existing shared facts.
+- ProductProject facts and reference images remain project-scoped data, while each platform intake owns the visible new-task action and may atomically create a draft project/session.
+- Platform workspaces must not silently overwrite facts already preserved by an existing session or historical snapshot.
 - Empty: explain what is missing, the next action, and what appears after it.
+- Before the first task exists, use `未命名任务` as identity and do not render a redundant `新任务` action. Empty-input requirements stay visibly adjacent to the disabled planning action.
 - Loading: name the current work, such as analyzing product, writing slot prompts, or generating image.
 - Success: show the result and the next available action.
 - Error: show what failed, what remains safe, and how to retry or change input.
@@ -241,10 +256,11 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - Workbench module columns (当前资料 / 平台交付槽位 / 槽位检查器) must render through `Panel` (or a thin wrapper around it). Do not hand-write `<section class="panel">` shells in business views.
 - When a module owns its own chrome bands (e.g. filled 槽位检查器), use `Panel` with `hideHeader` rather than a parallel DOM structure.
 - `PlatformRail` owns workflow grouping, visible scope descriptors, active-location treatment, and runtime/settings footer placement.
+- Production top chrome owns task identity, progress, history, and `新任务` only. Slot generation belongs to `SlotInspector`; export belongs to `ExportPanel`; do not duplicate either as a top-chrome primary action.
 - `WorkflowStepper` and `domain/workspace/platform-stage.ts` own the shared four-stage language, current-stage mapping, and completed-slot progress for Amazon and Taobao. Platform pages must not reimplement their own step labels.
-- `ProductContextBar` owns current product identity and product/library actions inside the shared Amazon/Taobao toolbar. Page headers and source selectors must not duplicate those actions.
+- `ProductContextBar` owns current product identity and existing-product actions inside the shared Amazon/Taobao toolbar. Page headers and source selectors must not duplicate those actions.
 - `AmazonSessionControls` owns the stable Listing/A+ parameters and the single A+ module-summary/dialog path. A+ rows must not move between inline and dialog owners based on whether a plan exists; dialog edits commit only through `应用编排`.
-- `StyleReferencePicker` owns optional style-board selection, custom-board preview, and delete confirmation. `StyleReferenceEditorDialog` creates a new current-product board; it must not label that action as editing an existing board. `AmazonSessionControls` continues to own the base text preset.
+- `StyleReferencePicker` owns optional visual-reference selection, custom-reference preview, and delete confirmation. `StyleReferenceEditorDialog` creates a new current-product reference; it must not label that action as editing an existing reference. `AmazonSessionControls` continues to own the base generation preset.
 - `SlotInspector` owns one fixed four-view switcher for `文案 / 版本 / 检查 / Copilot` between the identity header and scrollable body; only one detail view is active, and the current result remains visible in every view. Strategy, evidence, negative constraints, and compliance belong to `检查`; version selection and image actions belong to `版本`. Do not reintroduce independent accordions for these concerns.
 - The slot footer may show save only while the `文案` view owns the editable form. Generation remains the result commit action, and navigation to the next slot must stay blocked while the current slot has unsaved copy or Prompt changes.
 - Domain-specific slot cards and version tiles stay with their owning components until a second real consumer proves that a shared primitive would remove duplication.
@@ -253,13 +269,15 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 
 ## 10. Verification Contract
 
-For a visual pass, manual browser review is the acceptance source of truth:
+For a visual pass, browser rendering is the acceptance source of truth. Automated browser checks protect repeatable geometry, interaction, accessibility, and runtime invariants; a human review remains necessary for overall visual judgment:
 
-- Inspect one wide desktop, one normal desktop at or above `1100px`, compact desktop at `900px`, and the desktop-only gate at `899px` or below.
+- Inspect `1600×900`, `1366×768`, `1280×800`, the minimum desktop at `1200px` (including the `1200×650` height constraint), and the desktop-only gate at `1199px` or below.
 - Review the first-run source state, planned slot grid, selected inspector, generated-result surface, settings dialog, task history, and restored project when available.
 - Confirm no horizontal overflow, clipped text, overlapping fixed regions, or competing scroll containers.
 - Exercise default, hover/focus-visible, selected, disabled, loading, empty, success, error, and destructive states where practical.
-- Automated checks remain a separate engineering concern and are not required for a manual-only visual redesign request.
+- Exercise system dark preference, reduced motion, forced colors, DPR 2, and the 125% zoom-equivalent CSS viewport. The shipping contract remains one light theme and a `1200px` CSS-pixel desktop minimum; these conditions must not create an undeclared theme or bypass the gate.
+- Verify ordinary dialogs, nested confirmations, and the history drawer expose only one active modal layer, isolate the workbench background, trap focus, and return focus on close.
+- A complete governance run writes a timestamped evidence batch and manifest. Root-level historical screenshots are not evidence of the current run.
 
 ## 11. Prohibited Patterns
 
@@ -298,35 +316,46 @@ When changing UI:
 
 ```bash
 pnpm check:ui   # or: node scripts/check-ui-governance.mjs
+pnpm typecheck
 pnpm test       # runs check:ui then vitest
+pnpm test:browser
+pnpm test:browser:governance
+pnpm test:ui:acceptance  # complete gate + timestamped manifest
 ```
 
-`scripts/check-ui-governance.mjs` enforces: one `:root` token block, guide-aligned primary / rail / type tokens, no business `button--*` class assembly, workbench modules on `Panel` + `hideHeader` for filled inspector, stable skeleton hooks in `AppShell` / `PlatformWorkspace`, and no legacy mobile-pane hooks.
+`scripts/check-ui-governance.mjs` enforces: one `:root` token block, guide-aligned primary / rail / type tokens, state-text and focus contrast thresholds, shared modal/live-region ownership, no business `button--*` class assembly, workbench modules on `Panel` + `hideHeader` for filled inspector, stable skeleton hooks in `AppShell` / `PlatformWorkspace`, no legacy mobile-pane hooks, and no return of retired zero-consumer component/CSS families.
+
+Browser and full acceptance output goes to `artifacts/cross-platform-ais/runs/<timestamp>/manifest.json`; `artifacts/cross-platform-ais/latest.json` points to the most recent batch. The manifest records suite type, Git SHA/dirty state, tool versions, commands, viewports and conditions, test counts and bundle size when the full suite runs, plus the exact screenshot list. `check:bundle` limits the Vite business entry chunk to `500 kB`.
 
 Still out of scope for this minimal loop (add only when pain is repeated): Storybook, pixel-diff visual regression, stylelint token rules, CSS Modules.
 
-## 13. Governance Status (2026-07-21)
+## 13. Governance Status (2026-08-24)
 
 ### Completed
 
-- Commerce Ops tokens, typography, spacing, radius, borders, state colors, and the `208px` rail are owned by the single top `:root` block.
-- After planning, Amazon and Taobao default to slots + inspector at every supported desktop width; product source opens on demand and may temporarily restore the three-column shell where space permits. The desktop-only gate remains at `899px` and below.
+- Commerce Ops tokens, typography, spacing, radius, borders, state colors, the single light theme, and the `72px` rail are owned by the single top `:root` block.
+- Amazon and Taobao use the shared production shell with an on-demand platform-history drawer; product source opens on demand. The desktop-only gate remains at `1199px` and below.
 - Amazon and Taobao preparation/production states use the same toolbar stage control with an on-demand four-stage path; browser checks protect the Taobao `检查策划 → 逐图生产` transition as a representative cross-platform consumer.
 - Listing / A+ and settings mode selection use `SegmentedControl`; operating modes use neutral `StatusChip` semantics.
 - A+ module setup now uses one compact summary and one staged dialog before and after planning; base text style and optional hidden style-board attachment have explicit, synchronized ownership and scoped create/delete copy.
 - Generated results use fixed-ratio `MediaSlot`; the inspector footer uses `ActionBar` and keeps save / generate actions visible without covering Prompt content.
 - Library, source, history, compliance, export, shell runtime, and Amazon consumers share the same status and control primitives.
 - 淘宝分析、固定 5+7 槽位、手机预览和历史导出继续复用同一套 `Panel`、`Button`、`StatusChip`、`Dialog`、`MediaSlot` 和 `ActionBar`；生产记录样式只引用已声明的视觉 Token。
-- Browser evidence is generated under `artifacts/cross-platform-ais/` for library empty/search/progress, Listing/A+, production runs/filter empty, settings dual/single/error, mask states, loading/error, `1600px`, `1280px`, `1100px`, `900px`, and `899px` states.
+- Success/danger text tokens and the solid focus-ring token meet the governed contrast thresholds; status feedback opts into polite/assertive live regions only when it is dynamic.
+- Every centered dialog and history sidebar uses the shared overlay stack, background isolation, topmost-only nested behavior, focus trap, and focus return.
+- Production history loads 50 Runs per page, preserves already loaded records when an older-page read fails, and exposes retry; browser evidence exercises 120 records and both initial/older-page recovery paths.
+- Browser evidence covers the production shell and opened history drawer, Listing/A+, settings, mask states, loading/error, the full supported desktop matrix, `1199px` gate, dark preference, reduced motion, forced colors, DPR 2, and 125% zoom-equivalent rendering.
+- Each browser/full acceptance run has an isolated manifest-backed evidence batch; the 500 kB entry-chunk budget and supported Node/pnpm ranges are explicit.
 
 ### Remaining Debt
 
 - `Badge` remains exported for compatibility but has no current business-view consumer; remove it only with a separate API cleanup.
 - Screenshot evidence is deterministic acceptance output, not a pixel-diff baseline. Add image diffing only if visual regressions become recurrent.
+- Safari/Firefox, real external Providers, actual marketplace upload review, and browser UI zoom behavior beyond the CSS-pixel/DPR equivalent remain external/manual checks.
 - The product remains desktop-only by decision. A responsive mobile workbench requires a separate product and interaction design scope.
 
 ### Alignment Handoff
 
 - Amazon behavior and evidence status live in `AIS_ALIGNMENT_CHECKLIST.md`; visual checks cannot replace that domain verdict.
 - ProductProject, PlatformSession, ProductionRun, v2 business storage, and runtime-settings retention are fixed by `docs/adr/0001-product-session-run-boundaries.md`.
-- Future UI work must preserve the current domain ownership and `artifacts/cross-platform-ais/` browser evidence contract unless a new product decision explicitly replaces them.
+- Future UI work must preserve the current domain ownership and manifest-backed `artifacts/cross-platform-ais/runs/` browser evidence contract unless a new product decision explicitly replaces them.

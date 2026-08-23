@@ -7,7 +7,7 @@ import {
   type ConnectionTestResult,
   type RuntimeSettings,
 } from "../domain/settings";
-import { Button, Dialog, Field, IconButton, SegmentedControl, StatusMessage } from "./ui";
+import { Button, ConfirmDialog, Dialog, Field, IconButton, SegmentedControl, StatusMessage } from "./ui";
 
 export function connectionFeedbackMessage({
   draftChanged,
@@ -43,6 +43,35 @@ export async function runConnectionTestSafely(
 
 function baseFromEndpoint(settings: RuntimeSettings): string {
   return runtimeTextBaseUrl(settings);
+}
+
+type RuntimeSettingsField =
+  | "connectionMode"
+  | "textBaseUrl"
+  | "textApiKey"
+  | "planningModel"
+  | "imageBaseUrl"
+  | "imageApiKey"
+  | "imageModel";
+
+function runtimeSettingsFieldError(
+  error: string | null | undefined,
+  field: RuntimeSettingsField,
+): string | undefined {
+  if (!error) return undefined;
+  if (field === "textApiKey" && error === "请填写文本策划 API Key。") return error;
+  if (field === "imageApiKey" && error === "请填写图片生成 API Key。") return error;
+  if (field === "planningModel" && error === "请填写文本策划模型。") return error;
+  if (field === "imageModel" && error === "请填写图片生成模型。") return error;
+  if (field === "connectionMode" && error.startsWith("DeepSeek 官方连接仅支持文本策划")) return error;
+  if (
+    field === "textBaseUrl" &&
+    (error.startsWith("文本 API 根地址") || error.startsWith("文本策划请求地址"))
+  ) {
+    return error;
+  }
+  if (field === "imageBaseUrl" && error.startsWith("图片服务地址")) return error;
+  return undefined;
 }
 
 export function SettingsDialog({
@@ -97,6 +126,8 @@ export function SettingsDialog({
   const [backupOperation, setBackupOperation] = useState<"export" | "import" | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [backupError, setBackupError] = useState<string | null>(null);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [backupConfirmFile, setBackupConfirmFile] = useState<File | null>(null);
   const activeTesting =
     testingService !== null ||
     connectionStatus === "testing" ||
@@ -117,6 +148,8 @@ export function SettingsDialog({
     setBackupOperation(null);
     setBackupMessage(null);
     setBackupError(null);
+    setDiscardConfirmOpen(false);
+    setBackupConfirmFile(null);
   }, [open, settings]);
 
   const update = <Key extends keyof RuntimeSettings>(key: Key, value: RuntimeSettings[Key]) => {
@@ -143,7 +176,10 @@ export function SettingsDialog({
     setSaveMessage(null);
     const saved = await onSave(draft);
     setSaving(false);
-    if (saved) setSaveMessage("设置已保存。");
+    if (saved) {
+      setDraftChanged(false);
+      setSaveMessage("设置已保存。");
+    }
   };
 
   const testService = async (service: "text" | "image") => {
@@ -180,9 +216,13 @@ export function SettingsDialog({
 
   const importBackup = async (file: File) => {
     if (!onImportLocalBackup) return;
-    if (!window.confirm("恢复备份会替换当前商品、素材、工作区、生产记录和本地任务。API 设置不会改变。确认继续？")) {
-      return;
-    }
+    setBackupConfirmFile(file);
+  };
+
+  const confirmImportBackup = async () => {
+    const file = backupConfirmFile;
+    if (!onImportLocalBackup || !file) return;
+    setBackupConfirmFile(null);
     setBackupOperation("import");
     setBackupMessage(null);
     setBackupError(null);
@@ -196,8 +236,19 @@ export function SettingsDialog({
   };
 
   const closeDialog = useCallback(() => {
-    if (!operationBusy) onClose();
-  }, [operationBusy, onClose]);
+    if (operationBusy) return;
+    if (draftChanged) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    onClose();
+  }, [draftChanged, operationBusy, onClose]);
+
+  const discardChangesAndClose = useCallback(() => {
+    setDiscardConfirmOpen(false);
+    setDraftChanged(false);
+    onClose();
+  }, [onClose]);
 
   const textStatus = textConnectionStatus ?? connectionStatus;
   const textTesting = testingService === "text" || textStatus === "testing";
@@ -225,10 +276,23 @@ export function SettingsDialog({
   const textKey = draft.apiKey || draft.textApiKey || "";
   const imageKey = draft.imageApiKey !== undefined ? draft.imageApiKey : draft.apiKey || "";
   const effectiveConnectionMode = draft.connectionMode ?? "dual";
+  const fieldError = (field: RuntimeSettingsField) => runtimeSettingsFieldError(error, field);
+  const hasFieldError = (
+    [
+      "connectionMode",
+      "textBaseUrl",
+      "textApiKey",
+      "planningModel",
+      "imageBaseUrl",
+      "imageApiKey",
+      "imageModel",
+    ] as RuntimeSettingsField[]
+  ).some((field) => Boolean(fieldError(field)));
 
   return (
-    <Dialog
-      open={open}
+    <>
+      <Dialog
+      open={open && !discardConfirmOpen && backupConfirmFile === null}
       title="连接与生成模式"
       eyebrow="运行设置"
       className="settings-dialog"
@@ -268,7 +332,11 @@ export function SettingsDialog({
               API Key 会作为未加密的浏览器本地数据保存，并发送到你填写的文本与图片服务地址。请勿在共享设备使用；移除密钥时先清空此字段（或对应服务字段），再切换为演示模式并保存。清除整个网站数据会同时删除本地项目与素材。
             </StatusMessage>
 
-            <Field label="连接模式" hint="双配置分别连接策划与生图；单连接复用同一根地址和密钥。">
+            <Field
+              label="连接模式"
+              hint="双配置分别连接策划与生图；单连接复用同一根地址和密钥。"
+              error={fieldError("connectionMode")}
+            >
               <SegmentedControl
                 ariaLabel="连接模式"
                 value={effectiveConnectionMode}
@@ -283,17 +351,22 @@ export function SettingsDialog({
                 <h3 id="planning-service-title">{effectiveConnectionMode === "single" ? "统一模型连接" : "文本策划服务"}</h3>
                 <p>{effectiveConnectionMode === "single" ? "策划与生图复用此根地址和密钥，模型仍可分别指定。" : "用于生成平台策划、槽位文案与图像提示词。根地址统一填写到 /v1。"}</p>
               </div>
-              <Field label="文本 API 根地址" hint="例如 https://provider.example/v1">
+              <Field
+                label="文本 API 根地址"
+                hint="例如 https://provider.example/v1"
+                error={fieldError("textBaseUrl")}
+              >
                 <input
+                  name="textBaseUrl"
                   type="url"
                   value={draft.textBaseUrl ?? baseFromEndpoint(draft)}
                   disabled={controlsDisabled}
                   onChange={(event) => update("textBaseUrl", event.target.value)}
                 />
               </Field>
-              <Field label="文本 API Key">
+              <Field label="文本 API Key" error={fieldError("textApiKey")}>
                 <div className="settings-secret-field">
-                  <input aria-label="API Key" type={textKeyVisible ? "text" : "password"} value={textKey} autoComplete="off" disabled={controlsDisabled} onChange={(event) => update("textApiKey", event.target.value)} />
+                  <input name="textApiKey" aria-label="API Key" type={textKeyVisible ? "text" : "password"} value={textKey} autoComplete="off" disabled={controlsDisabled} onChange={(event) => update("textApiKey", event.target.value)} />
                   <IconButton
                     label={textKeyVisible ? "隐藏文本 API Key" : "显示文本 API Key"}
                     aria-pressed={textKeyVisible}
@@ -304,10 +377,11 @@ export function SettingsDialog({
                   </IconButton>
                 </div>
               </Field>
-              {effectiveConnectionMode === "single" ? <Field label="图片生成模型"><input value={draft.imageModel} disabled={controlsDisabled} onChange={(event) => update("imageModel", event.target.value)} /></Field> : null}
+              {effectiveConnectionMode === "single" ? <Field label="图片生成模型" name="imageModel" error={fieldError("imageModel")}><input value={draft.imageModel} disabled={controlsDisabled} onChange={(event) => update("imageModel", event.target.value)} /></Field> : null}
               {String(draft.textBaseUrl ?? baseFromEndpoint(draft)).includes("api.deepseek.com") ? <StatusMessage tone="warning">{effectiveConnectionMode === "single" ? "DeepSeek 官方连接不支持生图；请改用双配置并设置独立图片服务。" : "DeepSeek 官方策划接口仅接收文本；参考图会在策划请求中明确跳过，正式生图仍使用独立图片服务。"}</StatusMessage> : null}
-              <Field label="文本策划模型">
+              <Field label="文本策划模型" error={fieldError("planningModel")}>
                 <input
+                  name="planningModel"
                   value={draft.planningModel}
                   disabled={controlsDisabled}
                   onChange={(event) => update("planningModel", event.target.value)}
@@ -323,7 +397,7 @@ export function SettingsDialog({
                 >
                   {textTesting ? "正在测试..." : "测试文本 API"}
                 </Button>
-                {textMessage ? <StatusMessage tone={textTone}>{textMessage}</StatusMessage> : null}
+                {textMessage ? <StatusMessage tone={textTone} live={textTone === "danger" ? "assertive" : "polite"}>{textMessage}</StatusMessage> : null}
               </div>
             </section>
 
@@ -332,17 +406,22 @@ export function SettingsDialog({
                 <h3 id="image-service-title">图片生成服务</h3>
                 <p>用于根据已确认的槽位提示词生成商品图片。连接测试只验证权限，不实际生图。</p>
               </div>
-              <Field label="图片 API 根地址" hint="例如 https://provider.example/v1">
+              <Field
+                label="图片 API 根地址"
+                hint="例如 https://provider.example/v1"
+                error={fieldError("imageBaseUrl")}
+              >
                 <input
+                  name="imageBaseUrl"
                   type="url"
                   value={draft.imageBaseUrl}
                   disabled={controlsDisabled}
                   onChange={(event) => update("imageBaseUrl", event.target.value)}
                 />
               </Field>
-              <Field label="图片 API Key">
+              <Field label="图片 API Key" error={fieldError("imageApiKey")}>
                 <div className="settings-secret-field">
-                  <input aria-label="图片 API Key" type={imageKeyVisible ? "text" : "password"} value={imageKey} autoComplete="off" disabled={controlsDisabled} onChange={(event) => update("imageApiKey", event.target.value)} />
+                  <input name="imageApiKey" aria-label="图片 API Key" type={imageKeyVisible ? "text" : "password"} value={imageKey} autoComplete="off" disabled={controlsDisabled} onChange={(event) => update("imageApiKey", event.target.value)} />
                   <IconButton
                     label={imageKeyVisible ? "隐藏图片 API Key" : "显示图片 API Key"}
                     aria-pressed={imageKeyVisible}
@@ -353,8 +432,9 @@ export function SettingsDialog({
                   </IconButton>
                 </div>
               </Field>
-              <Field label="图片生成模型">
+              <Field label="图片生成模型" error={fieldError("imageModel")}>
                 <input
+                  name="imageModel"
                   value={draft.imageModel}
                   disabled={controlsDisabled}
                   onChange={(event) => update("imageModel", event.target.value)}
@@ -399,7 +479,7 @@ export function SettingsDialog({
                 >
                   {imageTesting ? "正在测试..." : "测试图片 API"}
                 </Button>
-                {imageMessage ? <StatusMessage tone={imageTone}>{imageMessage}</StatusMessage> : null}
+                {imageMessage ? <StatusMessage tone={imageTone} live={imageTone === "danger" ? "assertive" : "polite"}>{imageMessage}</StatusMessage> : null}
               </div>
             </section> : null}
           </>
@@ -464,15 +544,32 @@ export function SettingsDialog({
               {backupOperation === "import" ? "正在恢复..." : "恢复本地备份"}
             </Button>
           </div>
-          {backupMessage ? <StatusMessage tone="success">{backupMessage}</StatusMessage> : null}
-          {backupError ? <StatusMessage tone="danger">{backupError}</StatusMessage> : null}
+          {backupMessage ? <StatusMessage tone="success" live="polite">{backupMessage}</StatusMessage> : null}
+          {backupError ? <StatusMessage tone="danger" live="assertive">{backupError}</StatusMessage> : null}
         </section>
 
         {lockReason ? <StatusMessage tone="warning">{lockReason}</StatusMessage> : null}
-        {error ? <StatusMessage tone="danger">{error}</StatusMessage> : null}
-        {saveMessage ? <StatusMessage tone="success">{saveMessage}</StatusMessage> : null}
+        {error && !hasFieldError ? <StatusMessage tone="danger" live="assertive">{error}</StatusMessage> : null}
+        {saveMessage ? <StatusMessage tone="success" live="polite">{saveMessage}</StatusMessage> : null}
         {connectionMessage && !textConnectionStatus && !imageConnectionStatus ? null : null}
       </form>
-    </Dialog>
+      </Dialog>
+      <ConfirmDialog
+        open={discardConfirmOpen}
+        title="放弃未保存设置？"
+        description="当前设置只保存在本次弹窗草稿中，关闭后将丢失这些修改。"
+        confirmLabel="放弃修改"
+        onConfirm={discardChangesAndClose}
+        onCancel={() => setDiscardConfirmOpen(false)}
+      />
+      <ConfirmDialog
+        open={backupConfirmFile !== null}
+        title="恢复本地备份？"
+        description="恢复备份会替换当前商品、素材、工作区、生产记录和本地任务；API 设置不会改变。"
+        confirmLabel="恢复备份"
+        onConfirm={() => void confirmImportBackup()}
+        onCancel={() => setBackupConfirmFile(null)}
+      />
+    </>
   );
 }

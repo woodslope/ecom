@@ -85,4 +85,23 @@ describe("platform workflow registry and unified history", () => {
     expect(next.nextCursor).toBeUndefined();
     expect(prepareCalls).toBe(1);
   });
+
+  it("caches repeated project reads inside one history page", async () => {
+    const repository = createMemoryRunRepository();
+    await repository.put(run("run_old", "taobao-detail"));
+    await repository.put(run("run_new", "taobao-product"));
+    let projectReads = 0;
+    const service = createHistoryQueryService({
+      runRepository: repository,
+      getProject: async (projectId) => {
+        projectReads += 1;
+        return projectId === project.id ? project : null;
+      },
+    });
+
+    const result = await service.query({ platformId: "taobao" }, undefined, 2);
+
+    expect(result.items).toHaveLength(2);
+    expect(projectReads).toBe(1);
+  });
 });

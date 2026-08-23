@@ -66,7 +66,7 @@ export function AmazonSessionSummary({
       </StatusMessage>
       {planningInput ? (
         <StatusMessage tone={planningInput.quality === "standard" ? "success" : "warning"}>
-          {planningInput.sourceMode === "library" ? "资料库来源" : "手动来源"} · {planningInputQualityLabel(planningInput.quality)}
+          {planningInput.sourceMode === "library" ? "已保存任务资料" : "当前任务填写"} · {planningInputQualityLabel(planningInput.quality)}
           {planningInput.missingFacts.length > 0
             ? ` · 待补：${planningInput.missingFacts.join("、")}`
             : " · 输入完整"}
@@ -103,7 +103,7 @@ export function AmazonSessionSummary({
         />
       ) : null}
       {session.styleReferenceNotice ? (
-        <StatusMessage tone="warning">{session.styleReferenceNotice}</StatusMessage>
+        <StatusMessage tone="warning" live="polite">{session.styleReferenceNotice}</StatusMessage>
       ) : null}
     </Dialog>
   );
@@ -118,15 +118,12 @@ export function AmazonWorkspace({
   planning,
   error,
   onStartSession,
-  onSyncListingFacts,
+  onStartNewTask,
   onConfirmLocalizedFacts = async () => undefined,
-  onOpenLibrary,
-  onOpenProductPicker,
   onWorkspaceDirtyChange,
   onCreateStyleReference = async () => null,
   onRemoveAsset = async () => undefined,
-  onSyncToTaobao,
-  syncingToTaobao = false,
+  historyAction,
   children,
 }: {
   activeProject: ProductProject | null;
@@ -137,15 +134,12 @@ export function AmazonWorkspace({
   planning: boolean;
   error: string | null;
   onStartSession: (input: StartAmazonSessionInput) => Promise<PlatformSession | null>;
-  onSyncListingFacts: (listingText: string) => Promise<boolean>;
+  onStartNewTask?: () => void;
   onConfirmLocalizedFacts?: (sessionId: string, facts: ProductFacts) => Promise<void> | void;
-  onOpenLibrary?: () => void;
-  onOpenProductPicker?: () => void;
   onWorkspaceDirtyChange?: (reason: string | null) => void;
   onCreateStyleReference?: (presetId: string, draft: Partial<StyleReferenceDraft>) => Promise<WorkbenchAsset | null>;
   onRemoveAsset?: (id: string) => Promise<void>;
-  onSyncToTaobao?: () => void;
-  syncingToTaobao?: boolean;
+  historyAction?: ReactNode;
   children: ReactNode | ((contextBar: ReactNode) => ReactNode);
 }) {
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -168,10 +162,6 @@ export function AmazonWorkspace({
             detailLabel="任务输入"
             disabled={loading || planning}
             onOpenDetails={() => setSummaryOpen(true)}
-            onSwitchProduct={onOpenProductPicker}
-            onOpenLibrary={onOpenLibrary}
-            onSyncToPlatform={onSyncToTaobao}
-            syncingToPlatform={syncingToTaobao}
           />,
         ) : (
           <>
@@ -183,10 +173,6 @@ export function AmazonWorkspace({
               detailLabel="任务输入"
               disabled={loading || planning}
               onOpenDetails={() => setSummaryOpen(true)}
-              onSwitchProduct={onOpenProductPicker}
-              onOpenLibrary={onOpenLibrary}
-              onSyncToPlatform={onSyncToTaobao}
-              syncingToPlatform={syncingToTaobao}
             />
             {children}
           </>
@@ -206,9 +192,9 @@ export function AmazonWorkspace({
               statusLabel="待确认"
               statusTone="warning"
               disabled={loading || planning}
-              onOpenLibrary={onOpenLibrary}
             />
           }
+          historyAction={historyAction}
         >
           <LocalizedFactsReview
             draft={session.localizedFactsDraft}
@@ -226,9 +212,8 @@ export function AmazonWorkspace({
           planning={planning}
           error={error}
           onSubmit={onStartSession}
-          onSyncListingFacts={onSyncListingFacts}
-          onChooseLibrary={onOpenProductPicker}
-          onOpenLibrary={onOpenLibrary}
+          onStartNewTask={onStartNewTask}
+          historyAction={historyAction}
           onDirtyChange={onWorkspaceDirtyChange}
           onCreateStyleReference={onCreateStyleReference}
           onRemoveAsset={onRemoveAsset}

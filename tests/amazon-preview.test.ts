@@ -177,8 +177,20 @@ describe("Amazon mobile content preview", () => {
         updatedAt: "2026-07-22T09:00:00.000Z",
       },
     } as ProductionRunRecord;
-    const markup = renderToStaticMarkup(createElement(ProductionRunCard, {
+    const compactMarkup = renderToStaticMarkup(createElement(ProductionRunCard, {
       record,
+      compact: true,
+      expanded: false,
+      current: false,
+      assetUrls: {},
+      onToggle: () => undefined,
+      onResume: () => undefined,
+      onFork: () => undefined,
+      onReuse: () => undefined,
+    }));
+    const expandedMarkup = renderToStaticMarkup(createElement(ProductionRunCard, {
+      record,
+      compact: true,
       expanded: true,
       current: false,
       assetUrls: {},
@@ -188,6 +200,7 @@ describe("Amazon mobile content preview", () => {
       onReuse: () => undefined,
     }));
 
-    expect(markup).toContain("手机预览");
+    expect(compactMarkup).not.toContain("手机预览");
+    expect(expandedMarkup).toContain("手机预览");
   });
 });

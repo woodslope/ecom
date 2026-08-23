@@ -9,8 +9,13 @@ import { describe, expect, it } from "vitest";
 import appSource from "../src/App.tsx?raw";
 import appShellSource from "../src/components/AppShell.tsx?raw";
 import platformWorkspaceSource from "../src/components/PlatformWorkspace.tsx?raw";
+import productionRunCardSource from "../src/components/ProductionRunCard.tsx?raw";
 import settingsDialogSource from "../src/components/SettingsDialog.tsx?raw";
 import slotInspectorSource from "../src/components/SlotInspector.tsx?raw";
+import promptAssetCenterSource from "../src/components/PromptAssetCenterDialog.tsx?raw";
+import promptProfileSource from "../src/components/PromptProfileDialog.tsx?raw";
+import industryTemplateSource from "../src/components/IndustryTemplateSelector.tsx?raw";
+import uiSource from "../src/components/ui.tsx?raw";
 
 import {
   ActionBar,
@@ -68,8 +73,8 @@ describe("shared workbench primitives", () => {
     expect(markup).toContain("保存中");
     expect(markup).toContain("status-chip--mode");
     expect(markup).toContain("status-chip--info");
-    expect(markup).toContain('role="tablist"');
-    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain('role="group"');
+    expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("segmented-control__option--selected");
     expect(markup).toContain("media-slot--loading");
     expect(markup).toContain("media-slot--error");
@@ -111,6 +116,12 @@ describe("shared workbench primitives", () => {
     const status = renderToStaticMarkup(
       createElement(StatusMessage, { tone: "warning" }, "当前为演示引擎"),
     );
+    const liveStatus = renderToStaticMarkup(
+      createElement(StatusMessage, { tone: "success", live: "polite" }, "保存完成"),
+    );
+    const urgentStatus = renderToStaticMarkup(
+      createElement(StatusMessage, { tone: "danger", live: "assertive" }, "保存失败"),
+    );
     const buttons = renderToStaticMarkup(
       createElement(
         "div",
@@ -132,6 +143,13 @@ describe("shared workbench primitives", () => {
     expect(dialog).toContain("关闭侧栏");
     expect(tooltip).toContain('data-tooltip="设置"');
     expect(status).toContain("status-message--warning");
+    expect(status).not.toContain('role="status"');
+    expect(status).not.toContain('aria-live=');
+    expect(liveStatus).toContain('role="status"');
+    expect(liveStatus).toContain('aria-live="polite"');
+    expect(liveStatus).toContain('aria-atomic="true"');
+    expect(urgentStatus).toContain('role="alert"');
+    expect(urgentStatus).toContain('aria-live="assertive"');
     expect(buttons.match(/type="button"/g)).toHaveLength(2);
     expect(buttons).toContain("button--compact");
     expect(buttons).toContain("select-control");
@@ -151,12 +169,15 @@ describe("shared workbench primitives", () => {
     expect(appSource).toContain('size="compact"');
     expect(platformWorkspaceSource).toContain('size="compact"');
     expect(slotInspectorSource.match(/size="compact"/g)?.length ?? 0).toBeGreaterThanOrEqual(5);
+    expect(styles).toMatch(/--control-height:\s*32px/);
     expect(styles).toMatch(/--control-height-compact:\s*32px/);
+    expect(styles).toMatch(/\.button--normal\s*{[^}]*min-height:\s*var\(--control-height\)/);
     expect(styles).toMatch(/\.button--compact\s*{[^}]*min-height:\s*var\(--control-height-compact\)/);
-    expect(styles).toMatch(/--desktop-min-width:\s*900px/);
-    expect(styles).toMatch(/@media \(max-width: 899px\)[\s\S]*?\.desktop-only-gate/);
+    expect(styles).toMatch(/--desktop-min-width:\s*1200px/);
+    expect(styles).toMatch(/@media \(max-width: 1199px\)[\s\S]*?\.desktop-only-gate/);
+    expect(styles).not.toMatch(/@media \(min-width: 900px\) and \(max-width: 1099px\)/);
     expect(styles).toMatch(
-      /@media \(min-width: 900px\) and \(max-width: 1099px\)[\s\S]*?\.workbench-grid:not\(\.workbench-grid--guided\)/,
+      /\.workbench-grid--source-collapsed\s*\{[^}]*minmax\(420px,\s*0\.82fr\)\s+minmax\(520px,\s*1\.18fr\)/s,
     );
 
     expect(styles).toMatch(/\.icon-button:disabled\s*{[^}]*var\(--disabled-text\)/);
@@ -170,16 +191,19 @@ describe("shared workbench primitives", () => {
     expect(styles).toMatch(/--radius-shell:\s*0/);
     expect(styles).toMatch(/--shell-shadow:\s*none/);
     expect(styles).toMatch(/--primary:\s*#2563eb/i);
-    expect(styles).toMatch(/--rail-width:\s*208px/);
+    expect(styles).toMatch(/--rail-width:\s*72px/);
+    expect(styles).not.toContain("--rail-width-compact");
     expect(styles).toMatch(/--ink-elevated:\s*#2a3037/i);
     expect(styles).toMatch(/\.app-frame\s*{[^}]*width:\s*100%/);
+    expect(productionRunCardSource).toContain("回看阶段");
+    expect(productionRunCardSource).toContain("生成阶段");
+    expect(productionRunCardSource).toContain('aria-label="生成阶段列表"');
     expect(styles).toMatch(/\.app-frame\s*{[^}]*height:\s*100vh/);
     // UI_STYLE_GUIDE §3 desktop workbench columns
     expect(styles).toMatch(
       /\.workbench-grid\s*{[^}]*minmax\(290px,\s*0\.82fr\)\s+minmax\(340px,\s*1\.06fr\)\s+minmax\(320px,\s*0\.96fr\)/,
     );
-    expect(styles).toMatch(/\.overview-top-grid\s*{/);
-    expect(styles).toMatch(/\.overview-next-action\s*{/);
+    expect(styles).not.toMatch(/\.(?:overview|library)(?:[-_]|(?=[\s:{>,]))/);
     expect(styles).toMatch(/workspace:has\(\.platform-workspace-view\)/);
   });
 
@@ -193,6 +217,20 @@ describe("shared workbench primitives", () => {
     expect(appShellSource).toContain("workspace");
     expect(appShellSource).toContain("desktop-only-gate");
     expect(appShellSource).toContain("PlatformRail");
+  });
+
+  it("keeps only the topmost dialog active when a confirmation is open", () => {
+    expect(uiSource).toContain("isTopmostDialog");
+    expect(uiSource).toContain("stopImmediatePropagation");
+    expect(uiSource).toContain("syncModalEnvironment");
+    expect(uiSource).toContain("desktopContent.inert = gateActive || modalActive");
+    expect(uiSource).toContain("layer.inert = !active");
+    expect(appSource).toContain('variant="sidebar"');
+    expect(appSource).not.toContain("platform-history-backdrop");
+    expect(settingsDialogSource).toContain("open={open && !discardConfirmOpen && backupConfirmFile === null}");
+    expect(promptProfileSource).toContain("open={open && !deleteConfirmOpen}");
+    expect(promptAssetCenterSource).toContain("open={open && !deleteConfirmOpen}");
+    expect(industryTemplateSource).toContain("open={dialogOpen && !deleteConfirmOpen}");
   });
 
   it("keeps slot details under one inspector view owner", () => {

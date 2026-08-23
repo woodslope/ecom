@@ -2,14 +2,22 @@
   "name": "ecom",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=20 <25",
+    "pnpm": ">=10 <12"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5192 --strictPort",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
     "check:ui": "node scripts/check-ui-governance.mjs",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
     "test": "node scripts/check-ui-governance.mjs && vitest run",
-    "test:browser": "node tests/browser-smoke.mjs",
+    "test:browser": "node scripts/run-ui-acceptance.mjs --smoke-only",
+    "test:browser:governance": "node scripts/run-ui-acceptance.mjs --browser-only",
+    "test:ui:acceptance": "node scripts/run-ui-acceptance.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {

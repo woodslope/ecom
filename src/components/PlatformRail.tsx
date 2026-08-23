@@ -1,33 +1,25 @@
 import {
   Boxes,
-  FolderOpen,
-  History,
-  LayoutDashboard,
   PackageCheck,
   Settings,
   ShoppingBag,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 
 import { navigationItems } from "../domain/platforms/registry";
 import type { NavigationItemId } from "../domain/platforms/types";
-import { Tooltip } from "./ui";
+import type { RuntimeMode } from "../domain/settings";
+import { StatusChip, Tooltip } from "./ui";
 
-const iconById = {
-  overview: LayoutDashboard,
-  library: FolderOpen,
+const iconById: Partial<Record<NavigationItemId, LucideIcon>> = {
   taobao: ShoppingBag,
   amazon: PackageCheck,
-  history: History,
   settings: Settings,
-} satisfies Record<NavigationItemId, typeof LayoutDashboard>;
+};
 
-const navigationDescriptions: Record<NavigationItemId, string> = {
-  overview: "总览与下一步",
-  library: "档案 · 资料与参考图",
-  taobao: "头图与详情（次级）",
-  amazon: "主路径 · Listing / A+",
-  history: "Run、版本与导出记录",
+const navigationDescriptions: Partial<Record<NavigationItemId, string>> = {
+  taobao: "主图与详情图任务",
+  amazon: "Listing / A+ 图片任务",
   settings: "Demo / API 连接",
 };
 
@@ -35,26 +27,23 @@ const navigationGroups: Array<{
   label: string;
   ids: NavigationItemId[];
 }> = [
-  { label: "工作台", ids: ["overview"] },
-  { label: "生产流程", ids: ["library", "taobao", "amazon"] },
-  { label: "记录", ids: ["history"] },
+  { label: "平台", ids: ["taobao", "amazon"] },
 ];
 
 export function PlatformRail({
   activeItem,
   onChange,
-  runtimeBadge,
-  compact = false,
+  runtimeMode = "demo",
 }: {
   activeItem: NavigationItemId;
   onChange: (item: NavigationItemId) => void;
-  runtimeBadge?: ReactNode;
-  compact?: boolean;
+  runtimeMode?: RuntimeMode;
 }) {
   const settingsItem = navigationItems.find((item) => item.id === "settings")!;
 
   const renderItem = (item: (typeof navigationItems)[number]) => {
     const Icon = iconById[item.id];
+    if (!Icon) return null;
     const isActive = activeItem === item.id;
     return (
       <Tooltip key={item.id} label={item.label} className="rail-tooltip">
@@ -70,7 +59,7 @@ export function PlatformRail({
           </span>
           <span className="rail-item__copy">
             <strong>{item.label}</strong>
-            <small>{navigationDescriptions[item.id]}</small>
+            <small>{navigationDescriptions[item.id] ?? item.label}</small>
           </span>
         </button>
       </Tooltip>
@@ -78,11 +67,7 @@ export function PlatformRail({
   };
 
   return (
-    <aside
-      className={`platform-rail${compact ? " platform-rail--compact" : ""}`}
-      aria-label="平台和全局工具"
-      data-compact={compact || undefined}
-    >
+    <aside className="platform-rail" aria-label="平台导航">
       <div className="rail-brand" title="电商工作台">
         <div className="brand-tile">
           <Boxes size={21} strokeWidth={1.9} />
@@ -103,41 +88,25 @@ export function PlatformRail({
         ))}
       </nav>
       <div className="platform-rail__footer">
-        {runtimeBadge ? <div className="platform-rail__runtime">{runtimeBadge}</div> : null}
-        <div className="platform-rail__privacy" title="你的商品资料和图片仅保存在当前浏览器中，不会上传到任何服务器。API Key 不会被写入备份或静态构建。">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <span>本地优先</span>
+        <div className="platform-rail__runtime">
+          <Tooltip
+            label={`当前运行模式：${runtimeMode === "api" ? "API" : "本地演示"}，点击打开设置`}
+            className="rail-tooltip"
+          >
+            <button
+              type="button"
+              className="runtime-badge-button"
+              aria-label={`当前运行模式：${runtimeMode === "api" ? "API" : "本地演示"}，打开设置`}
+              onClick={() => onChange("settings")}
+            >
+              <StatusChip tone="mode" className="runtime-badge">
+                <span className="runtime-badge__text">{runtimeMode === "api" ? "API" : "Demo"}</span>
+              </StatusChip>
+            </button>
+          </Tooltip>
         </div>
         {renderItem(settingsItem)}
       </div>
     </aside>
-  );
-}
-
-export function MobileNavigation({
-  activeItem,
-  onChange,
-}: {
-  activeItem: NavigationItemId;
-  onChange: (item: NavigationItemId) => void;
-}) {
-  return (
-    <nav className="mobile-navigation" aria-label="移动端导航">
-      {navigationItems.map((item) => {
-        const Icon = iconById[item.id];
-        const isActive = activeItem === item.id;
-        return (
-          <button
-            key={item.id}
-            className={`mobile-navigation__item${isActive ? " is-active" : ""}`}
-            onClick={() => onChange(item.id)}
-            aria-current={isActive ? "page" : undefined}
-          >
-            <Icon size={18} strokeWidth={1.9} />
-            <span>{item.id === "taobao" ? "淘宝" : item.label}</span>
-          </button>
-        );
-      })}
-    </nav>
   );
 }

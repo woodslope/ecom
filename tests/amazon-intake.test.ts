@@ -144,6 +144,47 @@ describe("Amazon direct intake", () => {
     expect(restored.getState().sessions[0]?.selectedReferenceAssetIds).toEqual(["asset_01"]);
   });
 
+  it("plans from direct structured facts without requiring Listing text or an image", async () => {
+    const deps = dependencies();
+    let plannerProductName = "";
+    const store = createWorkbenchStore({
+      ...deps,
+      plannerEngine: {
+        async plan(facts, ...args) {
+          plannerProductName = facts.productName;
+          return demoPlanner.plan(facts, ...args);
+        },
+      },
+    });
+    await store.getState().initialize();
+
+    const session = await store.getState().startAmazonSession({
+      sourceMode: "manual",
+      workflowId: "amazon-listing",
+      listingText: "",
+      facts: {
+        ...sharedFacts,
+        productName: "手动填写的保温杯",
+        description: "316L 不锈钢内胆，容量 500ml",
+        sellingPoints: ["便携防漏", "杯盖可拆洗"],
+      },
+      files: [],
+      selectedReferenceAssetIds: [],
+      options: { plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
+    });
+
+    expect(session).not.toBeNull();
+    expect(store.getState().activeProject).toMatchObject({
+      scope: "task-draft",
+      facts: { productName: "手动填写的保温杯" },
+    });
+
+    const plannedSession = await confirmAmazonDraft(store, session!);
+    expect(plannerProductName).toBe("手动填写的保温杯");
+    expect(plannedSession.plan?.slots).toHaveLength(7);
+    expect(store.getState().planningError).toBeNull();
+  });
+
   it("persists Listing input and options in a session without overwriting shared facts", async () => {
     const deps = dependencies();
     const project = await deps.projectRepository.create({ name: "共享商品", facts: sharedFacts });
@@ -314,7 +355,6 @@ describe("Amazon direct intake", () => {
       planning: false,
       error: null,
       onSubmit: async () => null,
-      onSyncListingFacts: async () => false,
     };
     const directMarkup = renderToStaticMarkup(
       createElement(AmazonIntake, { ...common, activeProject: null }),
@@ -365,13 +405,14 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).not.toContain("workbench-chrome__progress-row--compact");
     expect(directMarkup).toContain("策划检查");
     expect(directMarkup).toContain("交付检查");
-    expect(directMarkup).not.toContain('class="amazon-session-controls__additional"');
-    expect(directMarkup).not.toContain("style-reference-picker--embedded");
-    expect(directMarkup).toContain("从资料库选择");
-    expect(directMarkup).toContain("手动填写");
-    expect(directMarkup).toContain('aria-label="Amazon 商品与任务来源"');
-    expect(directMarkup).toContain("本次任务");
-    expect(directMarkup).toContain("未绑定商品档案");
+    expect(directMarkup).toContain('class="task-advanced-settings"');
+    expect(directMarkup).toContain("style-reference-picker--embedded");
+    expect(directMarkup).not.toContain("选择已有商品");
+    expect(directMarkup).not.toContain("手动填写");
+    expect(directMarkup).toContain('aria-label="Amazon当前任务"');
+    expect(directMarkup).toContain("当前任务");
+    expect(directMarkup).toContain("未命名任务");
+    expect(directMarkup).not.toContain(">新任务</button>");
     expect(directMarkup).not.toContain("planning-input-quality");
     expect(directMarkup).not.toContain("任务输入来源");
     expect(directMarkup).not.toContain("intake-source-bar");
@@ -381,10 +422,8 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).not.toContain('class="amazon-session-controls__plan"');
     expect(directMarkup).not.toContain('class="action-bar');
     expect(directMarkup).not.toContain("打开资料库");
-    expect(existingMarkup).toContain("不会自动覆盖共享商品资料");
-    expect(existingMarkup).toContain("同步商品资料");
+    expect(existingMarkup).not.toContain("同步商品资料");
     expect(existingMarkup).toContain("Session-only Travel Pillow");
-    expect(existingMarkup).toContain('aria-label="重新载入资料库内容"');
     expect(existingMarkup.match(/<section class="product-context-bar/g)).toHaveLength(1);
   });
 
@@ -404,16 +443,14 @@ describe("Amazon direct intake", () => {
         planning: false,
         error: null,
         onSubmit: async () => null,
-        onSyncListingFacts: async () => false,
       }),
     );
 
     expect(markup).not.toContain("Title: 共享商品名称");
-    expect(markup).toContain("从资料库选择");
-    expect(markup).toContain("手动填写");
-    expect(markup).toContain("本次任务");
-    expect(markup).toContain("未绑定商品档案");
-    expect(markup).not.toContain("共享商品名称");
+    expect(markup).not.toContain("选择已有商品");
+    expect(markup).not.toContain("手动填写");
+    expect(markup).toContain("当前任务");
+    expect(markup).toContain("共享商品名称");
   });
 
   it("keeps the selected A+ mode when the target workflow has no session yet", () => {
@@ -427,13 +464,12 @@ describe("Amazon direct intake", () => {
         planning: false,
         error: null,
         onSubmit: async () => null,
-        onSyncListingFacts: async () => false,
       }),
     );
 
-    expect(markup).toMatch(/aria-selected="true"[^>]*>A\+ 图<\/button>/);
+    expect(markup).toMatch(/aria-pressed="true"[^>]*>A\+ 图<\/button>/);
     expect(markup).toContain("普通A+");
-    expect(markup).not.toContain('aria-label="A+ 类型"');
+    expect(markup).toContain('aria-label="A+ 类型"');
   });
 
   it("restores A+ type and a 12-module session after reload", async () => {
@@ -527,7 +563,6 @@ describe("Amazon direct intake", () => {
           planning: false,
           error: null,
           onStartSession: async () => null,
-          onSyncListingFacts: async () => false,
           children: createElement("div", null, "生产工作台"),
         },
       ),
@@ -551,7 +586,7 @@ describe("Amazon direct intake", () => {
     expect(summary).toContain("日本站");
     expect(summary).toContain("4K");
     expect(summary).toContain("front-reference.png");
-    expect(summary).toContain("资料库来源");
+    expect(summary).toContain("已保存任务资料");
     expect(summary).toContain("达标策划");
   });
 });

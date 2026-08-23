@@ -83,12 +83,14 @@ describe("AmazonSessionControls", () => {
     expect(markup).toContain("目标站点");
     expect(markup).toContain("Listing 张数");
     expect(markup).toContain("生成尺寸档");
-    expect(markup).toContain("提示词方案");
+    expect(markup).toContain("生成方案");
+    expect(markup).not.toContain("提示词方案");
     expect(markup).toContain("MAIN + PT01-PT06");
-    expect(markup.includes("调整参数") || markup.includes("收起参数")).toBe(true);
+    expect(markup).not.toContain("调整参数");
+    expect(markup).not.toContain("收起参数");
   });
 
-  it("keeps the parameter band folded when a restored plan needs replanning", () => {
+  it("keeps parameters owned by the surrounding details disclosure", () => {
     const markup = renderToStaticMarkup(
       createElement(AmazonSessionControls, {
         value: {
@@ -101,14 +103,11 @@ describe("AmazonSessionControls", () => {
           aPlusModuleSpecs: null,
         },
         hasPlan: true,
-        preferCollapsed: true,
-        collapseKey: "restored-amazon-task",
         onChange: () => undefined,
       }),
     );
-    expect(markup).toContain("调整参数");
-    expect(markup).not.toContain('aria-label="目标站点"');
-    expect(markup).not.toContain('aria-label="Listing 张数"');
+    expect(markup).toContain('aria-label="目标站点"');
+    expect(markup).toContain('aria-label="Listing 张数"');
   });
 
   it("passes custom A+ module specs into planner options and resolves slot count", () => {

@@ -30,6 +30,7 @@ import { VersionCompareDialog } from "./VersionCompareDialog";
 import {
   ActionBar,
   Button,
+  ConfirmDialog,
   Field,
   MediaSlot,
   SegmentedControl,
@@ -151,6 +152,7 @@ export function SlotInspector({
   const [promptAssetsOpen, setPromptAssetsOpen] = useState(false);
   const [maskEditorError, setMaskEditorError] = useState<string | null>(null);
   const [industryTemplateMessage, setIndustryTemplateMessage] = useState<string | null>(null);
+  const [industryTemplateConfirmOpen, setIndustryTemplateConfirmOpen] = useState(false);
   const [renderedDimensions, setRenderedDimensions] = useState<{
     width: number;
     height: number;
@@ -208,15 +210,22 @@ export function SlotInspector({
       industryTemplate.source !== "custom" ||
       !industryGuidance
     ) return;
-    const warning = [
-      `将当前 ${slot.slotKey} Prompt 保存为“${industryTemplate.name}”的新版本？`,
-      "请确认其中不包含只适用于当前商品的型号、尺寸、颜色、包装或认证信息。",
-    ].join("\n");
-    if (!window.confirm(warning)) return;
+    setIndustryTemplateConfirmOpen(true);
+    return;
+  };
+
+  const confirmSavePromptAsIndustryTemplateVersion = () => {
+    if (
+      typeof window === "undefined" ||
+      !industryTemplate ||
+      industryTemplate.source !== "custom" ||
+      !industryGuidance
+    ) return;
     const pack = listIndustryTemplatePacks(window.localStorage, industryTemplate.scope)
       .find((candidate) => candidate.id === industryTemplate.id);
     if (!pack) {
       setIndustryTemplateMessage("行业模板已被删除，当前任务快照仍可继续使用。");
+      setIndustryTemplateConfirmOpen(false);
       return;
     }
     const latest = industryTemplateSnapshot(pack);
@@ -235,6 +244,7 @@ export function SlotInspector({
     setIndustryTemplateMessage(
       `已保存为行业模板 v${saved.revisions.at(-1)?.version ?? latest.version + 1}；当前任务仍使用原快照。`,
     );
+    setIndustryTemplateConfirmOpen(false);
   };
   const previewAspectRatio = `${activeVersion?.width ?? slotRule?.dimensions.width ?? 1} / ${
     activeVersion?.height ?? slotRule?.dimensions.height ?? 1
@@ -340,7 +350,7 @@ export function SlotInspector({
         <div className="slot-inspector__identity">
           <span className="slot-inspector__eyebrow">槽位详情</span>
           <span className="slot-inspector__key">{slot.slotKey}</span>
-          {slotRule ? <span className="slot-inspector__label">{slotRule.label}</span> : null}
+          {slotRule ? <span className="slot-inspector__label">{slotRule.uiLabel ?? slotRule.label}</span> : null}
           {uploadHint ? <span className="slot-inspector__meta-line">{uploadHint}</span> : null}
         </div>
         <div className="slot-inspector__badges">
@@ -441,6 +451,7 @@ export function SlotInspector({
                 </div>
                 <Field label="外部标题（图片外）">
                   <input
+                    name="externalTitle"
                     aria-label="外部标题（图片外）"
                     value={externalTitle}
                     disabled={submitting}
@@ -453,6 +464,7 @@ export function SlotInspector({
                 </Field>
                 <Field label="外部正文（图片外）">
                   <textarea
+                    name="externalBody"
                     aria-label="外部正文（图片外）"
                     value={externalBody}
                     disabled={submitting}
@@ -465,15 +477,16 @@ export function SlotInspector({
                   />
                 </Field>
                 {copyState === "copied" ? (
-                  <StatusMessage tone="success">外部标题与正文已复制。</StatusMessage>
+                  <StatusMessage tone="success" live="polite">外部标题与正文已复制。</StatusMessage>
                 ) : null}
                 {copyState === "error" ? (
-                  <StatusMessage tone="danger">复制失败，请手动选择外部文案。</StatusMessage>
+                  <StatusMessage tone="danger" live="assertive">复制失败，请手动选择外部文案。</StatusMessage>
                 ) : null}
               </div>
             ) : (
               <Field label="可见文案">
                 <textarea
+                  name="visibleCopy"
                   aria-label="可见文案"
                   className="slot-inspector__visible-copy"
                   placeholder={isMain ? "Amazon MAIN 不使用可见文案" : undefined}
@@ -523,7 +536,7 @@ export function SlotInspector({
               </StatusMessage>
             ) : null}
             {industryTemplateMessage ? (
-              <StatusMessage tone="success">{industryTemplateMessage}</StatusMessage>
+              <StatusMessage tone="success" live="polite">{industryTemplateMessage}</StatusMessage>
             ) : null}
             <Field
               label={promptLabel}
@@ -534,6 +547,7 @@ export function SlotInspector({
               }
             >
               <textarea
+                name="prompt"
                 aria-label={promptLabel}
                 className="slot-inspector__prompt"
                 value={prompt}
@@ -546,10 +560,10 @@ export function SlotInspector({
               />
             </Field>
             {saveState === "saved" ? (
-              <StatusMessage tone="success">用户编辑：槽位草稿已保存。</StatusMessage>
+              <StatusMessage tone="success" live="polite">用户编辑：槽位草稿已保存。</StatusMessage>
             ) : null}
             {saveState === "error" ? (
-              <StatusMessage tone="danger">保存失败，当前输入仍保留，请检查提示后重试。</StatusMessage>
+              <StatusMessage tone="danger" live="assertive">保存失败，当前输入仍保留，请检查提示后重试。</StatusMessage>
             ) : null}
         </form>
 
@@ -650,7 +664,7 @@ export function SlotInspector({
         >
             <p className="visually-hidden">写入动作只调整当前槽位；检查与解释只返回建议</p>
             {copilotRunning ? (
-              <StatusMessage className="copilot-status">
+              <StatusMessage live="polite" className="copilot-status">
                 <span>
                   <LoaderCircle className="spin" size={14} />
                   Copilot 正在处理当前槽位请求
@@ -661,8 +675,8 @@ export function SlotInspector({
                 </Button>
               </StatusMessage>
             ) : null}
-            {copilotError ? <StatusMessage tone="danger">{copilotError}</StatusMessage> : null}
-            {copilotMessage ? <StatusMessage>{copilotMessage}</StatusMessage> : null}
+            {copilotError ? <StatusMessage tone="danger" live="assertive">{copilotError}</StatusMessage> : null}
+            {copilotMessage ? <StatusMessage live="polite">{copilotMessage}</StatusMessage> : null}
             {!copilotRunning && copilotLockReason ? (
               <StatusMessage tone="warning">{copilotLockReason}</StatusMessage>
             ) : null}
@@ -812,7 +826,7 @@ export function SlotInspector({
           workflowId: promptAssetWorkflowId,
           slotKey: slot.slotKey,
         }}
-        slotLabel={slotRule?.label ?? slot.slotKey}
+        slotLabel={slotRule?.uiLabel ?? slotRule?.label ?? slot.slotKey}
         baselinePrompt={slot.prompt}
         currentPrompt={prompt}
         aiRewriteDisabledReason={
@@ -824,6 +838,14 @@ export function SlotInspector({
         }}
         onAIRewrite={() => onCopilotCommand("rewrite-prompt")}
         onClose={() => setPromptAssetsOpen(false)}
+      />
+      <ConfirmDialog
+        open={industryTemplateConfirmOpen}
+        title="保存为行业模板新版本？"
+        description="请确认当前 Prompt 不包含只适用于当前商品的型号、尺寸、颜色、包装或认证信息。"
+        confirmLabel="保存新版本"
+        onConfirm={confirmSavePromptAsIndustryTemplateVersion}
+        onCancel={() => setIndustryTemplateConfirmOpen(false)}
       />
     </div>
   );

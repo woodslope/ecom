@@ -16,13 +16,13 @@ export function TaobaoWorkspace({
   onCancelPlanning,
   error,
   onAnalyze,
-  onOpenLibrary,
-  onOpenProductPicker,
+  onStartNewTask,
   onWorkspaceDirtyChange,
   onReanalyze,
   reanalyzeDisabled = false,
   reanalyzeDisabledReason,
   stylePresetId,
+  historyAction,
   children,
 }: {
   activeProject: ProductProject | null;
@@ -33,14 +33,14 @@ export function TaobaoWorkspace({
   onCancelPlanning?: () => void;
   error: string | null;
   onAnalyze: (input: AnalyzeTaobaoProductInput) => Promise<unknown>;
-  onOpenLibrary?: () => void;
-  onOpenProductPicker?: () => void;
+  onStartNewTask?: () => void;
   onWorkspaceDirtyChange?: (reason: string | null) => void;
   onReanalyze?: () => void;
   reanalyzeDisabled?: boolean;
   reanalyzeDisabledReason?: string;
   /** Prompt profile id for Taobao planning. */
   stylePresetId?: string | null;
+  historyAction?: ReactNode;
   children: ReactNode | ((contextBar: ReactNode) => ReactNode);
 }) {
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -62,8 +62,6 @@ export function TaobaoWorkspace({
             detailLabel={analysis ? "分析详情" : undefined}
             disabled={loading}
             onOpenDetails={analysis ? () => setAnalysisOpen(true) : undefined}
-            onSwitchProduct={onOpenProductPicker}
-            onOpenLibrary={onOpenLibrary}
           />,
         ) : (
           <>
@@ -75,8 +73,6 @@ export function TaobaoWorkspace({
               detailLabel={analysis ? "分析详情" : undefined}
               disabled={loading}
               onOpenDetails={analysis ? () => setAnalysisOpen(true) : undefined}
-              onSwitchProduct={onOpenProductPicker}
-              onOpenLibrary={onOpenLibrary}
             />
             {children}
           </>
@@ -91,9 +87,9 @@ export function TaobaoWorkspace({
           onCancelLockedTask={onCancelPlanning}
           error={error}
           onAnalyze={onAnalyze}
+          onStartNewTask={onStartNewTask}
+          historyAction={historyAction}
           onDirtyChange={onWorkspaceDirtyChange}
-          onOpenLibrary={onOpenLibrary}
-          onOpenProductPicker={onOpenProductPicker}
           onOpenAnalysisDetails={
             session?.taobaoAnalysis
               ? () => setAnalysisOpen(true)

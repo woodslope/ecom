@@ -64,10 +64,7 @@ export function getPlatformWorkflow(workflowId: PlatformWorkflowId): PlatformWor
 }
 
 export const navigationItems: NavigationItem[] = [
-  { id: "overview", label: "概览", kind: "global" },
-  { id: "library", label: "资料库", kind: "global" },
   { id: "taobao", label: "淘宝 / 天猫", kind: "platform", accent: "var(--taobao)" },
   { id: "amazon", label: "Amazon", kind: "platform", accent: "var(--amazon)" },
-  { id: "history", label: "生产记录", kind: "tool" },
   { id: "settings", label: "设置", kind: "tool" },
 ];

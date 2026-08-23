@@ -85,6 +85,13 @@ export function createHistoryQueryService(
       await prepared;
       const pageLimit = Number.isInteger(limit) && limit > 0 ? limit : 50;
       const items: HistoryRunRecord[] = [];
+      const projectCache = new Map<string, ProductProject | null>();
+      const getCachedProject = async (projectId: string): Promise<ProductProject | null> => {
+        if (projectCache.has(projectId)) return projectCache.get(projectId) ?? null;
+        const project = await dependencies.getProject(projectId);
+        projectCache.set(projectId, project);
+        return project;
+      };
       let repositoryCursor = cursor;
       let hasMore = false;
       do {
@@ -97,11 +104,11 @@ export function createHistoryQueryService(
           const run = normalizedRun(rawRun);
           if (filters.workflowId && run.workflowId !== filters.workflowId) continue;
           if (filters.shape && !hasShape(run, filters.shape)) continue;
-          const project = await dependencies.getProject(run.projectId);
+          const project = await getCachedProject(run.projectId);
           if (!project) continue;
           const sourceProjectId = run.contextSnapshot.planningInput?.sourceProjectId;
           const sourceProject = sourceProjectId
-            ? await dependencies.getProject(sourceProjectId)
+            ? await getCachedProject(sourceProjectId)
             : null;
           const search = filters.search?.trim().toLocaleLowerCase();
           if (search) {

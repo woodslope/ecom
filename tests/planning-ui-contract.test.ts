@@ -40,6 +40,9 @@ describe("planning workspace UI contract", () => {
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("MAIN");
     expect(markup).toContain("A+S08");
+    expect(markup).toContain("主图");
+    expect(markup).toContain("核心卖点");
+    expect(markup).not.toContain("<small>PT01</small>");
     expect(markup).toContain("2000 × 2000 px");
     expect((markup.match(/class="slot-card(?: |")/g) ?? [])).toHaveLength(
       amazonRulePack.slots.length,
@@ -145,6 +148,7 @@ describe("planning workspace UI contract", () => {
     expect(markup).toContain('aria-label="槽位身份"');
     expect(markup).toContain('aria-label="槽位内容"');
     expect(markup).toContain('aria-label="槽位操作"');
+    expect(markup).toContain("核心卖点");
     expect(markup.indexOf('aria-label="槽位身份"')).toBeLessThan(
       markup.indexOf('aria-label="槽位内容"'),
     );

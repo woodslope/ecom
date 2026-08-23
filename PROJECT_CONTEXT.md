@@ -1,7 +1,7 @@
 # Ecom Project Context
 
 > 当前真相源：项目起源、开源参考、领域边界、关键取舍和后续协作门禁。
-> Updated: 2026-07-28
+> Updated: 2026-08-24
 
 ## 1. 项目目标
 
@@ -36,8 +36,8 @@ Amazon Listing / A+ 的行为对齐真相源锁定为 AIS commit `bca89d728e415c
 
 `ProductProject` 保存平台无关的商品名称、品类、品牌、型号、SKU、目标人群、描述、卖点、禁用声明和规格。参考素材以 project scope 保存。
 
-- 资料库拥有商品创建、共享事实、参考素材和平台进度。
-- Amazon Listing 原文属于平台 session；解析结果只有在用户显式同步时才更新共享事实。
+- ProductProject 与参考素材仍按商品持久化；当前界面由平台新任务创建草稿，并从平台历史恢复或派生既有任务，不提供独立资料库导航。
+- Amazon Listing 原文属于平台 session；当前工作台不会用解析结果静默覆盖共享事实。
 - 平台工作区可以从直接输入原子创建 draft project/session，但不能静默覆盖已有事实。
 
 ### 3.2 PlatformSession：当前平台工作上下文
@@ -112,14 +112,15 @@ flowchart LR
 ### 当前支持
 
 - 本地多商品资料与参考素材。
-- Amazon 与淘宝均可从资料库、手动资料或纯商品图开始；无档案提交时原子创建本地草稿。
+- Amazon 与淘宝均可从手动资料、纯商品图或两者组合开始；无档案提交时原子创建本地草稿，既有任务从平台历史恢复或派生。
 - Amazon Listing / A+ 主路径和已可独立运行的淘宝 / 天猫商品生产包（次级 rule pack）。
-- Demo 与 OpenAI-compatible API 运行模式。
+- Demo 与 OpenAI-compatible API 运行模式；当前模式常驻左栏底部并可进入设置。
 - 可解释策划、Prompt 编辑、Copilot、图片生成、局部编辑和 ZIP 交付。
 - 当前商品、当前平台工作流内的本地批量生成任务，支持进度、取消、失败重试和刷新后继续。
 - 业务数据的本地 JSON 备份与恢复，API Key 和 Provider 设置除外。
 - 淘宝商品分析、固定 5 张主图 + 7 张详情图、逐图生产、手机商品页预览、部分/完整导出和历史重导出。
-- 桌面工作台：`1100px` 以上三模块，`900–1099px` 双模块加资料抽屉，`899px` 及以下显示桌面门禁。
+- 桌面工作台：最低支持 `1200px`；`1199px` 及以下显示桌面门禁，不提供移动端生产工作台。
+- 单一浅色主题：系统深色偏好不切换第二套视觉 Token。
 
 ### 当前不承诺
 
@@ -137,7 +138,7 @@ flowchart LR
 - 治理实现：Token、共享 UI、页面壳、状态和动作层级是否由同一套机制拥有。
 - 工程运行：类型、测试、构建、Provider/存储契约和浏览器错误。
 
-当前浏览器证据位于 `artifacts/cross-platform-ais/`。当前收口基线为 `pnpm check:ui`、`pnpm typecheck`、`pnpm test`（88 个文件、455 项）、`pnpm build`、`VITE_BASE_PATH=/ecom/ pnpm build`、`pnpm test:browser`；浏览器烟测已连续执行两次通过，断点覆盖 `1600/1280/1100/900/899`。生产构建的最大业务块为 452.31 kB，低于 Vite 默认 500 kB 提示线。
+当前浏览器证据位于 `artifacts/cross-platform-ais/runs/<时间戳>/`，`latest.json` 指向最近一次运行，批次内 `manifest.json` 是判断本次命令、环境和截图归属的依据；目录根部旧图仅保留作历史证据。完整收口运行 `pnpm test:ui:acceptance`，覆盖 UI 治理、类型、单元测试、标准与 `/ecom/` 子路径构建、500 kB 业务入口块预算，以及 `1600×900 / 1366×768 / 1280×800 / 1200×800 / 1200×650 / 1199×800`、系统深色偏好、减少动效、强制色、DPR 2、125% 缩放等效 CSS 视口、双平台空态/历史、120 条历史分页与错误恢复、模态隔离、淘宝固定 12 槽位预览、Amazon 本地化/A+、生产生命周期、失败恢复、遮罩编辑和版本切换。自动浏览器范围为 Playwright Chromium；Safari/Firefox、真实 Provider、平台上传审核与浏览器自身 UI 缩放行为仍需人工或外部环境验证。
 
 ## 8. 后续协作门禁
 

@@ -100,7 +100,6 @@ export function SlotBoard({
                       ) : (
                         <FileImage size={18} />
                       )}
-                      {!previewAsset ? <small>{rule.key}</small> : null}
                     </span>
                     <span className="slot-card__content">
                       <span className="slot-card__topline">
@@ -118,7 +117,7 @@ export function SlotBoard({
                           {status.label}
                         </StatusChip>
                       </span>
-                      <span className="slot-card__title">{rule.label}</span>
+                      <span className="slot-card__title">{rule.uiLabel ?? rule.label}</span>
                       <span className="slot-card__footer">
                         <span className="slot-card__meta">
                           {rule.dimensions.width} × {rule.dimensions.height} px

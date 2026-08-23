@@ -71,10 +71,11 @@ export function StyleReferenceEditorDialog({
     >
       <div className="style-reference-editor">
         <p className="style-reference-editor__scope">
-          保存后会成为当前商品可复用的风格板，并自动选为本次 Amazon 任务的附加风格板。
+          保存后会成为当前商品可复用的视觉参考，并自动选为本次 Amazon 任务的视觉参考。
         </p>
         <Field label="风格名称">
           <input
+            name="styleReferenceName"
             aria-label="风格名称"
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -82,7 +83,7 @@ export function StyleReferenceEditorDialog({
         </Field>
         <Field label="色板">
           <div className="style-reference-editor__palette">
-            {palette.map((color, index) => <input key={index} aria-label={`颜色 ${index + 1}`} type="color" value={color} onChange={(event) => setPalette((current) => current.map((value, i) => i === index ? event.target.value : value))} />)}
+            {palette.map((color, index) => <input name={`paletteColor${index + 1}`} key={index} aria-label={`颜色 ${index + 1}`} type="color" value={color} onChange={(event) => setPalette((current) => current.map((value, i) => i === index ? event.target.value : value))} />)}
           </div>
         </Field>
         <div className="style-reference-editor__grid">

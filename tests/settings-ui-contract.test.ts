@@ -66,7 +66,7 @@ describe("settings UI", () => {
     expect(markup).not.toContain("API 配置尚未启用");
   });
 
-  it("shows API mode honestly in desktop and mobile context badges", () => {
+  it("keeps runtime mode visible in the platform rail and links it to settings", () => {
     const markup = renderToStaticMarkup(
       createElement(AppShell, {
         activeItem: "amazon",
@@ -76,9 +76,9 @@ describe("settings UI", () => {
       }),
     );
 
-    expect(markup).toContain("API 引擎");
-    expect(markup).toContain("当前运行模式：API 引擎");
-    expect(markup).not.toContain("真实 API 尚未配置");
+    expect(markup).toContain("runtime-badge");
+    expect(markup).toContain("当前运行模式：API");
+    expect(markup).toContain("打开设置");
   });
 
   it("does not reuse an old connection result after the draft changes", () => {
@@ -119,6 +119,22 @@ describe("settings UI", () => {
       message: "API 连接测试未能完成，请检查网络、代理或服务配置后重试。",
     });
     expect(result.message).not.toContain("sk-secret-value");
+  });
+
+  it("renders runtime validation feedback on the matching field", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SettingsDialog, {
+        open: true,
+        settings: { ...apiSettings, textApiKey: "", apiKey: "" },
+        error: "请填写文本策划 API Key。",
+        onClose: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("field__error");
+    expect(markup).toContain("请填写文本策划 API Key。");
+    expect(markup).toContain('aria-invalid="true"');
+    expect(markup).not.toContain('class="status-message status-message--danger"');
   });
 
   it("locks settings controls while a connection test is running", () => {

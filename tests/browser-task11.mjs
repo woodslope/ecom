@@ -1,10 +1,49 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { createServer } from "node:net";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
 
-const baseUrl = process.env.E2E_BASE_URL ?? "http://127.0.0.1:5192/";
-const evidenceDir = resolve("artifacts/cross-platform-ais");
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+async function openPort() {
+  const server = createServer();
+  server.unref();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  await new Promise((done) => server.close(done));
+  return port;
+}
+
+async function waitForServer(url) {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    try {
+      if ((await fetch(url)).ok) return;
+    } catch {
+      // Vite is still starting.
+    }
+    await new Promise((done) => setTimeout(done, 100));
+  }
+  throw new Error(`本地预览未能在 15 秒内启动：${url}`);
+}
+
+const externalBaseUrl = process.env.E2E_BASE_URL;
+const port = externalBaseUrl ? null : await openPort();
+const baseUrl = externalBaseUrl ?? `http://127.0.0.1:${port}/`;
+const vite = externalBaseUrl ? null : spawn(
+  process.execPath,
+  [resolve(projectRoot, "node_modules/vite/bin/vite.js"), "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+  { cwd: projectRoot, stdio: "ignore" },
+);
+const evidenceDir = resolve(
+  process.env.ECOM_EVIDENCE_DIR ?? resolve(projectRoot, "artifacts/cross-platform-ais"),
+);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -37,36 +76,52 @@ async function drawMask(page) {
   assert(selectedPixels > 0, "绘制后遮罩画布仍为空");
 }
 
+async function resumeAmazonTask(page) {
+  if (!(await page.getByRole("heading", { name: "Amazon", exact: true }).count())) {
+    await page.getByRole("button", { name: "Amazon", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "历史记录", exact: true }).click();
+  const history = page.getByRole("dialog", { name: "Amazon历史记录", exact: true });
+  await history.waitFor({ state: "visible" });
+  await history.getByRole("button", { name: "继续任务", exact: true }).first().click();
+  await page.locator(".slot-card").first().waitFor({ state: "attached" });
+  await history.getByRole("button", { name: "关闭历史记录", exact: true }).click();
+}
+
 await mkdir(evidenceDir, { recursive: true });
+await waitForServer(baseUrl);
 const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+const context = await browser.newContext({
+  viewport: { width: 1280, height: 800 },
+  deviceScaleFactor: 2,
+});
+const page = await context.newPage();
 const runtimeErrors = [];
 page.on("pageerror", (error) => runtimeErrors.push(error.message));
 page.on("console", (message) => {
   if (message.type() === "error") runtimeErrors.push(message.text());
 });
+page.on("response", (response) => {
+  if (response.status() >= 400) runtimeErrors.push(`HTTP ${response.status()}: ${response.url()}`);
+});
 
 try {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "资料库", exact: true }).click();
-  await page.getByRole("button", { name: "新建商品", exact: true }).first().click();
-  const projectDialog = page.getByRole("dialog", { name: "新建商品资料", exact: true });
-  await projectDialog.getByLabel("资料名称", { exact: true }).fill("任务 11 遮罩验收");
-  await projectDialog.getByLabel("商品名称", { exact: true }).fill("云感旅行颈枕");
-  await projectDialog.getByLabel("品类", { exact: true }).fill("旅行用品");
-  await projectDialog.getByLabel("核心卖点", { exact: true }).fill("慢回弹承托\n可折叠收纳");
-  await projectDialog.getByRole("button", { name: "创建资料", exact: true }).click();
-  await page.getByRole("tab", { name: "平台进度", exact: true }).click();
-  await page.locator('button[data-workflow-id="amazon-listing"]').click();
+  assert(await page.evaluate(() => window.devicePixelRatio === 2), "遮罩验收未在 DPR 2 环境运行");
+  await page.getByRole("button", { name: "Amazon", exact: true }).click();
+  await page.getByText("粘贴 Amazon Listing（可选）", { exact: true }).click();
   await page.getByLabel("Amazon Listing 原文", { exact: true }).fill(
     "Title: Cloud Travel Neck Pillow\n- Memory foam support\n- Foldable for carry-on",
   );
+  await page.getByRole("button", { name: "填入空字段", exact: true }).click();
   await page.getByRole("button", { name: "生成图片策划", exact: true }).click();
+  await page.getByRole("button", { name: "确认并生成策划", exact: true }).click();
   await page.locator(".slot-card").filter({ hasText: "PT01" }).click();
   await page.getByRole("button", { name: "生成图片", exact: true }).click();
   await page.getByRole("img", { name: "PT01 当前生成版本", exact: true }).waitFor();
   assert((await page.locator(".version-tile").count()) === 1, "首次生成没有创建 V1");
 
+  await page.getByRole("button", { name: "版本", exact: true }).click();
   await page.getByRole("button", { name: "局部编辑", exact: true }).click();
   const maskDialog = page.getByRole("dialog", { name: "局部编辑", exact: true });
   await maskDialog.waitFor({ state: "visible" });
@@ -77,7 +132,9 @@ try {
   await capture(page, "task11-mask-drawn-1280.png");
 
   await page.goto(`${baseUrl}?fixture=image-fail-once`, { waitUntil: "networkidle" });
+  await resumeAmazonTask(page);
   await page.locator(".slot-card").filter({ hasText: "PT01" }).click();
+  await page.getByRole("button", { name: "版本", exact: true }).click();
   await page.getByRole("button", { name: "局部编辑", exact: true }).click();
   await drawMask(page);
   await page.getByRole("button", { name: "保存编辑", exact: true }).click();
@@ -89,17 +146,19 @@ try {
   await page.getByRole("dialog", { name: "局部编辑", exact: true }).waitFor({ state: "hidden" });
   assert((await page.locator(".version-tile").count()) === 2, "编辑重试没有追加 V2");
   await page.locator(".version-tile").first().click();
+  await page.locator('.version-tile[aria-pressed="true"]').filter({ hasText: "V1" }).waitFor({ state: "visible" });
   assert((await page.locator(".version-tile").first().getAttribute("aria-pressed")) === "true", "V1 无法重新激活");
   await page.locator(".version-tile").nth(1).click();
+  await page.locator('.version-tile[aria-pressed="true"]').filter({ hasText: "V2" }).waitFor({ state: "visible" });
   assert((await page.locator(".version-tile").nth(1).getAttribute("aria-pressed")) === "true", "V2 无法重新激活");
   await capture(page, "task11-mask-saved-v2-1280.png");
 
-  await page.setViewportSize({ width: 900, height: 800 });
+  await page.setViewportSize({ width: 1200, height: 800 });
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
-  assert(!overflow, "900px 遮罩编辑结果态出现横向溢出");
-  await capture(page, "task11-mask-saved-v2-900.png");
+  assert(!overflow, "1200px 遮罩编辑结果态出现横向溢出");
+  await capture(page, "task11-mask-saved-v2-1200.png");
   assert(runtimeErrors.length === 0, `浏览器出现运行错误：${runtimeErrors.join(" | ")}`);
   console.log("Task 11 browser evidence passed:");
   console.log([
@@ -107,8 +166,10 @@ try {
     "task11-mask-drawn-1280.png",
     "task11-mask-error-1280.png",
     "task11-mask-saved-v2-1280.png",
-    "task11-mask-saved-v2-900.png",
+    "task11-mask-saved-v2-1200.png",
   ].join("\n"));
 } finally {
+  await context.close();
   await browser.close();
+  vite?.kill("SIGTERM");
 }

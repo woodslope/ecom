@@ -16,6 +16,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "MAIN",
     label: "Main image",
+    uiLabel: "主图",
     group: "listing",
     order: 1,
     required: true,
@@ -35,6 +36,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "PT01",
     label: "Core benefit",
+    uiLabel: "核心卖点",
     group: "listing",
     order: 2,
     required: true,
@@ -46,6 +48,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "PT02",
     label: "Feature proof",
+    uiLabel: "功能证明",
     group: "listing",
     order: 3,
     required: true,
@@ -57,6 +60,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "PT03",
     label: "Lifestyle",
+    uiLabel: "使用场景",
     group: "listing",
     order: 4,
     required: true,
@@ -68,6 +72,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "PT04",
     label: "Size and fit",
+    uiLabel: "尺寸与适配",
     group: "listing",
     order: 5,
     required: true,
@@ -79,6 +84,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "PT05",
     label: "Detail and material",
+    uiLabel: "细节与材质",
     group: "listing",
     order: 6,
     required: true,
@@ -90,6 +96,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "PT06",
     label: "Package and trust",
+    uiLabel: "包装与信任",
     group: "listing",
     order: 7,
     required: true,
@@ -101,6 +108,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "A+S01",
     label: "A+ header banner",
+    uiLabel: "A+ 顶部横幅",
     group: "a-plus",
     order: 8,
     required: true,
@@ -112,6 +120,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "A+S02",
     label: "A+ value story",
+    uiLabel: "A+ 价值故事",
     group: "a-plus",
     order: 9,
     required: true,
@@ -123,6 +132,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "A+S03",
     label: "A+ feature system",
+    uiLabel: "A+ 功能体系",
     group: "a-plus",
     order: 10,
     required: true,
@@ -134,6 +144,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "A+S04",
     label: "A+ usage story",
+    uiLabel: "A+ 使用故事",
     group: "a-plus",
     order: 11,
     required: true,
@@ -145,6 +156,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "A+S05",
     label: "A+ benefit tile 1",
+    uiLabel: "A+ 卖点方块 1",
     group: "a-plus",
     order: 12,
     required: true,
@@ -156,6 +168,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "A+S06",
     label: "A+ benefit tile 2",
+    uiLabel: "A+ 卖点方块 2",
     group: "a-plus",
     order: 13,
     required: true,
@@ -167,6 +180,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "A+S07",
     label: "A+ benefit tile 3",
+    uiLabel: "A+ 卖点方块 3",
     group: "a-plus",
     order: 14,
     required: true,
@@ -178,6 +192,7 @@ const slots: PlatformSlotRule[] = [
   {
     key: "A+S08",
     label: "A+ benefit tile 4",
+    uiLabel: "A+ 卖点方块 4",
     group: "a-plus",
     order: 15,
     required: true,

@@ -31,6 +31,7 @@ import type { PlatformRulePack } from "../domain/platforms/types";
 import { useWorkbenchStore } from "../store/workbench-store";
 import {
   Button,
+  ConfirmDialog,
   Dialog,
   Field,
   IconButton,
@@ -82,6 +83,7 @@ export function IndustryTemplateSelector({
   const [description, setDescription] = useState("");
   const [brief, setBrief] = useState<IndustryTemplateBrief>(() => blankBrief());
   const [message, setMessage] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const transforming = useWorkbenchStore((state) => state.industryTemplateTransforming);
   const transformError = useWorkbenchStore((state) => state.industryTemplateTransformError);
   const transformIndustryTemplate = useWorkbenchStore((state) => state.transformIndustryTemplate);
@@ -213,14 +215,17 @@ export function IndustryTemplateSelector({
 
   const removeSelected = () => {
     if (!storage || !selectedPack) return;
-    if (!window.confirm(`删除行业模板“${selectedPack.name}”及其全部版本？历史任务快照不会受影响。`)) {
-      return;
-    }
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmRemoveSelected = () => {
+    if (!storage || !selectedPack) return;
     deleteIndustryTemplatePack(storage, selectedPack.id);
     refresh();
     selectForPreview(SYSTEM_GENERAL_TEMPLATE_ID);
     if (value?.id === selectedPack.id) onChange(generalTemplate);
     setMessage("模板已删除，历史任务仍保留原模板快照。 ");
+    setDeleteConfirmOpen(false);
   };
 
   const currentValue = value && sameScope(value.scope, scope) ? value : generalTemplate;
@@ -235,8 +240,9 @@ export function IndustryTemplateSelector({
   return (
     <>
       <div className="industry-template-selector">
-        <Field label="行业模板" hint="模板提供行业方向；商品事实仍由本次 AI 策划补全。">
+        <Field label="当前模板" hint="模板提供行业方向；商品事实仍由本次 AI 策划补全。">
           <Select
+            name="industryTemplate"
             aria-label="行业模板"
             value={templateOptionValue(currentValue)}
             disabled={disabled}
@@ -262,17 +268,18 @@ export function IndustryTemplateSelector({
             ) : null}
           </Select>
         </Field>
-        <Button type="button" variant="secondary" size="compact" disabled={disabled} onClick={openLibrary}>
-          <Library size={14} />
-          管理模板
-        </Button>
-        <StatusChip tone={currentValue.source === "system" ? "neutral" : "info"}>
-          {currentValue.slots.length} 个槽位
-        </StatusChip>
+        <div className="industry-template-selector__actions">
+          <IconButton type="button" label="管理模板" disabled={disabled} onClick={openLibrary}>
+            <Library size={14} />
+          </IconButton>
+          <StatusChip tone={currentValue.source === "system" ? "neutral" : "info"}>
+            {currentValue.slots.length} 个槽位
+          </StatusChip>
+        </div>
       </div>
 
       <Dialog
-        open={dialogOpen}
+        open={dialogOpen && !deleteConfirmOpen}
         variant="sidebar"
         title="行业模板库"
         eyebrow={`${rulePack.label} · ${scope.workflowId}`}
@@ -347,6 +354,7 @@ export function IndustryTemplateSelector({
             {selectedPack ? (
               <Field label="模板版本">
                 <Select
+                  name="industryTemplateVersion"
                   aria-label="行业模板版本"
                   value={String(selectedVersion)}
                   disabled={transforming}
@@ -402,29 +410,29 @@ export function IndustryTemplateSelector({
               </div>
               <div className="industry-template-transform__grid">
                 <Field label="模板名称">
-                  <input value={name} disabled={transforming} placeholder="例如：家居饰品摆件" onChange={(event) => setName(event.target.value)} />
+                  <input name="industryTemplateName" value={name} disabled={transforming} placeholder="例如：家居饰品摆件" onChange={(event) => setName(event.target.value)} />
                 </Field>
                 <Field label="行业">
-                  <input value={brief.industry} disabled={transforming} placeholder="例如：家居软装" onChange={(event) => updateBrief("industry", event.target.value)} />
+                  <input name="industry" value={brief.industry} disabled={transforming} placeholder="例如：家居软装" onChange={(event) => updateBrief("industry", event.target.value)} />
                 </Field>
                 <Field label="产品类型">
-                  <input value={brief.productTypes} disabled={transforming} placeholder="花瓶、摆件、相框、装饰画" onChange={(event) => updateBrief("productTypes", event.target.value)} />
+                  <input name="productTypes" value={brief.productTypes} disabled={transforming} placeholder="花瓶、摆件、相框、装饰画" onChange={(event) => updateBrief("productTypes", event.target.value)} />
                 </Field>
                 <Field label="目标人群">
-                  <input value={brief.targetAudience} disabled={transforming} placeholder="例如：25–45 岁家居审美人群" onChange={(event) => updateBrief("targetAudience", event.target.value)} />
+                  <input name="targetAudience" value={brief.targetAudience} disabled={transforming} placeholder="例如：25–45 岁家居审美人群" onChange={(event) => updateBrief("targetAudience", event.target.value)} />
                 </Field>
                 <Field label="风格偏好">
-                  <input value={brief.stylePreference} disabled={transforming} placeholder="自然、质感、生活方式" onChange={(event) => updateBrief("stylePreference", event.target.value)} />
+                  <input name="stylePreference" value={brief.stylePreference} disabled={transforming} placeholder="自然、质感、生活方式" onChange={(event) => updateBrief("stylePreference", event.target.value)} />
                 </Field>
                 <Field label="模板说明">
-                  <input value={description} disabled={transforming} placeholder="适用范围和使用边界" onChange={(event) => setDescription(event.target.value)} />
+                  <input name="industryTemplateDescription" value={description} disabled={transforming} placeholder="适用范围和使用边界" onChange={(event) => setDescription(event.target.value)} />
                 </Field>
               </div>
               <Field label="额外要求">
-                <textarea rows={3} value={brief.extraRequirements} disabled={transforming} placeholder="对构图、材质、场景的额外方向" onChange={(event) => updateBrief("extraRequirements", event.target.value)} />
+                <textarea name="extraRequirements" rows={3} value={brief.extraRequirements} disabled={transforming} placeholder="对构图、材质、场景的额外方向" onChange={(event) => updateBrief("extraRequirements", event.target.value)} />
               </Field>
               <Field label="禁止内容">
-                <textarea rows={2} value={brief.forbiddenContent} disabled={transforming} placeholder="行业特有的禁用场景、道具或表达" onChange={(event) => updateBrief("forbiddenContent", event.target.value)} />
+                <textarea name="forbiddenContent" rows={2} value={brief.forbiddenContent} disabled={transforming} placeholder="行业特有的禁用场景、道具或表达" onChange={(event) => updateBrief("forbiddenContent", event.target.value)} />
               </Field>
               <div className="industry-template-transform__actions">
                 {transforming ? (
@@ -443,12 +451,20 @@ export function IndustryTemplateSelector({
                   {selectedPack ? "生成并保存新版本" : "生成并保存行业模板"}
                 </Button>
               </div>
-              {transformError ? <StatusMessage tone="danger">{transformError}</StatusMessage> : null}
-              {message ? <StatusMessage tone={message.includes("失败") ? "danger" : "success"}>{message}</StatusMessage> : null}
+              {transformError ? <StatusMessage tone="danger" live="assertive">{transformError}</StatusMessage> : null}
+              {message ? <StatusMessage tone={message.includes("失败") ? "danger" : "success"} live={message.includes("失败") ? "assertive" : "polite"}>{message}</StatusMessage> : null}
             </section>
           </section>
         </div>
       </Dialog>
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title="删除行业模板？"
+        description={`将删除“${selectedPack?.name ?? "当前模板"}”及其全部版本，历史任务快照不会受影响。`}
+        confirmLabel="删除模板"
+        onConfirm={confirmRemoveSelected}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
     </>
   );
 }

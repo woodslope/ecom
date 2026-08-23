@@ -27,12 +27,13 @@ function downloadOutput(url: string, fileName: string): void {
   anchor.remove();
 }
 
-export function ProductionRunCard({ record, expanded, current, assetUrls, busy, onRequestPreviewAssets, onToggle, onResume, onFork, onReuse, onExport, onDeposit }: {
+export function ProductionRunCard({ record, expanded, current, assetUrls, busy, compact = false, onRequestPreviewAssets, onToggle, onResume, onFork, onReuse, onExport, onDeposit }: {
   record: ProductionRunRecord;
   expanded: boolean;
   current: boolean;
   assetUrls: Record<string, string>;
   busy?: boolean;
+  compact?: boolean;
   onRequestPreviewAssets?: (assetIds: readonly string[]) => void;
   onToggle: () => void;
   onResume: () => void;
@@ -89,7 +90,8 @@ export function ProductionRunCard({ record, expanded, current, assetUrls, busy, 
         <div className="production-run-card__chips">
           <StatusChip tone={run.status === "ready" ? "success" : run.status === "failed" ? "warning" : "info"}>{statusLabels[run.status]}</StatusChip>
           <StatusChip tone="neutral">{previewOutputs.length} 张</StatusChip>
-          <StatusChip tone="neutral">{run.source === "api" ? "API" : "Demo"}</StatusChip>
+          <StatusChip tone="neutral">{run.events.length} 个阶段</StatusChip>
+          {!compact ? <StatusChip tone="neutral">{run.source === "api" ? "API" : "Demo"}</StatusChip> : null}
           {current ? <StatusChip tone="success">当前任务</StatusChip> : null}
         </div>
       </header>
@@ -129,32 +131,39 @@ export function ProductionRunCard({ record, expanded, current, assetUrls, busy, 
 
         <div className="production-run-card__actions">
           {current ? <Button size="compact" disabled={busy} onClick={onResume}><RotateCcw size={14} />继续任务</Button> : <Button variant="secondary" size="compact" disabled={busy} onClick={onFork}><CopyPlus size={14} />基于记录新建</Button>}
-          {manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存到资料库</Button> : null}
-          {canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}
-          {onExport && outputEvents.length > 0 ? <Button variant="secondary" size="compact" disabled={busy} onClick={onExport}><Download size={14} />重新导出</Button> : null}
+          {!compact && manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存商品</Button> : null}
+          {!compact && canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}
+          {!compact && onExport && outputEvents.length > 0 ? <Button variant="secondary" size="compact" disabled={busy} onClick={onExport}><Download size={14} />重新导出</Button> : null}
           <Button variant="quiet" size="compact" aria-expanded={expanded} onClick={onToggle}>
-            {expanded ? "收起详情" : "查看详情"}
+            {expanded ? "收起阶段" : "回看阶段"}
             <ChevronDown size={15} className={expanded ? "production-run-card__chevron--open" : ""} aria-hidden="true" />
           </Button>
         </div>
 
         <div className="production-run-card__facts">
-          <span>{run.planSnapshot.slots.length} 个槽位</span>
-          <span>{previewOutputs.length} 张结果</span>
-          <span>最近：{lastEvent ? eventLabels[lastEvent.kind] : "无事件"}</span>
-          <span>{manual ? "手动来源" : "资料库来源"}</span>
-          {!manual ? <span>来源商品：{record.sourceProject?.name ?? "已删除商品"}</span> : null}
-          {run.deposit ? <span>已保存：{new Date(run.deposit.depositedAt).toLocaleString("zh-CN")}</span> : null}
+          {!compact ? <span>{run.planSnapshot.slots.length} 个槽位</span> : null}
+          {!compact ? <span>{previewOutputs.length} 张结果</span> : null}
+          <span>最后阶段：{lastEvent ? eventLabels[lastEvent.kind] : "无事件"}</span>
+          {!compact ? <span>{manual ? "当前任务填写" : "已保存任务资料"}</span> : null}
+          {!compact && !manual ? <span>来源商品：{record.sourceProject?.name ?? "已删除商品"}</span> : null}
+          {!compact && run.deposit ? <span>已保存：{new Date(run.deposit.depositedAt).toLocaleString("zh-CN")}</span> : null}
         </div>
       </div>
 
       {expanded ? <div className="production-run-card__details">
         <div className="production-run-card__details-heading">
-          <strong>运行详情</strong>
+          <strong>生成阶段</strong>
           <code>{run.id}</code>
         </div>
-        <ol className="production-run-events">
-          {[...run.events].reverse().map((event) => <li key={event.id} className={`production-run-event production-run-event--${event.status}`}>
+        {compact ? (
+          <div className="production-run-card__details-actions">
+            {manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存商品</Button> : null}
+            {canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}
+            {onExport && outputEvents.length > 0 ? <Button variant="secondary" size="compact" disabled={busy} onClick={onExport}><Download size={14} />重新导出</Button> : null}
+          </div>
+        ) : null}
+        <ol className="production-run-events" aria-label="生成阶段列表">
+          {[...run.events].reverse().map((event) => <li key={event.id} className={`production-run-event production-run-event--${event.status}`} aria-label={`阶段：${eventLabels[event.kind]}${event.slotKey ? ` · ${event.slotKey}` : ""}`}>
             {event.assetId && assetUrls[event.assetId] ? <img src={assetUrls[event.assetId]} alt={`${event.slotKey ?? "历史"} 输出缩略图`} /> : <span className="production-run-event__marker" />}
             <span><strong>{eventLabels[event.kind]}{event.slotKey ? ` · ${event.slotKey}` : ""}</strong><time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("zh-CN")}</time>{event.artifactFileName ? <code>{event.artifactFileName}</code> : null}</span>
             {outputEvent(event) && assetUrls[event.assetId!] ? (

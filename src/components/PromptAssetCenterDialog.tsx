@@ -10,7 +10,7 @@ import {
   type SlotPromptAsset,
   type SlotPromptScope,
 } from "../domain/prompt-profiles/slot-prompt-assets";
-import { Button, Dialog, Field, IconButton, Select, StatusChip, StatusMessage } from "./ui";
+import { Button, ConfirmDialog, Dialog, Field, IconButton, Select, StatusChip, StatusMessage } from "./ui";
 
 function latestVersion(asset: SlotPromptAsset): number {
   return Math.max(...asset.revisions.map((revision) => revision.version));
@@ -45,6 +45,7 @@ export function PromptAssetCenterDialog({
   const [label, setLabel] = useState("");
   const [description, setDescription] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const refresh = () => {
     if (!storage) return;
@@ -116,10 +117,15 @@ export function PromptAssetCenterDialog({
 
   const removeSelectedAsset = () => {
     if (!storage || !selectedAsset) return;
-    if (!window.confirm(`删除模板“${selectedAsset.label}”及其全部版本？`)) return;
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmRemoveSelectedAsset = () => {
+    if (!storage || !selectedAsset) return;
     deleteSlotPromptAsset(storage, selectedAsset.id);
     refresh();
     setMessage("模板已删除，当前槽位内容未改变。");
+    setDeleteConfirmOpen(false);
   };
 
   const markDefault = () => {
@@ -139,8 +145,9 @@ export function PromptAssetCenterDialog({
   };
 
   return (
-    <Dialog
-      open={open}
+    <>
+      <Dialog
+      open={open && !deleteConfirmOpen}
       variant="sidebar"
       title="Prompt 资产中心"
       eyebrow={`${scope.platformId === "amazon" ? "Amazon" : "淘宝 / 天猫"} · ${scope.workflowId} · ${scope.slotKey}`}
@@ -226,6 +233,7 @@ export function PromptAssetCenterDialog({
           {selectedAsset ? (
             <Field label="模板版本">
               <Select
+                name="templateVersion"
                 aria-label="模板版本"
                 value={String(selectedVersion)}
                 onChange={(event) => setSelectedVersion(Number(event.target.value))}
@@ -242,7 +250,7 @@ export function PromptAssetCenterDialog({
           ) : null}
 
           <Field label="模板 Prompt">
-            <textarea aria-label="模板 Prompt" rows={12} value={previewPrompt} readOnly />
+            <textarea name="templatePrompt" aria-label="模板 Prompt" rows={12} value={previewPrompt} readOnly />
           </Field>
 
           <div className="prompt-asset-center__apply-actions">
@@ -284,6 +292,7 @@ export function PromptAssetCenterDialog({
             <div className="prompt-asset-center__create-grid">
               <Field label="模板名称">
                 <input
+                  name="templateLabel"
                   aria-label="Prompt 模板名称"
                   value={label}
                   placeholder="例如：旅行用品场景强化"
@@ -292,6 +301,7 @@ export function PromptAssetCenterDialog({
               </Field>
               <Field label="说明">
                 <input
+                  name="templateDescription"
                   aria-label="Prompt 模板说明"
                   value={description}
                   placeholder="适用目标或修改方向"
@@ -305,9 +315,18 @@ export function PromptAssetCenterDialog({
             </Button>
           </div>
 
-          {message ? <StatusMessage tone="success">{message}</StatusMessage> : null}
+          {message ? <StatusMessage tone="success" live="polite">{message}</StatusMessage> : null}
         </section>
       </div>
-    </Dialog>
+      </Dialog>
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title="删除 Prompt 模板？"
+        description={`将删除“${selectedAsset?.label ?? "当前模板"}”及其全部版本，当前槽位内容不会改变。`}
+        confirmLabel="删除模板"
+        onConfirm={confirmRemoveSelectedAsset}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
+    </>
   );
 }

@@ -68,26 +68,24 @@ export function StyleReferencePicker({
   return (
     <section
       className={`style-reference-picker${embedded ? " style-reference-picker--embedded" : ""}`}
-      aria-label="Amazon 风格参考设置"
+      aria-label="Amazon 视觉参考设置"
     >
       <div className="style-reference-picker__head">
         <div>
-          <strong>附加风格板</strong>
-          <span>叠加在基础风格上，只用于附图与 A+；MAIN 自动排除</span>
+          <strong>视觉参考</strong>
+          <span>可选图片参考，只用于附图与 A+；主图不套用</span>
         </div>
-        <Button
-          variant="secondary"
-          size="compact"
+        <IconButton
           disabled={disabled || !canCreate}
+          label="新建参考"
           onClick={() => setEditorOpen(true)}
         >
           <Pencil size={14} />
-          新建风格
-        </Button>
+        </IconButton>
       </div>
-      <Field label="当前风格板">
+      <Field label="当前参考">
         <Select
-          aria-label="附加风格板"
+          aria-label="视觉参考"
           value={value ?? "none"}
           disabled={disabled}
           onChange={(event) =>
@@ -117,13 +115,13 @@ export function StyleReferencePicker({
         <div className="style-reference-picker__selected">
           {selectedCustomAsset ? (
             <>
-              <img src={selectedCustomAsset.objectUrl} alt="当前风格板预览" />
+              <img src={selectedCustomAsset.objectUrl} alt="当前视觉参考预览" />
               <span>
                 <strong>{selectedCustomAsset.metadata.styleReference?.name}</strong>
-                当前商品的自定义风格板
+                当前商品的自定义视觉参考
               </span>
               <IconButton
-                label="删除当前自定义风格"
+                label="删除当前自定义视觉参考"
                 disabled={disabled}
                 onClick={() => setRemoveDialogOpen(true)}
               >
@@ -132,13 +130,13 @@ export function StyleReferencePicker({
             </>
           ) : (
             <StatusMessage tone="warning">
-              风格板不可用，提交时将使用基础文本风格。
+              视觉参考不可用，提交时将使用生成方案的基础视觉。
             </StatusMessage>
           )}
         </div>
       ) : null}
-      {notice ? <StatusMessage tone="warning">{notice}</StatusMessage> : null}
-      {!canCreate ? <p className="style-reference-picker__hint">先创建或选择商品后，可保存自定义风格板。</p> : null}
+      {notice ? <StatusMessage tone="warning" live="polite">{notice}</StatusMessage> : null}
+      {!canCreate ? <p className="style-reference-picker__hint">先创建或选择商品后，可保存自定义视觉参考。</p> : null}
       <StyleReferenceEditorDialog
         open={editorOpen}
         presetId={selectedPresetId}
@@ -159,7 +157,7 @@ export function StyleReferencePicker({
       />
       <Dialog
         open={removeDialogOpen}
-        title="删除自定义风格板？"
+        title="删除自定义视觉参考？"
         eyebrow="当前商品"
         className="style-reference-remove-dialog"
         onClose={() => setRemoveDialogOpen(false)}
@@ -174,7 +172,7 @@ export function StyleReferencePicker({
               loadingLabel="删除中"
               onClick={() => void removeSelectedStyle()}
             >
-              删除风格板
+              删除视觉参考
             </Button>
           </>
         }

@@ -13,22 +13,25 @@ import { PlatformRail } from "../src/components/PlatformRail";
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
 describe("reference-image follow-up plans", () => {
-  it("uses compact navigation only for a planned production workspace", () => {
+  it("uses one narrow navigation contract for the platform rail", () => {
     const markup = renderToStaticMarkup(
       createElement(PlatformRail, {
         activeItem: "amazon",
-        compact: true,
+        runtimeMode: "api",
         onChange: () => undefined,
       }),
     );
 
-    expect(markup).toContain("platform-rail--compact");
-    expect(markup).toContain('data-compact="true"');
+    expect(markup).toContain('class="platform-rail"');
+    expect(markup).not.toContain("platform-rail--compact");
+    expect(markup).toContain("runtime-badge");
+    expect(markup).toContain("API");
     expect(appSource).toContain('activeItem === "amazon"');
-    expect(appSource).toContain("Boolean(activeAmazonSession?.plan)");
-    expect(appSource).toContain("Boolean(activeTaobaoSession?.plan)");
-    expect(styles).toContain(".app-frame--compact-rail");
-    expect(styles).toContain("--rail-width-compact: 72px");
+    expect(appSource).not.toContain("compactRail");
+    expect(appSource).toContain("platform-page-layout");
+    expect(styles).not.toContain(".app-frame--compact-rail");
+    expect(styles).toContain("--rail-width: 72px");
+    expect(styles).not.toContain("--rail-width-compact");
   });
 
   it("opens a scoped Prompt asset center from the selected slot inspector", () => {

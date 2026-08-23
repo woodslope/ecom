@@ -8,6 +8,7 @@ import {
 import type { ProductFacts, ProductProject, UpdateProductProjectInput } from "../domain/projects/types";
 import type { WorkbenchAsset } from "../store/workbench-store";
 import { AssetLibrary } from "./AssetLibrary";
+import { ProductFactsForm } from "./ProductFactsForm";
 import { Button, Field, Panel, StatusChip, StatusMessage } from "./ui";
 
 function toLines(values: readonly string[]): string {
@@ -117,12 +118,6 @@ export function ProductSourcePanel({
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
 
-  const setFact = (field: keyof Omit<ProductFacts, "sellingPoints" | "forbiddenClaims" | "specifications">) =>
-    (value: string) => {
-      setFacts((current) => ({ ...current, [field]: value }));
-      setSaveState("idle");
-    };
-
   const applyListingPaste = (mode: "fill-empty" | "overwrite") => {
     const parsed = parseAmazonListingText(listingPaste);
     if (!parsed.title && parsed.bullets.length === 0 && !parsed.description) {
@@ -209,6 +204,7 @@ export function ProductSourcePanel({
                 hint="支持 Title:、About this item、- 列表等常见格式。本地解析，不调用 API。"
               >
                 <textarea
+                  name="listingText"
                   aria-label="粘贴 Listing 文本"
                   placeholder={
                     "Title: Cloud Travel Neck Pillow\n\nAbout this item\n- Memory foam support\n- Foldable for carry-on\n- Removable cover\n\nOptional longer product description..."
@@ -244,76 +240,26 @@ export function ProductSourcePanel({
                 </Button>
               </div>
               {listingPasteMessage ? (
-                <StatusMessage tone={listingPasteTone}>{listingPasteMessage}</StatusMessage>
+                <StatusMessage tone={listingPasteTone} live={listingPasteTone === "danger" ? "assertive" : "polite"}>{listingPasteMessage}</StatusMessage>
               ) : null}
             </div>
           ) : null}
-          <Field label="商品名称">
-            <input disabled={controlsDisabled} value={facts.productName} onChange={(event) => setFact("productName")(event.target.value)} />
-          </Field>
-          <div className="source-form__pair">
-            <Field label="品类">
-              <input disabled={controlsDisabled} value={facts.category} onChange={(event) => setFact("category")(event.target.value)} />
-            </Field>
-            <Field label="品牌">
-              <input disabled={controlsDisabled} value={facts.brand} onChange={(event) => setFact("brand")(event.target.value)} />
-            </Field>
-          </div>
-          <div className="source-form__pair">
-            <Field label="型号">
-              <input disabled={controlsDisabled} value={facts.model} onChange={(event) => setFact("model")(event.target.value)} />
-            </Field>
-            <Field label="SKU">
-              <input disabled={controlsDisabled} value={facts.sku} onChange={(event) => setFact("sku")(event.target.value)} />
-            </Field>
-          </div>
-          <Field label="目标人群">
-            <input disabled={controlsDisabled} value={facts.targetAudience} onChange={(event) => setFact("targetAudience")(event.target.value)} />
-          </Field>
-          <Field label="商品描述">
-            <textarea disabled={controlsDisabled} value={facts.description} onChange={(event) => setFact("description")(event.target.value)} />
-          </Field>
-          <Field label="核心卖点">
-            <textarea
-              aria-label="核心卖点"
-              placeholder="每行一条卖点"
-              disabled={controlsDisabled}
-              value={sellingPoints}
-              onChange={(event) => {
-                setSellingPoints(event.target.value);
-                setSaveState("idle");
-              }}
-            />
-          </Field>
-          <Field label="规格参数">
-            <textarea
-              aria-label="规格参数"
-              placeholder={"每行一条，例如：\n材质：记忆棉"}
-              disabled={controlsDisabled}
-              value={specifications}
-              onChange={(event) => {
-                setSpecifications(event.target.value);
-                setSaveState("idle");
-              }}
-            />
-          </Field>
-          <Field label="禁用声明">
-            <textarea
-              aria-label="禁用声明"
-              placeholder="每行一条禁用说法"
-              disabled={controlsDisabled}
-              value={forbiddenClaims}
-              onChange={(event) => {
-                setForbiddenClaims(event.target.value);
-                setSaveState("idle");
-              }}
-            />
-          </Field>
+          <ProductFactsForm
+            facts={draftFacts}
+            disabled={controlsDisabled}
+            onChange={(next) => {
+              setFacts(next);
+              setSellingPoints(toLines(next.sellingPoints));
+              setForbiddenClaims(toLines(next.forbiddenClaims));
+              setSpecifications(toSpecificationLines(next.specifications));
+              setSaveState("idle");
+            }}
+          />
           {saveState === "saved" ? (
-            <StatusMessage tone="success">商品资料已保存。</StatusMessage>
+            <StatusMessage tone="success" live="polite">商品资料已保存。</StatusMessage>
           ) : null}
           {saveState === "error" ? (
-            <StatusMessage tone="danger">保存失败，当前输入仍保留，请重试。</StatusMessage>
+            <StatusMessage tone="danger" live="assertive">保存失败，当前输入仍保留，请重试。</StatusMessage>
           ) : null}
           <Button type="submit" variant="secondary" disabled={controlsDisabled || !dirty}>
             <Save size={15} />

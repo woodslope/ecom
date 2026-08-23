@@ -1,12 +1,12 @@
 export type PlatformId = "taobao" | "amazon";
 export type PlatformWorkflowId = "amazon-listing" | "amazon-aplus" | "taobao-product" | "taobao-detail";
 
-export type NavigationItemId = "overview" | PlatformId | "library" | "history" | "settings";
+export type NavigationItemId = PlatformId | "settings";
 
 export interface NavigationItem {
   id: NavigationItemId;
   label: string;
-  kind: "global" | "platform" | "tool";
+  kind: "platform" | "tool";
   accent?: string;
 }
 
@@ -21,6 +21,8 @@ export interface SlotDimensions {
 
 export interface PlatformSlotRule {
   readonly key: string;
+  /** Optional localized label for product UI; canonical label remains stable for prompts and export. */
+  readonly uiLabel?: string;
   readonly label: string;
   readonly group: PlatformSlotGroup;
   readonly order: number;

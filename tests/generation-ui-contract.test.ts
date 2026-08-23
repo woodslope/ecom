@@ -240,7 +240,7 @@ describe("generation UI contract", () => {
     );
 
     expect(markup).toContain('aria-label="槽位检查视图"');
-    expect(markup.match(/role="tab"/g)).toHaveLength(4);
+    expect(markup.match(/segmented-control__option[^>]*aria-pressed="(?:true|false)"/g)).toHaveLength(4);
     expect(markup).toContain('aria-label="文案与提示词"');
     expect(markup.match(/hidden=""/g)).toHaveLength(3);
     expect(markup).toContain('aria-label="版本与图片工具" hidden=""');
