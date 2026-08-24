@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const distIndex = join(projectRoot, "dist/index.html");
-const budgetBytes = 500_000;
+const budgetBytes = 480_000;
+const budgetKilobytes = (budgetBytes / 1000).toFixed(2);
 
 let html;
 try {
@@ -27,8 +28,8 @@ const entryBytes = statSync(entryFile).size;
 const kilobytes = (entryBytes / 1000).toFixed(2);
 
 if (entryBytes > budgetBytes) {
-  console.error(`Business entry chunk exceeds the 500 kB budget: ${kilobytes} kB (${entryFile}).`);
+  console.error(`Business entry chunk exceeds the ${budgetKilobytes} kB budget: ${kilobytes} kB (${entryFile}).`);
   process.exit(1);
 }
 
-console.log(`Bundle budget passed: ${kilobytes} kB / 500.00 kB (${basename(entryFile)}).`);
+console.log(`Bundle budget passed: ${kilobytes} kB / ${budgetKilobytes} kB (${basename(entryFile)}).`);

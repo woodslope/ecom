@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { History, RefreshCw, X } from "lucide-react";
 
 import { AppShell } from "./components/AppShell";
@@ -11,7 +11,6 @@ import {
 } from "./components/GenerationActions";
 import { ConfirmLeaveDialog } from "./components/ConfirmLeaveDialog";
 import { PlatformWorkspace } from "./components/PlatformWorkspace";
-import { TaskHistoryArchive } from "./components/TaskHistory";
 import { TaobaoWorkspace } from "./components/TaobaoWorkspace";
 import { Button, Dialog, IconButton, StatusMessage } from "./components/ui";
 import type { NavigationItemId, PlatformId } from "./domain/platforms/types";
@@ -27,13 +26,11 @@ import {
   writeLastPlatform,
 } from "./domain/workspace/preferences";
 import { useWorkbenchStore, type WorkbenchAsset } from "./store/workbench-store";
-import {
-  createLocalBackup,
-  localBackupFileName,
-  parseLocalBackup,
-  restoreLocalBackup,
-  summarizeLocalBackup,
-} from "./application/local-backup";
+
+const TaskHistoryArchive = lazy(async () => {
+  const module = await import("./components/TaskHistory");
+  return { default: module.TaskHistoryArchive };
+});
 
 function initialNavigationItem(): NavigationItemId {
   if (typeof window === "undefined") return "amazon";
@@ -109,20 +106,22 @@ function PlatformHistoryPane({
           />
         </section>
       ) : null}
-      <TaskHistoryArchive
-        projects={projects}
-        historyProjects={historyProjects}
-        activeProjectId={activeProjectId}
-        activeRunIds={activeRunIds}
-        platformId={platform}
-        onResumeRun={onResumeRun}
-        onForkRun={onForkRun}
-        onReuseImage={onReuseImage}
-        onExportRun={onExportRun}
-        historyQueryService={historyQueryService}
-        refreshKey={historyRefreshKey}
-        compact
-      />
+      <Suspense fallback={<StatusMessage live="polite">正在载入历史记录...</StatusMessage>}>
+        <TaskHistoryArchive
+          projects={projects}
+          historyProjects={historyProjects}
+          activeProjectId={activeProjectId}
+          activeRunIds={activeRunIds}
+          platformId={platform}
+          onResumeRun={onResumeRun}
+          onForkRun={onForkRun}
+          onReuseImage={onReuseImage}
+          onExportRun={onExportRun}
+          historyQueryService={historyQueryService}
+          refreshKey={historyRefreshKey}
+          compact
+        />
+      </Suspense>
     </Dialog>
   );
 }
@@ -296,6 +295,11 @@ export function App() {
     }
   };
   const exportLocalBackup = useCallback(async () => {
+    const {
+      createLocalBackup,
+      localBackupFileName,
+      summarizeLocalBackup,
+    } = await import("./application/local-backup");
     const backup = await createLocalBackup({
       storage: window.localStorage,
       indexedDB: window.indexedDB,
@@ -314,6 +318,10 @@ export function App() {
   }, []);
 
   const importLocalBackup = useCallback(async (file: File) => {
+    const {
+      parseLocalBackup,
+      restoreLocalBackup,
+    } = await import("./application/local-backup");
     const backup = parseLocalBackup(await file.text());
     const summary = await restoreLocalBackup(backup, {
       storage: window.localStorage,

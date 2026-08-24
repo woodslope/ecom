@@ -116,7 +116,7 @@ async function bundleEvidence() {
     const fileName = html.match(/<script[^>]+type="module"[^>]+src="[^"]*\/assets\/(index-[^"]+\.js)"/)?.[1];
     if (!fileName) return null;
     const bytes = (await stat(join(projectRoot, "dist/assets", fileName))).size;
-    return { file: fileName, bytes, kilobytes: Number((bytes / 1000).toFixed(2)), budgetKilobytes: 500 };
+    return { file: fileName, bytes, kilobytes: Number((bytes / 1000).toFixed(2)), budgetKilobytes: 480 };
   } catch {
     return null;
   }
@@ -199,6 +199,7 @@ const manifest = {
       "mask editing failure/retry",
       "Taobao fixed 5+7 preview",
       "cross-tab generation lock, cancellation signal, and owner-tab close release",
+      "lazy-loaded history and local backup export",
     ],
   },
   verification: {

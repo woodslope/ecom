@@ -26,7 +26,7 @@ pnpm test:browser:governance
 pnpm test:ui:acceptance
 ```
 
-`test:browser` 是双平台关键路径冒烟；`test:browser:governance` 追加 Amazon 本地化、A+、完整生命周期、失败恢复、遮罩编辑及版本切换。`test:ui:acceptance` 是完整收口入口，会依次运行 UI 治理、类型、单元测试、标准与子路径构建、500 kB 业务入口块预算和全部浏览器治理场景。
+`test:browser` 是双平台关键路径冒烟；`test:browser:governance` 追加 Amazon 本地化、A+、完整生命周期、失败恢复、遮罩编辑及版本切换。`test:ui:acceptance` 是完整收口入口，会依次运行 UI 治理、类型、单元测试、标准与子路径构建、480 kB 业务入口块预算和全部浏览器治理场景。
 
 每次浏览器或完整验收都会写入独立的 `artifacts/cross-platform-ais/runs/<时间戳>/`，其中 `manifest.json` 记录 Git 状态、工具版本、命令结果、视口与环境条件、测试数量、构建大小和本次截图清单；`artifacts/cross-platform-ais/latest.json` 指向最近一次运行。目录根部的旧截图仅是历史证据，不能单独代表当前基线。
 

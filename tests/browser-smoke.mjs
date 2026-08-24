@@ -417,6 +417,14 @@ try {
     const settingsDialog = page.getByRole("dialog", { name: "连接与生成模式", exact: true });
     assert(await settingsDialog.isVisible(), "设置弹窗未打开");
     await assertModalIsolation(page, "设置弹窗");
+    const downloadPromise = page.waitForEvent("download");
+    await settingsDialog.getByRole("button", { name: "导出本地备份", exact: true }).click();
+    const download = await downloadPromise;
+    assert(download.suggestedFilename().endsWith(".json"), "按需加载后的本地备份没有导出 JSON");
+    assert(
+      await settingsDialog.getByText(/备份已导出：/).isVisible(),
+      "按需加载后的本地备份没有显示成功反馈",
+    );
     await settingsDialog.getByRole("button", { name: "API", exact: true }).click();
     await page.screenshot({ path: resolve(evidenceDir, "governance-settings-api-dual-1280.png"), animations: "disabled" });
     await settingsDialog.getByRole("button", { name: "单连接", exact: true }).click();
