@@ -12,6 +12,7 @@ export interface ExecutionJobRepository {
   get(jobId: string): Promise<ExecutionJob | null>;
   put(job: ExecutionJob): Promise<void>;
   remove(jobId: string): Promise<void>;
+  removeProject(projectId: string): Promise<void>;
   list(filters?: ExecutionJobFilters): Promise<ExecutionJobPage>;
 }
 
@@ -46,6 +47,11 @@ export function createMemoryExecutionJobRepository(): ExecutionJobRepository {
     },
     async remove(jobId) {
       jobs.delete(jobId);
+    },
+    async removeProject(projectId) {
+      for (const [jobId, job] of jobs) {
+        if (matches(job, { projectId })) jobs.delete(jobId);
+      }
     },
     async list(filters = {}) {
       return listJobs([...jobs.values()], filters);
@@ -116,6 +122,17 @@ export function createIndexedDbExecutionJobRepository(options: {
       const transaction = opened.transaction(EXECUTION_JOB_STORE_NAME, "readwrite");
       const completion = transactionDone(transaction);
       transaction.objectStore(EXECUTION_JOB_STORE_NAME).delete(jobId);
+      await completion;
+    },
+    async removeProject(projectId) {
+      const opened = await database;
+      const transaction = opened.transaction(EXECUTION_JOB_STORE_NAME, "readwrite");
+      const completion = transactionDone(transaction);
+      const store = transaction.objectStore(EXECUTION_JOB_STORE_NAME);
+      const jobs = await requestResult(store.getAll() as IDBRequest<ExecutionJob[]>);
+      jobs.forEach((job) => {
+        if (matches(job, { projectId })) store.delete(job.id);
+      });
       await completion;
     },
     async list(filters = {}) {

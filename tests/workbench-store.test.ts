@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { createMemoryAssetRepository } from "../src/domain/assets/repository";
+import { createMemoryExecutionJobRepository } from "../src/domain/jobs/repository";
+import { createExecutionJob } from "../src/domain/jobs/state";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
 import type { ProductFacts } from "../src/domain/projects/types";
@@ -30,6 +32,7 @@ function createDependencies() {
       now: () => "2026-07-16T08:00:00.000Z",
     }),
     assetRepository: createMemoryAssetRepository(),
+    executionJobRepository: createMemoryExecutionJobRepository(),
     compressImageFile: async (file: File) => file,
     createObjectURL: (blob: Blob) => `blob:test/${blob.size}`,
     revokeObjectURL: () => undefined,
@@ -150,6 +153,34 @@ describe("workbench store", () => {
       id: "task_01", batchId: "batch_01", kind: "plan", platformId: "amazon", status: "success",
       startedAt: workspace.updatedAt, completedAt: workspace.updatedAt, summary: "test",
     }] });
+    const firstJob = createExecutionJob({
+      id: "job_first_project",
+      kind: "batch-generate",
+      targets: [{
+        id: "item_first_project",
+        projectId: first.id,
+        sessionId: "session_first",
+        platformId: "amazon",
+        workflowId: "amazon-listing",
+        slotKey: "MAIN",
+      }],
+      now: workspace.updatedAt,
+    });
+    const removedProjectJob = createExecutionJob({
+      id: "job_removed_project",
+      kind: "batch-generate",
+      targets: [{
+        id: "item_removed_project",
+        projectId: second.id,
+        sessionId: "session_second",
+        platformId: "taobao",
+        workflowId: "taobao-product",
+        slotKey: "TB-HERO-01",
+      }],
+      now: workspace.updatedAt,
+    });
+    await dependencies.executionJobRepository.put(firstJob);
+    await dependencies.executionJobRepository.put(removedProjectJob);
     await store.getState().initialize();
 
     expect(store.getState().activeProject?.id).toBe(second.id);
@@ -158,6 +189,10 @@ describe("workbench store", () => {
     expect(store.getState().projects.map((project) => project.id)).toEqual([first.id]);
     expect(await dependencies.assetRepository.list(second.id)).toEqual([]);
     expect((await dependencies.workspaceRepository.load(second.id)).taskHistory).toEqual([]);
+    expect((await dependencies.executionJobRepository.list({ projectId: second.id })).items).toEqual([]);
+    expect((await dependencies.executionJobRepository.list({ projectId: first.id })).items).toEqual([
+      expect.objectContaining({ id: firstJob.id }),
+    ]);
   });
 
   it("blocks AI and export tasks while a workspace mutation is loading", async () => {

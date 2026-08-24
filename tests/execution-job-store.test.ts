@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryExecutionJobRepository } from "../src/domain/jobs/repository";
+import { createMemoryExecutionJobCoordinator } from "../src/domain/jobs/execution-coordinator";
 import {
   claimNextExecutionJobItem,
   createExecutionJob,
@@ -177,6 +178,157 @@ describe("workbench execution jobs", () => {
     expect(completed?.status).toBe("completed");
     expect(generationCalls).toBeGreaterThan(1);
     expect(await deps.executionJobRepository!.get(queued.id)).toMatchObject({ status: "canceled" });
+  });
+
+  it("allows only one generating tab, preserves its running job on refresh, and releases after completion", async () => {
+    let markStarted!: () => void;
+    let releaseGeneration!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const generationGate = new Promise<void>((resolve) => {
+      releaseGeneration = resolve;
+    });
+    const shared = dependencies();
+    const projectIds = ["project_tab_a", "project_tab_b"];
+    shared.projectRepository = createMemoryProjectRepository({
+      createId: () => projectIds.shift()!,
+    });
+    const coordinator = createMemoryExecutionJobCoordinator();
+    const firstProject = await shared.projectRepository.create({ name: "标签页 A 商品", facts });
+    const secondProject = await shared.projectRepository.create({ name: "标签页 B 商品", facts });
+    let firstGenerationCalls = 0;
+    let secondGenerationCalls = 0;
+    let firstSignalAborted = false;
+    const firstStore = createWorkbenchStore({
+      ...shared,
+      executionJobCoordinator: coordinator,
+      imageGenerator: {
+        async generate(request, signal) {
+          firstGenerationCalls += 1;
+          if (firstGenerationCalls === 1) {
+            markStarted();
+            await generationGate;
+            firstSignalAborted = signal.aborted;
+          }
+          return demoImageGenerator.generate(request, signal);
+        },
+      },
+    });
+    const secondStore = createWorkbenchStore({
+      ...shared,
+      executionJobCoordinator: coordinator,
+      imageGenerator: {
+        async generate(request, signal) {
+          secondGenerationCalls += 1;
+          return demoImageGenerator.generate(request, signal);
+        },
+      },
+    });
+
+    await firstStore.getState().initialize();
+    await firstStore.getState().selectProject(firstProject.id);
+    await firstStore.getState().planPlatform("amazon");
+    await secondStore.getState().initialize();
+    await secondStore.getState().selectProject(secondProject.id);
+    await secondStore.getState().planPlatform("amazon");
+
+    const firstExecution = firstStore.getState().startBatchGeneration("amazon");
+    await started;
+    await secondStore.getState().refreshExecutionJobs();
+    expect(secondStore.getState().jobs).toEqual([
+      expect.objectContaining({ status: "running" }),
+    ]);
+
+    await expect(secondStore.getState().startBatchGeneration("amazon")).resolves.toBeNull();
+    expect(secondStore.getState().error).toContain("另一个浏览器标签页");
+    expect(secondGenerationCalls).toBe(0);
+    expect(firstSignalAborted).toBe(false);
+    expect((await shared.executionJobRepository!.list()).items).toHaveLength(1);
+
+    releaseGeneration();
+    await expect(firstExecution).resolves.toMatchObject({ status: "completed" });
+    await expect(secondStore.getState().startBatchGeneration("amazon")).resolves.toMatchObject({
+      status: "completed",
+    });
+    expect(firstSignalAborted).toBe(false);
+    expect(secondGenerationCalls).toBeGreaterThan(0);
+  });
+
+  it("cancels an active project job before deleting the project and its task records", async () => {
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const deps = dependencies();
+    deps.executionJobCoordinator = createMemoryExecutionJobCoordinator();
+    deps.imageGenerator = {
+      generate: (_request, signal) => new Promise((_resolve, reject) => {
+        markStarted();
+        const abort = () => reject(
+          signal.reason ?? new DOMException("图片生成已取消", "AbortError"),
+        );
+        if (signal.aborted) abort();
+        else signal.addEventListener("abort", abort, { once: true });
+      }),
+    };
+    const store = createWorkbenchStore(deps);
+    const project = await store.getState().createProject({ name: "删除中的任务商品", facts });
+    await store.getState().planPlatform("amazon");
+
+    const execution = store.getState().startBatchGeneration("amazon");
+    await started;
+    await expect(store.getState().removeProject(project!.id)).resolves.toBe(true);
+
+    await expect(execution).resolves.toMatchObject({ status: "canceled" });
+    await expect(deps.projectRepository.get(project!.id)).resolves.toBeNull();
+    expect((await deps.executionJobRepository!.list({ projectId: project!.id })).items).toEqual([]);
+    expect(store.getState().jobs).toEqual([]);
+  });
+
+  it("requests cancellation from the owning tab before deleting its project", async () => {
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let abortEvents = 0;
+    const shared = dependencies();
+    const coordinator = createMemoryExecutionJobCoordinator();
+    const ownerStore = createWorkbenchStore({
+      ...shared,
+      executionJobCoordinator: coordinator,
+      imageGenerator: {
+        generate: (_request, signal) => new Promise((_resolve, reject) => {
+          markStarted();
+          const abort = () => {
+            abortEvents += 1;
+            reject(signal.reason ?? new DOMException("图片生成已取消", "AbortError"));
+          };
+          if (signal.aborted) abort();
+          else signal.addEventListener("abort", abort, { once: true });
+        }),
+      },
+    });
+    const deletingStore = createWorkbenchStore({
+      ...shared,
+      executionJobCoordinator: coordinator,
+    });
+    const project = await ownerStore.getState().createProject({
+      name: "跨标签页删除任务商品",
+      facts,
+    });
+    await ownerStore.getState().planPlatform("amazon");
+    await deletingStore.getState().initialize();
+
+    const execution = ownerStore.getState().startBatchGeneration("amazon");
+    await started;
+    const deletion = deletingStore.getState().removeProject(project!.id);
+
+    await expect(execution).resolves.toMatchObject({ status: "canceled" });
+    await expect(deletion).resolves.toBe(true);
+    expect(abortEvents).toBe(1);
+    await expect(shared.projectRepository.get(project!.id)).resolves.toBeNull();
+    expect((await shared.executionJobRepository!.list({ projectId: project!.id })).items).toEqual([]);
   });
 
   it("fails invalid job references before invoking the image generator", async () => {

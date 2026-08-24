@@ -125,6 +125,52 @@ try {
   await waitForServer(baseUrl);
   browser = await chromium.launch({ headless: true });
 
+  const lockContext = await createMonitoredContext(browser, { viewport: { width: 900, height: 800 } });
+  const ownerPage = await lockContext.newPage();
+  const competingPage = await lockContext.newPage();
+  await Promise.all([ownerPage.goto(baseUrl), competingPage.goto(baseUrl)]);
+  await ownerPage.evaluate(() => {
+    let releaseLock;
+    const released = new Promise((resolveReleased) => {
+      releaseLock = resolveReleased;
+    });
+    window.__releaseExecutionLock = releaseLock;
+    window.__executionLockHeld = false;
+    void navigator.locks.request("ecom-workbench.execution-job", { mode: "exclusive" }, async () => {
+      window.__executionLockHeld = true;
+      await released;
+    });
+    const channel = new BroadcastChannel("ecom-workbench.execution-job:cancellation");
+    channel.addEventListener("message", (event) => {
+      window.__executionCancellationMessage = event.data;
+    });
+    window.__executionCancellationChannel = channel;
+  });
+  await ownerPage.waitForFunction(() => window.__executionLockHeld === true);
+  const competingAcquired = await competingPage.evaluate(() =>
+    navigator.locks.request(
+      "ecom-workbench.execution-job",
+      { mode: "exclusive", ifAvailable: true },
+      (lock) => Boolean(lock),
+    ));
+  assert(!competingAcquired, "第二个标签页不应获得已被占用的生成锁");
+  await competingPage.evaluate(() => {
+    const channel = new BroadcastChannel("ecom-workbench.execution-job:cancellation");
+    channel.postMessage({ type: "cancel", ownerId: "job-browser-owner" });
+    channel.close();
+  });
+  await ownerPage.waitForFunction(() =>
+    window.__executionCancellationMessage?.ownerId === "job-browser-owner");
+  await ownerPage.close();
+  const acquiredAfterClose = await competingPage.evaluate(() =>
+    navigator.locks.request(
+      "ecom-workbench.execution-job",
+      { mode: "exclusive", ifAvailable: true },
+      (lock) => Boolean(lock),
+    ));
+  assert(acquiredAfterClose, "持有标签页关闭后应自动释放生成锁");
+  await lockContext.close();
+
   for (const viewport of [
     { width: 900, height: 800 },
     { width: 1200, height: 800 },

@@ -198,6 +198,7 @@ const manifest = {
       "Amazon localization, A+, generation recovery and versioning",
       "mask editing failure/retry",
       "Taobao fixed 5+7 preview",
+      "cross-tab generation lock, cancellation signal, and owner-tab close release",
     ],
   },
   verification: {

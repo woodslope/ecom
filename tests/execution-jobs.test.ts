@@ -14,6 +14,7 @@ import {
   createIndexedDbExecutionJobRepository,
   createMemoryExecutionJobRepository,
 } from "../src/domain/jobs/repository";
+import { createMemoryExecutionJobCoordinator } from "../src/domain/jobs/execution-coordinator";
 
 const firstTarget = {
   id: "target_amazon_main",
@@ -115,15 +116,78 @@ describe("local execution jobs", () => {
       targets: [firstTarget],
       now: "2026-07-21T11:00:00.000Z",
     });
+    const otherProjectJob = createExecutionJob({
+      id: "job_other_project",
+      kind: "batch-generate",
+      targets: [secondTarget],
+      now: "2026-07-21T11:01:00.000Z",
+    });
 
     for (const repository of [memory, database]) {
       await repository.put(job);
+      await repository.put(otherProjectJob);
       await expect(repository.get(job.id)).resolves.toMatchObject({ id: job.id });
-      await expect(repository.list({ status: "queued" })).resolves.toMatchObject({
+      await expect(repository.list({
+        status: "queued",
+        projectId: firstTarget.projectId,
+      })).resolves.toMatchObject({
         items: [{ id: job.id }],
       });
-      await repository.remove(job.id);
+      await repository.removeProject(firstTarget.projectId);
       await expect(repository.get(job.id)).resolves.toBeNull();
+      await expect(repository.get(otherProjectJob.id)).resolves.toMatchObject({
+        id: otherProjectJob.id,
+      });
+      await repository.remove(otherProjectJob.id);
     }
+  });
+
+  it("serializes shared execution, rejects non-waiting competitors, and releases after failure", async () => {
+    const coordinator = createMemoryExecutionJobCoordinator();
+    let cancellationRequested = false;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = coordinator.runExclusive(async () => {
+      await gate;
+      return "first";
+    }, {
+      ownerId: "job-first",
+      onCancel: () => {
+        cancellationRequested = true;
+      },
+    });
+
+    await expect(coordinator.isLocked()).resolves.toBe(true);
+    await expect(coordinator.activeOwnerId()).resolves.toBe("job-first");
+    coordinator.requestCancellation("job-other");
+    expect(cancellationRequested).toBe(false);
+    coordinator.requestCancellation("job-first");
+    expect(cancellationRequested).toBe(true);
+    await expect(coordinator.runExclusive(async () => "second")).resolves.toEqual({
+      acquired: false,
+    });
+    let waitedOperationStarted = false;
+    const waited = coordinator.runExclusive(async () => {
+      waitedOperationStarted = true;
+      return "waited";
+    }, { wait: true });
+    await Promise.resolve();
+    expect(waitedOperationStarted).toBe(false);
+
+    release();
+    await expect(first).resolves.toEqual({ acquired: true, value: "first" });
+    await expect(waited).resolves.toEqual({ acquired: true, value: "waited" });
+    await expect(coordinator.isLocked()).resolves.toBe(false);
+    await expect(coordinator.activeOwnerId()).resolves.toBeNull();
+
+    await expect(coordinator.runExclusive(async () => {
+      throw new Error("generation failed");
+    })).rejects.toThrow("generation failed");
+    await expect(coordinator.runExclusive(async () => "recovered")).resolves.toEqual({
+      acquired: true,
+      value: "recovered",
+    });
   });
 });

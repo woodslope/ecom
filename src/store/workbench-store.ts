@@ -24,6 +24,11 @@ import {
   type ExecutionJobRepository,
 } from "../domain/jobs/repository";
 import {
+  createBrowserExecutionJobCoordinator,
+  createMemoryExecutionJobCoordinator,
+  type ExecutionJobCoordinator,
+} from "../domain/jobs/execution-coordinator";
+import {
   cancelExecutionJob,
   claimNextExecutionJobItem,
   completeExecutionJobItem,
@@ -257,6 +262,7 @@ export interface WorkbenchStoreDependencies {
   workspaceRepository?: ProjectWorkspaceRepository;
   runRepository?: RunRepository;
   executionJobRepository?: ExecutionJobRepository;
+  executionJobCoordinator?: ExecutionJobCoordinator;
   historyQueryService?: HistoryQueryService;
   settingsRepository?: SettingsRepository;
   plannerEngine?: PlannerEngine;
@@ -654,6 +660,8 @@ export function createWorkbenchStore(
     dependencies.workspaceRepository ?? createMemoryWorkspaceRepository();
   const executionJobRepository =
     dependencies.executionJobRepository ?? createMemoryExecutionJobRepository();
+  const executionJobCoordinator =
+    dependencies.executionJobCoordinator ?? createMemoryExecutionJobCoordinator();
   const settingsRepository =
     dependencies.settingsRepository ?? createMemorySettingsRepository();
   const historyQueryService = dependencies.historyQueryService ?? (
@@ -685,6 +693,8 @@ export function createWorkbenchStore(
   let generationRequestId = 0;
   let activeGenerationController: AbortController | null = null;
   let activeExecutionJobId: string | null = null;
+  let executionJobGenerationActive = false;
+  let directGenerationLockHeld = false;
   let exportRequestId = 0;
   let copilotRequestId = 0;
   let activeCopilotController: AbortController | null = null;
@@ -697,10 +707,11 @@ export function createWorkbenchStore(
   const isCurrentLifecycle = (version: number) => version === lifecycleVersion;
 
   const restoreExecutionJobs = async (): Promise<ExecutionJob[]> => {
+    const globallyActiveJobId = await executionJobCoordinator.activeOwnerId();
     const page = await executionJobRepository.list();
     const restored: ExecutionJob[] = [];
     for (const job of page.items) {
-      const next = job.id === activeExecutionJobId
+      const next = job.id === activeExecutionJobId || job.id === globallyActiveJobId
         ? job
         : recoverInterruptedExecutionJob(job, now());
       if (next.updatedAt !== job.updatedAt || next.status !== job.status) {
@@ -794,6 +805,37 @@ export function createWorkbenchStore(
       canceledExecutionJobIds.delete(jobId);
     };
 
+    const runAsExecutionJobOwner = async (
+      jobId: string,
+      action: string,
+      operation: () => Promise<ExecutionJob | null>,
+    ): Promise<ExecutionJob | null> => {
+      if (activeExecutionJobId) {
+        set({ error: `已有本地执行任务正在运行，请完成或取消后再${action}。` });
+        return null;
+      }
+      const result = await executionJobCoordinator.runExclusive(async () => {
+        if (!claimExecutionJobOwnership(jobId, action)) return null;
+        try {
+          return await operation();
+        } finally {
+          releaseExecutionJobOwnership(jobId);
+        }
+      }, {
+        ownerId: jobId,
+        onCancel: () => {
+          if (activeExecutionJobId !== jobId) return;
+          canceledExecutionJobIds.add(jobId);
+          if (get().generatingSlot) get().cancelGeneration();
+        },
+      });
+      if (!result.acquired) {
+        set({ error: `另一个浏览器标签页正在执行生成任务，请等待其完成或取消后再${action}。` });
+        return null;
+      }
+      return result.value;
+    };
+
     const persistJobs = async (jobs: readonly ExecutionJob[]) => {
       await Promise.all(jobs.map((job) => executionJobRepository.put(job)));
       const ids = new Set(jobs.map((job) => job.id));
@@ -872,7 +914,13 @@ export function createWorkbenchStore(
           set({ error: targetError });
           return failed;
         }
-        const version = await get().generateSessionSlot(target.sessionId, target.slotKey);
+        executionJobGenerationActive = true;
+        let version: SlotVersion | null;
+        try {
+          version = await get().generateSessionSlot(target.sessionId, target.slotKey);
+        } finally {
+          executionJobGenerationActive = false;
+        }
         const latest = await executionJobRepository.get(jobId);
         if (!latest || latest.status === "canceled") return latest;
         if (canceledExecutionJobIds.has(jobId)) {
@@ -2204,9 +2252,19 @@ export function createWorkbenchStore(
         set({ error: "要删除的商品项目不存在" });
         return false;
       }
+      let relatedJobs: ExecutionJob[];
+      try {
+        relatedJobs = (await executionJobRepository.list({ projectId: id })).items;
+      } catch (error) {
+        set({ error: `关联任务读取失败：${errorMessage(error)}` });
+        return false;
+      }
+      const activeRelatedJob = activeExecutionJobId
+        ? relatedJobs.find((job) => job.id === activeExecutionJobId)
+        : undefined;
       if (
         get().planningPlatformId ||
-        get().generatingSlot ||
+        (get().generatingSlot && !activeRelatedJob) ||
         get().copilotTarget ||
         get().exportingPlatform ||
         get().industryTemplateTransforming ||
@@ -2225,9 +2283,19 @@ export function createWorkbenchStore(
       lifecycleVersion += 1;
       set({ loading: true, error: null });
       try {
-        await dependencies.assetRepository.clearProject(id);
-        await workspaceRepository.remove?.(id);
-        await dependencies.projectRepository.remove(id);
+        for (const job of relatedJobs) {
+          if (job.status === "queued" || job.status === "running" || job.status === "paused") {
+            await get().cancelExecutionJob(job.id);
+          }
+        }
+        const deletion = await executionJobCoordinator.runExclusive(async () => {
+          await dependencies.assetRepository.clearProject(id);
+          await workspaceRepository.remove?.(id);
+          await executionJobRepository.removeProject(id);
+          await dependencies.projectRepository.remove(id);
+          return true;
+        }, { wait: true });
+        if (!deletion.acquired) throw new Error("无法获得项目删除执行权");
         const projects = (await dependencies.projectRepository.list()).filter(
           (candidate) => candidate.scope === "library",
         );
@@ -2243,6 +2311,9 @@ export function createWorkbenchStore(
           assets: [],
           sessions: [],
           runs: [],
+          jobs: get().jobs.filter((job) =>
+            !job.items.some((item) => item.target.projectId === id),
+          ),
           plans: {},
           planInputSignatures: {},
           selectedSlotKeys: {},
@@ -3431,6 +3502,13 @@ export function createWorkbenchStore(
         });
         return null;
       }
+      if (activeExecutionJobId && !executionJobGenerationActive) {
+        set({
+          generationError: "当前批量生成任务正在执行，请完成或取消后再单独生成图片。",
+          generationErrorTarget: { platformId, slotKey },
+        });
+        return null;
+      }
       if (get().planningPlatformId === platformId) {
         set({
           generationError: "当前平台正在重新策划，请完成或取消后再生成图片。",
@@ -3452,6 +3530,24 @@ export function createWorkbenchStore(
           generationErrorTarget: { platformId, slotKey },
         });
         return null;
+      }
+      if (!executionJobGenerationActive && !directGenerationLockHeld) {
+        const result = await executionJobCoordinator.runExclusive(async () => {
+          directGenerationLockHeld = true;
+          try {
+            return await get().generateSlot(platformId, slotKey);
+          } finally {
+            directGenerationLockHeld = false;
+          }
+        });
+        if (!result.acquired) {
+          set({
+            generationError: "另一个浏览器标签页正在生成图片，请等待其完成或取消后再试。",
+            generationErrorTarget: { platformId, slotKey },
+          });
+          return null;
+        }
+        return result.value;
       }
 
       const operationLifecycle = lifecycleVersion;
@@ -3911,6 +4007,13 @@ export function createWorkbenchStore(
         });
         return null;
       }
+      if (activeExecutionJobId) {
+        set({
+          generationError: "当前批量生成任务正在执行，请完成或取消后再进行局部编辑。",
+          generationErrorTarget: { platformId, slotKey },
+        });
+        return null;
+      }
 
       const rulePack = resolveRulePackForPlan(platformId, session.plan);
       const rule = rulePack.slots.find((candidate) => candidate.key === slotKey);
@@ -3920,6 +4023,30 @@ export function createWorkbenchStore(
           generationErrorTarget: { platformId, slotKey },
         });
         return null;
+      }
+      if (!directGenerationLockHeld) {
+        const result = await executionJobCoordinator.runExclusive(async () => {
+          directGenerationLockHeld = true;
+          try {
+            return await get().generateMaskedVersion(
+              sessionId,
+              slotKey,
+              versionId,
+              mask,
+              editPrompt,
+            );
+          } finally {
+            directGenerationLockHeld = false;
+          }
+        });
+        if (!result.acquired) {
+          set({
+            generationError: "另一个浏览器标签页正在生成图片，请等待其完成或取消后再试。",
+            generationErrorTarget: { platformId, slotKey },
+          });
+          return null;
+        }
+        return result.value;
       }
 
       const operationLifecycle = lifecycleVersion;
@@ -4831,19 +4958,15 @@ export function createWorkbenchStore(
         })),
         now: timestamp,
       });
-      if (!claimExecutionJobOwnership(job.id, "开始批量生成")) return null;
-      try {
+      return runAsExecutionJobOwner(job.id, "开始批量生成", async () => {
         await persistJobs([job]);
         set({ error: null });
         return await runExecutionJob(job.id);
-      } finally {
-        releaseExecutionJobOwnership(job.id);
-      }
+      });
     },
 
     async resumeExecutionJob(jobId) {
-      if (!claimExecutionJobOwnership(jobId, "继续其他任务")) return null;
-      try {
+      return runAsExecutionJobOwner(jobId, "继续其他任务", async () => {
         const job = await executionJobRepository.get(jobId);
         if (!job) {
           set({ error: "要继续的本地任务不存在。" });
@@ -4861,14 +4984,11 @@ export function createWorkbenchStore(
         const queued = { ...job, status: "queued" as const, error: undefined, updatedAt: now() };
         await persistJobs([queued]);
         return await runExecutionJob(jobId);
-      } finally {
-        releaseExecutionJobOwnership(jobId);
-      }
+      });
     },
 
     async retryExecutionJob(jobId) {
-      if (!claimExecutionJobOwnership(jobId, "重试其他任务")) return null;
-      try {
+      return runAsExecutionJobOwner(jobId, "重试其他任务", async () => {
         const job = await executionJobRepository.get(jobId);
         if (!job) {
           set({ error: "要重试的本地任务不存在。" });
@@ -4885,9 +5005,7 @@ export function createWorkbenchStore(
         const retried = retryExecutionJob(job, now());
         await persistJobs([retried]);
         return await runExecutionJob(jobId);
-      } finally {
-        releaseExecutionJobOwnership(jobId);
-      }
+      });
     },
 
     async cancelExecutionJob(jobId) {
@@ -4896,6 +5014,7 @@ export function createWorkbenchStore(
         set({ error: "要取消的本地任务不存在。" });
         return false;
       }
+      executionJobCoordinator.requestCancellation(jobId);
       if (activeExecutionJobId === jobId) canceledExecutionJobIds.add(jobId);
       if (activeExecutionJobId === jobId && job.currentItemId && get().generatingSlot) {
         get().cancelGeneration();
@@ -5437,6 +5556,7 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
   let workspaceV3Repository: ProjectWorkspaceV3Repository;
   let runRepository: RunRepository;
   let executionJobRepository: ExecutionJobRepository;
+  let executionJobCoordinator: ExecutionJobCoordinator = createMemoryExecutionJobCoordinator();
   let settingsRepository: SettingsRepository;
   let defaultPlannerEngine: PlannerEngine = demoPlanner;
   let defaultImageGenerator: ImageGenerator = demoImageGenerator;
@@ -5510,6 +5630,11 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
       executionJobRepository = createMemoryExecutionJobRepository();
       warnings.push("IndexedDB 不可用，本地任务仅在当前会话保存在内存中。");
     }
+    if (window.navigator.locks) {
+      executionJobCoordinator = createBrowserExecutionJobCoordinator(window.navigator.locks);
+    } else {
+      warnings.push("当前浏览器不支持跨标签页任务锁，请勿在多个标签页同时生成图片。");
+    }
     workspaceRepository = createV3WorkspacePersistence({
       legacyRepository: legacyWorkspaceRepository,
       v3Repository: workspaceV3Repository,
@@ -5530,6 +5655,7 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
     workspaceRepository,
     runRepository,
     executionJobRepository,
+    executionJobCoordinator,
     settingsRepository,
     plannerEngine: defaultPlannerEngine,
     imageGenerator: defaultImageGenerator,

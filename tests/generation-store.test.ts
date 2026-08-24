@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createMemoryAssetRepository } from "../src/domain/assets/repository";
+import { createMemoryExecutionJobCoordinator } from "../src/domain/jobs/execution-coordinator";
 import type { GeneratedImage, ImageGenerationRequest, ImageGenerator } from "../src/domain/generation/types";
 import type { MaskDraft } from "../src/domain/generation/mask";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
@@ -77,6 +78,38 @@ async function confirmAmazonSession(
 }
 
 describe("workbench generation versions", () => {
+  it("blocks direct generation while another tab owns the shared lock and succeeds after release", async () => {
+    let generationCalls = 0;
+    const dependencies = createDependencies({
+      async generate(request, signal) {
+        generationCalls += 1;
+        return demoImageGenerator.generate(request, signal);
+      },
+    });
+    const coordinator = createMemoryExecutionJobCoordinator();
+    dependencies.executionJobCoordinator = coordinator;
+    const store = createWorkbenchStore(dependencies);
+    await store.getState().createProject({ name: "跨标签页单图生成", facts: productFacts });
+    await store.getState().planPlatform("amazon");
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const otherTab = coordinator.runExclusive(async () => {
+      await gate;
+    });
+
+    await expect(store.getState().generateSlot("amazon", "PT01")).resolves.toBeNull();
+    expect(store.getState().generationError).toContain("另一个浏览器标签页");
+    expect(generationCalls).toBe(0);
+
+    release();
+    await otherTab;
+    await expect(store.getState().generateSlot("amazon", "PT01")).resolves.not.toBeNull();
+    expect(generationCalls).toBe(1);
+  });
+
   it("excludes hidden style from MAIN and appends it with guard for PT", async () => {
     const requests: ImageGenerationRequest[] = [];
     const generator: ImageGenerator = {
