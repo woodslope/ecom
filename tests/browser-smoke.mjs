@@ -126,6 +126,7 @@ try {
   browser = await chromium.launch({ headless: true });
 
   for (const viewport of [
+    { width: 900, height: 800 },
     { width: 1200, height: 800 },
     { width: 1280, height: 800 },
     { width: 1366, height: 768 },
@@ -173,25 +174,25 @@ try {
   }
 
   {
-    const context = await createMonitoredContext(browser, { viewport: { width: 1199, height: 800 } });
+    const context = await createMonitoredContext(browser, { viewport: { width: 899, height: 800 } });
     const page = await context.newPage();
     await page.goto(baseUrl, { waitUntil: "networkidle" });
-    assert(await page.getByTestId("desktop-only-gate").isVisible(), "1199px 未显示桌面宽度门槛");
-    assert(await page.getByTestId("app-desktop-content").getAttribute("inert") !== null, "1199px 底层工作台未隔离");
-    assert(await page.getByTestId("app-desktop-content").getAttribute("aria-hidden") === "true", "1199px 底层工作台未从辅助技术隐藏");
+    assert(await page.getByTestId("desktop-only-gate").isVisible(), "899px 未显示桌面宽度门槛");
+    assert(await page.getByTestId("app-desktop-content").getAttribute("inert") !== null, "899px 底层工作台未隔离");
+    assert(await page.getByTestId("app-desktop-content").getAttribute("aria-hidden") === "true", "899px 底层工作台未从辅助技术隐藏");
     await page.getByTestId("desktop-only-gate").waitFor();
-    assert(await page.getByTestId("desktop-only-gate").evaluate((node) => node === document.activeElement), "1199px 门槛未接管焦点");
-    await page.screenshot({ path: resolve(evidenceDir, "governance-desktop-gate-1199.png"), animations: "disabled" });
+    assert(await page.getByTestId("desktop-only-gate").evaluate((node) => node === document.activeElement), "899px 门槛未接管焦点");
+    await page.screenshot({ path: resolve(evidenceDir, "governance-desktop-gate-899.png"), animations: "disabled" });
     await context.close();
   }
 
   {
-    const context = await createMonitoredContext(browser, { viewport: { width: 1200, height: 800 } });
+    const context = await createMonitoredContext(browser, { viewport: { width: 900, height: 800 } });
     const page = await context.newPage();
     await page.goto(baseUrl, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "设置", exact: true }).click();
     assert(await page.getByRole("dialog", { name: "连接与生成模式", exact: true }).isVisible(), "调整到门禁前设置弹窗未打开");
-    await page.setViewportSize({ width: 1199, height: 800 });
+    await page.setViewportSize({ width: 899, height: 800 });
     await page.getByTestId("desktop-only-gate").waitFor({ state: "visible" });
     assert((await page.getByRole("dialog", { name: "连接与生成模式", exact: true }).count()) === 0, "进入桌面门禁后设置弹窗仍挂载");
     assert((await page.locator('[role="alertdialog"]:visible').count()) === 1, "进入桌面门禁后出现多个可见模态 owner");
@@ -314,15 +315,15 @@ try {
 
   {
     const context = await createMonitoredContext(browser, {
-      viewport: { width: 1200, height: 640 },
-      screen: { width: 1500, height: 800 },
+      viewport: { width: 1024, height: 640 },
+      screen: { width: 1280, height: 800 },
       deviceScaleFactor: 1.25,
     });
     const page = await context.newPage();
     await page.goto(baseUrl, { waitUntil: "networkidle" });
     const metrics = await page.evaluate(() => ({ width: window.innerWidth, dpr: window.devicePixelRatio }));
-    assert(metrics.width === 1200 && Math.abs(metrics.dpr - 1.25) < 0.01, "125% 缩放等效环境未生效");
-    assert(!(await page.getByTestId("desktop-only-gate").isVisible()), "125% 缩放等效的 1200 CSS px 错误触发门禁");
+    assert(metrics.width === 1024 && Math.abs(metrics.dpr - 1.25) < 0.01, "125% 缩放等效环境未生效");
+    assert(!(await page.getByTestId("desktop-only-gate").isVisible()), "125% 缩放等效的 1024 CSS px 错误触发门禁");
     assert(!(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)), "125% 缩放等效环境出现横向溢出");
     await page.getByRole("button", { name: "设置", exact: true }).click();
     await assertModalIsolation(page, "125% 缩放等效设置弹窗");
@@ -415,7 +416,9 @@ try {
     await page.goto(baseUrl, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Amazon", exact: true }).click();
     await page.getByRole("button", { name: "历史记录", exact: true }).click();
-    assert(await page.getByText("还没有任务记录", { exact: true }).isVisible(), "旧项目无 Run 时未显示空历史");
+    const emptyHistory = page.getByText("还没有任务记录", { exact: true });
+    await emptyHistory.waitFor({ state: "visible" });
+    assert(await emptyHistory.isVisible(), "旧项目无 Run 时未显示空历史");
     assert((await page.getByText("筛选条件没有结果", { exact: true }).count()) === 0, "隐藏 platformId 被误判为主动筛选");
     await context.close();
   }
@@ -451,6 +454,7 @@ try {
     assert((await page.getByLabel("Amazon Listing 原文").inputValue()) === "", "Amazon 新任务不是空白输入");
     await page.getByRole("button", { name: "淘宝 / 天猫", exact: true }).click();
     await page.getByRole("button", { name: "历史记录", exact: true }).click();
+    await page.getByText("还没有任务记录", { exact: true }).waitFor({ state: "visible" });
     assert((await page.locator(".production-run-card").count()) === 0, "Amazon 历史泄漏到淘宝");
     assert(await page.getByText("还没有任务记录", { exact: true }).isVisible(), "淘宝空历史不正确");
     await page.getByRole("button", { name: "关闭历史记录", exact: true }).click();
@@ -489,6 +493,7 @@ try {
     for (const size of [
       { width: 1280, height: 800 },
       { width: 1200, height: 650 },
+      { width: 900, height: 650 },
     ]) {
       await page.setViewportSize(size);
       const compact = await inspectProductionLayout(page);
@@ -498,9 +503,36 @@ try {
       assert(compact && !compact.overflow, `${size.width}px Amazon 生产区出现横向溢出`);
     }
 
+    await page.getByText("任务设置", { exact: true }).click();
+    await page.getByRole("button", { name: "编辑任务输入", exact: true }).click();
+    const compactSource = await page.evaluate(() => {
+      const source = document.querySelector(".workbench-source-column:not([hidden])");
+      const slots = document.querySelector(".workbench-panel--slots");
+      if (!(source instanceof HTMLElement) || !(slots instanceof HTMLElement)) return null;
+      const sourceRect = source.getBoundingClientRect();
+      const slotsRect = slots.getBoundingClientRect();
+      return {
+        sourceWidth: sourceRect.width,
+        sourceRight: sourceRect.right,
+        overlaysSlots: sourceRect.left < slotsRect.right && sourceRect.right > slotsRect.left,
+        sourcePosition: getComputedStyle(source).position,
+        sourceZIndex: Number.parseInt(getComputedStyle(source).zIndex, 10),
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      };
+    });
+    assert(compactSource && compactSource.sourceWidth <= 360, `900px 任务输入浮层过宽：${compactSource?.sourceWidth}`);
+    assert(compactSource && compactSource.sourceRight <= 900, "900px 任务输入浮层超出视口");
+    assert(
+      compactSource && compactSource.overlaysSlots && compactSource.sourcePosition === "absolute" && compactSource.sourceZIndex >= 20,
+      `900px 任务输入未以浮层覆盖生产区：${JSON.stringify(compactSource)}`,
+    );
+    assert(compactSource && !compactSource.overflow, "900px 展开任务输入后出现横向溢出");
+    await page.screenshot({ path: resolve(evidenceDir, "governance-amazon-source-overlay-900.png"), animations: "disabled" });
+    await page.getByRole("button", { name: "收起任务输入", exact: true }).click();
+
     await page.getByRole("button", { name: "设置", exact: true }).click();
     const settingsDialog = page.getByRole("dialog", { name: "连接与生成模式", exact: true });
-    assert(await settingsDialog.isVisible(), "1200×650 设置弹窗未打开");
+    assert(await settingsDialog.isVisible(), "900×650 设置弹窗未打开");
     const settingsGeometry = await settingsDialog.evaluate((node) => {
       const body = node.querySelector(".dialog__body");
       const footer = node.querySelector(".dialog__footer");
@@ -510,7 +542,7 @@ try {
         footerVisible: footer instanceof HTMLElement && footer.getBoundingClientRect().bottom <= window.innerHeight,
       };
     });
-    assert(settingsGeometry.withinViewport && settingsGeometry.bodyScrollable && settingsGeometry.footerVisible, "1200×650 设置弹窗滚动或底部操作不可达");
+    assert(settingsGeometry.withinViewport && settingsGeometry.bodyScrollable && settingsGeometry.footerVisible, "900×650 设置弹窗滚动或底部操作不可达");
     await context.close();
   }
 

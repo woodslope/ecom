@@ -294,7 +294,7 @@ function walkTsx(dir, out = []) {
   for (const legacyHook of ["mobilePane", "data-mobile-pane", "mobile-workbench-tabs"]) {
     if (workspace.includes(legacyHook) || css.includes(legacyHook)) {
       fail(
-        `Legacy mobile workbench hook "${legacyHook}" must stay removed; 1199px and below use the desktop-only gate.`,
+        `Legacy mobile workbench hook "${legacyHook}" must stay removed; 899px and below use the desktop-only gate.`,
       );
     }
   }

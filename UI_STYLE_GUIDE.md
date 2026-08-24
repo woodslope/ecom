@@ -85,7 +85,7 @@ Digital cobalt represents the active workflow, selection, and primary action. AP
 - All controls: `32px` high → CSS `--control-height` and `--control-height-compact`; normal and compact buttons, inputs, selects, and icon buttons share one height, with icon buttons remaining square.
 - Slot thumbnail: stable aspect ratio from its rule pack; no content-driven resizing.
 - Expanded-source columns remain product source `minmax(290px, 0.82fr)`, slots `minmax(340px, 1.06fr)`, inspector `minmax(320px, 0.96fr)`.
-- Once a plan exists, every supported desktop width defaults to the two-column slots `minmax(420px, 0.82fr)` + inspector `minmax(520px, 1.18fr)` canvas; product source opens only when requested. The column order and ratio do not reverse at narrower supported desktop widths.
+- Once a plan exists, `1100px` and wider defaults to the two-column slots `minmax(420px, 0.82fr)` + inspector `minmax(520px, 1.18fr)` canvas. From `900–1099px`, keep slots + inspector as a compact two-column canvas (`minmax(320px, 0.82fr)` + `minmax(340px, 1.18fr)`) and open product source on demand as a `360px`-maximum elevated overlay. The inspector remains the wider primary workspace. History remains a shared sidebar Dialog and never consumes permanent grid width.
 - The page gives the production workspace the full available width by default. The current platform's history opens on demand as a right-side drawer and must not permanently compress production.
 - Main content max width: about `1600px` inside the full-viewport shell.
 
@@ -140,7 +140,7 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 
 ### Desktop minimum width
 
-- This product is desktop-only. Minimum supported viewport width is `1200px` (`--desktop-min-width`).
+- This product is desktop-only. Minimum supported viewport width is `900px` (`--desktop-min-width`); `1100px` and above remains the preferred wider workbench.
 - Below that width, show a full-screen gate: “当前只支持电脑端浏览”, and do not offer a mobile workbench layout.
 - Do not ship a bottom navigation or mobile pane switcher for the production workbench.
 
@@ -271,11 +271,11 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 
 For a visual pass, browser rendering is the acceptance source of truth. Automated browser checks protect repeatable geometry, interaction, accessibility, and runtime invariants; a human review remains necessary for overall visual judgment:
 
-- Inspect `1600×900`, `1366×768`, `1280×800`, the minimum desktop at `1200px` (including the `1200×650` height constraint), and the desktop-only gate at `1199px` or below.
+- Inspect `1600×900`, `1366×768`, `1280×800`, `1200×800`, the minimum desktop at `900px` (including the `900×650` height constraint), and the desktop-only gate at `899px` or below.
 - Review the first-run source state, planned slot grid, selected inspector, generated-result surface, settings dialog, task history, and restored project when available.
 - Confirm no horizontal overflow, clipped text, overlapping fixed regions, or competing scroll containers.
 - Exercise default, hover/focus-visible, selected, disabled, loading, empty, success, error, and destructive states where practical.
-- Exercise system dark preference, reduced motion, forced colors, DPR 2, and the 125% zoom-equivalent CSS viewport. The shipping contract remains one light theme and a `1200px` CSS-pixel desktop minimum; these conditions must not create an undeclared theme or bypass the gate.
+- Exercise system dark preference, reduced motion, forced colors, DPR 2, and the 125% zoom-equivalent CSS viewport. The shipping contract remains one light theme and a `900px` CSS-pixel desktop minimum; these conditions must not create an undeclared theme or bypass the gate.
 - Verify ordinary dialogs, nested confirmations, and the history drawer expose only one active modal layer, isolate the workbench background, trap focus, and return focus on close.
 - A complete governance run writes a timestamped evidence batch and manifest. Root-level historical screenshots are not evidence of the current run.
 
@@ -334,7 +334,7 @@ Still out of scope for this minimal loop (add only when pain is repeated): Story
 ### Completed
 
 - Commerce Ops tokens, typography, spacing, radius, borders, state colors, the single light theme, and the `72px` rail are owned by the single top `:root` block.
-- Amazon and Taobao use the shared production shell with an on-demand platform-history drawer; product source opens on demand. The desktop-only gate remains at `1199px` and below.
+- Amazon and Taobao use the shared production shell with an on-demand platform-history drawer; product source opens on demand and becomes an elevated overlay from `900–1099px`. The desktop-only gate remains at `899px` and below.
 - Amazon and Taobao preparation/production states use the same toolbar stage control with an on-demand four-stage path; browser checks protect the Taobao `检查策划 → 逐图生产` transition as a representative cross-platform consumer.
 - Listing / A+ and settings mode selection use `SegmentedControl`; operating modes use neutral `StatusChip` semantics.
 - A+ module setup now uses one compact summary and one staged dialog before and after planning; base text style and optional hidden style-board attachment have explicit, synchronized ownership and scoped create/delete copy.
@@ -344,7 +344,7 @@ Still out of scope for this minimal loop (add only when pain is repeated): Story
 - Success/danger text tokens and the solid focus-ring token meet the governed contrast thresholds; status feedback opts into polite/assertive live regions only when it is dynamic.
 - Every centered dialog and history sidebar uses the shared overlay stack, background isolation, topmost-only nested behavior, focus trap, and focus return.
 - Production history loads 50 Runs per page, preserves already loaded records when an older-page read fails, and exposes retry; browser evidence exercises 120 records and both initial/older-page recovery paths.
-- Browser evidence covers the production shell and opened history drawer, Listing/A+, settings, mask states, loading/error, the full supported desktop matrix, `1199px` gate, dark preference, reduced motion, forced colors, DPR 2, and 125% zoom-equivalent rendering.
+- Browser evidence covers the production shell and opened history drawer, Listing/A+, settings, mask states, loading/error, the full supported desktop matrix, `899px` gate, compact-source overlay, dark preference, reduced motion, forced colors, DPR 2, and 125% zoom-equivalent rendering.
 - Each browser/full acceptance run has an isolated manifest-backed evidence batch; the 500 kB entry-chunk budget and supported Node/pnpm ranges are explicit.
 
 ### Remaining Debt

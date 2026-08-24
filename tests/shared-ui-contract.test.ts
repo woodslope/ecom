@@ -173,9 +173,15 @@ describe("shared workbench primitives", () => {
     expect(styles).toMatch(/--control-height-compact:\s*32px/);
     expect(styles).toMatch(/\.button--normal\s*{[^}]*min-height:\s*var\(--control-height\)/);
     expect(styles).toMatch(/\.button--compact\s*{[^}]*min-height:\s*var\(--control-height-compact\)/);
-    expect(styles).toMatch(/--desktop-min-width:\s*1200px/);
-    expect(styles).toMatch(/@media \(max-width: 1199px\)[\s\S]*?\.desktop-only-gate/);
-    expect(styles).not.toMatch(/@media \(min-width: 900px\) and \(max-width: 1099px\)/);
+    expect(styles).toMatch(/--desktop-min-width:\s*900px/);
+    expect(styles).toMatch(/@media \(max-width: 899px\)[\s\S]*?\.desktop-only-gate/);
+    expect(styles).toMatch(/@media \(min-width: 900px\) and \(max-width: 1099px\)/);
+    expect(styles).toMatch(
+      /\.workbench-grid:not\(\.workbench-grid--guided\)\s*\{[^}]*minmax\(320px,\s*0\.82fr\)\s+minmax\(340px,\s*1\.18fr\)/s,
+    );
+    expect(styles).toMatch(
+      /\.workbench-source-column:not\(\[hidden\]\)\s*\{[^}]*position:\s*absolute[^}]*width:\s*min\(360px,/s,
+    );
     expect(styles).toMatch(
       /\.workbench-grid--source-collapsed\s*\{[^}]*minmax\(420px,\s*0\.82fr\)\s+minmax\(520px,\s*1\.18fr\)/s,
     );

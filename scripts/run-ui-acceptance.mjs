@@ -184,13 +184,13 @@ const manifest = {
     typescript: await dependencyVersion("typescript"),
   },
   supportContract: {
-    desktopMinimumCssPixels: 1200,
+    desktopMinimumCssPixels: 900,
     visualTheme: "light-only",
     browserEngine: "Chromium",
   },
   coverage: {
-    viewports: ["1600x900", "1366x768", "1280x800", "1200x800", "1200x650", "1199x800 gate"],
-    conditions: ["dark system preference", "reduced motion", "forced colors", "DPR 2", "125% zoom equivalent (1200 CSS px / DPR 1.25)"],
+    viewports: ["1600x900", "1366x768", "1280x800", "1200x800", "900x800", "900x650", "899x800 gate"],
+    conditions: ["dark system preference", "reduced motion", "forced colors", "DPR 2", "125% zoom equivalent (1024 CSS px / DPR 1.25)"],
     flows: [
       "Amazon and Taobao empty/planned/history",
       "history 120-record pagination and transient retry",

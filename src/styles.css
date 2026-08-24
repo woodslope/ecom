@@ -84,7 +84,7 @@
   --control-height: 32px;
   --control-height-compact: 32px;
   --rail-width: 72px;
-  --desktop-min-width: 1200px;
+  --desktop-min-width: 900px;
   --shell-shadow: none;
   --ink: #20252b;
   --ink-elevated: #2a3037;
@@ -1048,7 +1048,7 @@ select.select-control__input:disabled + .select-control__icon {
   display: none !important;
 }
 
-@media (min-width: 1200px) and (max-width: 1320px) {
+@media (min-width: 1100px) and (max-width: 1320px) {
   .workbench-grid:not(.workbench-grid--source-collapsed):not(.workbench-grid--guided) {
     grid-template-columns: minmax(260px, 0.82fr) minmax(300px, 1.06fr) minmax(280px, 0.96fr);
   }
@@ -4160,7 +4160,7 @@ select.select-control__input:disabled + .select-control__icon {
   font-weight: 700;
 }
 
-@media (max-width: 1199px) {
+@media (max-width: 899px) {
   body {
     background: var(--page);
   }
@@ -6388,10 +6388,25 @@ select.select-control__input:disabled + .select-control__icon {
   gap: var(--space-2);
 }
 
-@media (min-width: 1200px) and (max-width: 1320px) {
+@media (min-width: 900px) and (max-width: 1320px) {
   .slot-inspector__chrome-bottom .generation-actions__primary .status-chip {
     /* Runtime mode remains visible in the rail and inspector header at compact width. */
     display: none;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1099px) {
+  .workbench-grid:not(.workbench-grid--guided) {
+    position: relative;
+    grid-template-columns: minmax(320px, 0.82fr) minmax(340px, 1.18fr);
+  }
+
+  .workbench-grid:not(.workbench-grid--guided) > .workbench-source-column:not([hidden]) {
+    position: absolute;
+    z-index: 20;
+    inset: 0 auto 0 0;
+    width: min(360px, calc(100% - var(--space-4)));
+    box-shadow: var(--elevation-shadow);
   }
 }
 

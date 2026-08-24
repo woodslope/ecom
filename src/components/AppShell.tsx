@@ -7,7 +7,7 @@ import { PlatformRail } from "./PlatformRail";
 import { SettingsDialog } from "./SettingsDialog";
 import { syncModalEnvironment } from "./ui";
 
-export const DESKTOP_MIN_WIDTH = 1200;
+export const DESKTOP_MIN_WIDTH = 900;
 
 export function AppShell({
   activeItem,
@@ -141,7 +141,7 @@ export function AppShell({
           </div>
           <strong id="desktop-only-gate-title">当前只支持电脑端浏览</strong>
           <p id="desktop-only-gate-description">
-            电商工作台需要足够宽度同时查看平台制作区与历史记录。请将窗口调整到至少{" "}
+            电商工作台需要足够宽度编辑商品资料与生产内容。请将窗口调整到至少{" "}
             {DESKTOP_MIN_WIDTH}px。
           </p>
           <span className="desktop-only-gate__meta">

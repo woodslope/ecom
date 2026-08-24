@@ -45,7 +45,7 @@ The product has three domain layers:
 2. PlatformSession: one platform/workflow's editable source, options, plan, selected slot, versions, and active run.
 3. ProductionRun: immutable snapshot and event history for a complete production attempt.
 
-Amazon workspaces expose Listing/A+ mode, marketplace, count/type, module options, size tier, style, Listing source, reference assets, plan, slot board, inspector, generation, compliance, and export. Taobao exposes product analysis input, fixed gallery/detail slots, the same slot inspector and version workflow, phone product-page preview, and partial/full delivery export. The shared production shell is desktop-only; at `1199px` and below the desktop-only gate is shown.
+Amazon workspaces expose Listing/A+ mode, marketplace, count/type, module options, size tier, style, Listing source, reference assets, plan, slot board, inspector, generation, compliance, and export. Taobao exposes product analysis input, fixed gallery/detail slots, the same slot inspector and version workflow, phone product-page preview, and partial/full delivery export. The shared production shell is desktop-only; at `899px` and below the desktop-only gate is shown.
 
 In production, the toolbar owns progress, current-task identity, history, and new-task entry. The selected-slot inspector owns image generation, and the delivery panel owns export, so only one primary action exists for each operation. With task input collapsed, the slot board and inspector keep a stable `0.82fr / 1.18fr` order across all supported desktop widths.
 
@@ -192,7 +192,7 @@ Current export is a platform ZIP with manifest, Prompt snapshot, active version 
 - History restore/fork: identify project, platform, workflow, Run and source.
 - Local batch task: show queued/running/paused/completed/failed/canceled state, progress, cancel/retry actions, and refresh recovery.
 - API settings: show dual/single mode, connection feedback, provider restrictions, and no key echo.
-- Narrow viewport: 1200px minimum desktop; 1199px and below shows the desktop-only gate.
+- Narrow viewport: 900px minimum desktop; 899px and below shows the desktop-only gate. Between 900px and 1099px, production remains a two-column slots/inspector canvas and task input opens as an elevated overlay.
 
 ## 11. Non-Goals And External Risks
 
@@ -207,7 +207,7 @@ External provider availability, CORS, quotas, model quality, generated-image fac
 - A solo operator can complete Listing default 7 and A+ default `standard-large` paths in Demo mode.
 - Six Amazon marketplaces, Listing 7–12, A+ types/modules, Listing parsing, slot editing, version recovery, production history, export, and mask editing are reachable where listed above.
 - A solo operator can analyze a Taobao product, create the fixed 5+7 plan, generate/edit/version individual slots, preview the phone product page, and export partial/full or historical results.
-- Browser evidence covers the supported desktop matrix, the `1199px` gate, system preference/accessibility conditions, empty/loading/success/failure/recovery, paged history, modal isolation, settings modes, production filters, and mask states under a timestamped `artifacts/cross-platform-ais/runs/` batch with a manifest.
+- Browser evidence covers the supported desktop matrix, the `899px` gate, system preference/accessibility conditions, empty/loading/success/failure/recovery, paged history, modal isolation, settings modes, production filters, and mask states under a timestamped `artifacts/cross-platform-ais/runs/` batch with a manifest.
 
 ### Engineering
 
