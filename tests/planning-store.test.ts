@@ -9,7 +9,10 @@ import type {
 import { isPlanningInputCurrent } from "../src/domain/planning/input-signature";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import type { ProductFacts } from "../src/domain/projects/types";
-import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
+import {
+  createMemoryWorkspaceRepository,
+  type PlatformSession,
+} from "../src/domain/workspace/project-workspace";
 import { demoPlanner } from "../src/services/demo-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
@@ -45,6 +48,59 @@ function createDependencies(plannerEngine: PlannerEngine = demoPlanner) {
 }
 
 describe("workbench planning state", () => {
+  it("defensively rejects a restored session with 17 references before calling the planner", async () => {
+    let plannerCalls = 0;
+    const dependencies = createDependencies({
+      async plan(...args) {
+        plannerCalls += 1;
+        return demoPlanner.plan(...args);
+      },
+    });
+    const project = await dependencies.projectRepository.create({
+      name: "旧版超限会话",
+      facts: productFacts,
+    });
+    const referenceIds: string[] = [];
+    for (let index = 0; index < 17; index += 1) {
+      const stored = await dependencies.assetRepository.put({
+        projectId: project.id,
+        blob: new Blob(["x"], { type: "image/png" }),
+        metadata: { name: `ref-${index}.png`, kind: "reference" },
+      });
+      referenceIds.push(stored.metadata.id);
+    }
+    const timestamp = "2026-07-17T09:00:00.000Z";
+    const workspace = await dependencies.workspaceRepository.load(project.id);
+    const session: PlatformSession = {
+      id: "session_legacy_over_budget",
+      projectId: project.id,
+      platformId: "taobao",
+      workflowId: "taobao-product",
+      sourceInput: {
+        listingText: "",
+        taobaoProduct: { productText: "商品名：云感旅行颈枕", selectedReferenceAssetIds: referenceIds },
+      },
+      options: { platformId: "taobao" },
+      selectedReferenceAssetIds: referenceIds,
+      slotVersions: {},
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    await dependencies.workspaceRepository.save({
+      ...workspace,
+      sessions: [session],
+      updatedAt: timestamp,
+    });
+    const store = createWorkbenchStore(dependencies);
+    await store.getState().initialize();
+
+    await expect(store.getState().planPlatform("taobao")).resolves.toBeNull();
+
+    expect(store.getState().planningError).toContain("最多 16 张");
+    expect(plannerCalls).toBe(0);
+    expect(store.getState().runs).toEqual([]);
+  });
+
   it("keeps Listing and A+ plans independently switchable after reload", async () => {
     const dependencies = createDependencies();
     const store = createWorkbenchStore(dependencies);

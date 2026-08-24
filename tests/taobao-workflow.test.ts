@@ -173,6 +173,46 @@ describe("Taobao product workflow", () => {
     expect(store.getState().planningError).toBeNull();
   });
 
+  it("rejects Taobao reference count and bytes before creating a draft or calling the planner", async () => {
+    const deps = dependencies();
+    let plannerCalls = 0;
+    const store = createWorkbenchStore({
+      ...deps,
+      plannerEngine: {
+        async plan(...args) {
+          plannerCalls += 1;
+          return demoPlanner.plan(...args);
+        },
+      },
+    });
+    await store.getState().initialize();
+    const input = {
+      sourceMode: "manual" as const,
+      productText: "商品名：旅行颈枕",
+      selectedReferenceAssetIds: [],
+    };
+
+    await expect(store.getState().analyzeTaobaoProduct({
+      ...input,
+      files: Array.from(
+        { length: 17 },
+        (_, index) => new File(["x"], `ref-${index}.png`, { type: "image/png" }),
+      ),
+    })).resolves.toBeNull();
+    expect(store.getState().planningError).toContain("最多 16 张");
+
+    await expect(store.getState().analyzeTaobaoProduct({
+      ...input,
+      files: [new File([new Uint8Array(8 * 1024 * 1024 + 1)], "too-large.png", {
+        type: "image/png",
+      })],
+    })).resolves.toBeNull();
+    expect(store.getState().planningError).toContain("超过 8 MiB");
+    expect(plannerCalls).toBe(0);
+    expect(await deps.projectRepository.list()).toEqual([]);
+    expect(store.getState().sessions).toEqual([]);
+  });
+
   it("starts from only a product image without inventing hidden product facts", async () => {
     const deps = dependencies();
     const store = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });

@@ -68,6 +68,92 @@ async function fixture(): Promise<{ session: PlatformSession; run: ProductionRun
 }
 
 describe("application workspace persistence", () => {
+  it("removes target Runs, V3 and legacy V2 documents without touching another project", async () => {
+    const legacyRepository = createMemoryWorkspaceRepository();
+    const v3Repository = createMemoryWorkspaceV3Repository();
+    const runRepository = createMemoryRunRepository();
+    const { session, run } = await fixture();
+    const unrelatedSession = { ...session, id: "session_02", projectId: "project_02" };
+    const unrelatedRun = {
+      ...run,
+      id: "run_02",
+      projectId: "project_02",
+      sessionId: unrelatedSession.id,
+    };
+    const legacy = await legacyRepository.load("project_01");
+    await legacyRepository.save({ ...legacy, sessions: [session], runs: [run] });
+    const unrelatedLegacy = await legacyRepository.load("project_02");
+    await legacyRepository.save({
+      ...unrelatedLegacy,
+      sessions: [unrelatedSession],
+      runs: [unrelatedRun],
+    });
+    const v3 = await v3Repository.load("project_01");
+    await v3Repository.save({ ...v3, currentSessions: [session] });
+    const unrelatedV3 = await v3Repository.load("project_02");
+    await v3Repository.save({ ...unrelatedV3, currentSessions: [unrelatedSession] });
+    await runRepository.put(run);
+    await runRepository.put(unrelatedRun);
+    const persistence = createV3WorkspacePersistence({
+      legacyRepository,
+      v3Repository,
+      runRepository,
+    });
+
+    await persistence.remove!("project_01");
+
+    await expect(runRepository.get(run.id)).resolves.toBeNull();
+    await expect(v3Repository.load("project_01")).resolves.toMatchObject({ currentSessions: [] });
+    await expect(legacyRepository.load("project_01")).resolves.toMatchObject({ sessions: [], runs: [] });
+    await expect(runRepository.get(unrelatedRun.id)).resolves.toMatchObject({ id: unrelatedRun.id });
+    await expect(v3Repository.load("project_02")).resolves.toMatchObject({
+      currentSessions: [{ id: unrelatedSession.id }],
+    });
+    await expect(legacyRepository.load("project_02")).resolves.toMatchObject({
+      sessions: [{ id: unrelatedSession.id }],
+      runs: [{ id: unrelatedRun.id }],
+    });
+  });
+
+  it("can retry an interrupted layered deletion and remains idempotent", async () => {
+    const baseLegacyRepository = createMemoryWorkspaceRepository();
+    const v3Repository = createMemoryWorkspaceV3Repository();
+    const runRepository = createMemoryRunRepository();
+    const { session, run } = await fixture();
+    const legacy = await baseLegacyRepository.load("project_01");
+    await baseLegacyRepository.save({ ...legacy, sessions: [session], runs: [run] });
+    const v3 = await v3Repository.load("project_01");
+    await v3Repository.save({ ...v3, currentSessions: [session] });
+    await runRepository.put(run);
+    let failLegacyRemoval = true;
+    const legacyRepository = {
+      ...baseLegacyRepository,
+      async remove(projectId: string) {
+        if (failLegacyRemoval) {
+          failLegacyRemoval = false;
+          throw new Error("legacy storage unavailable");
+        }
+        await baseLegacyRepository.remove!(projectId);
+      },
+    };
+    const persistence = createV3WorkspacePersistence({
+      legacyRepository,
+      v3Repository,
+      runRepository,
+    });
+
+    await expect(persistence.remove!("project_01")).rejects.toThrow("legacy storage unavailable");
+    await expect(runRepository.get(run.id)).resolves.toBeNull();
+    await expect(v3Repository.load("project_01")).resolves.toMatchObject({ currentSessions: [] });
+    await expect(baseLegacyRepository.load("project_01")).resolves.toMatchObject({
+      sessions: [{ id: session.id }],
+    });
+
+    await expect(persistence.remove!("project_01")).resolves.toBeUndefined();
+    await expect(persistence.remove!("project_01")).resolves.toBeUndefined();
+    await expect(baseLegacyRepository.load("project_01")).resolves.toMatchObject({ sessions: [], runs: [] });
+  });
+
   it("removes a newly written run when the following V3 save fails", async () => {
     const legacyRepository = createMemoryWorkspaceRepository();
     const baseV3Repository = createMemoryWorkspaceV3Repository();

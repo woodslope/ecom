@@ -17,6 +17,7 @@ import { Button, Dialog, IconButton, StatusMessage } from "./components/ui";
 import type { NavigationItemId, PlatformId } from "./domain/platforms/types";
 import type { ExecutionJob } from "./domain/jobs/types";
 import type { HistoryQueryService } from "./domain/history/query";
+import { productionHistoryRevision } from "./domain/history/revision";
 import { getPlatformRulePack } from "./domain/platforms/registry";
 import type { ProductProject, UpdateProductProjectInput } from "./domain/projects/types";
 import { runtimeSupportsImageEditing } from "./domain/settings";
@@ -693,7 +694,7 @@ export function App() {
           onReuseImage={(record, eventId) => void reuseRunImageAsReference(record.run.id, eventId)}
           onExportRun={(record) => void exportHistoryRun(record.run.id)}
           historyQueryService={historyQueryService}
-          historyRefreshKey={`${runs.length}:${runs.at(-1)?.updatedAt ?? ""}`}
+          historyRefreshKey={productionHistoryRevision(runs)}
           />
         </div>
       ) : null}

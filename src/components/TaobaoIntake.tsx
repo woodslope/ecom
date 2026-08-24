@@ -432,7 +432,7 @@ export function TaobaoIntake({
         <Panel title="商品参考图" className="taobao-intake__asset-panel">
           <label className="taobao-intake__upload">
             <Upload size={18} />
-            <span>添加本次任务商品图</span>
+            <span>添加本次任务商品图<small>最多 16 张，合计不超过 8 MiB</small></span>
             <input
               aria-label="淘宝分析图片"
               type="file"

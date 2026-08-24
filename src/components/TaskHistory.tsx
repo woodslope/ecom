@@ -122,6 +122,7 @@ export function TaskHistoryArchive({
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyErrorSource, setHistoryErrorSource] = useState<"query" | "load-more" | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const assetUrlsRef = useRef<Record<string, string>>({});
   const pendingAssetIdsRef = useRef(new Set<string>());
@@ -191,7 +192,7 @@ export function TaskHistoryArchive({
       setLoading(true);
       setLoadingMore(false);
       setHistoryError(null);
-      setNextCursor(undefined);
+      setHistoryErrorSource(null);
       try {
         const page = await queryRecords();
         if (cancelled || queryVersionRef.current !== queryVersion) return;
@@ -200,8 +201,8 @@ export function TaskHistoryArchive({
         setExpandedRunId((current) => current && page.items.some(({ run }) => run.id === current) ? current : null);
       } catch (caught) {
         if (cancelled || queryVersionRef.current !== queryVersion) return;
-        setRecords([]);
         setHistoryError(caught instanceof Error ? caught.message : "读取任务历史失败，请重试。");
+        setHistoryErrorSource("query");
       } finally {
         if (!cancelled && queryVersionRef.current === queryVersion) setLoading(false);
       }
@@ -213,10 +214,11 @@ export function TaskHistoryArchive({
   }, [queryRecords, refreshKey, retryKey]);
 
   const loadMore = useCallback(async () => {
-    if (!nextCursor || loadingMore) return;
+    if (!nextCursor || loading || loadingMore) return;
     const queryVersion = queryVersionRef.current;
     setLoadingMore(true);
     setHistoryError(null);
+    setHistoryErrorSource(null);
     try {
       const page = await queryRecords(nextCursor);
       if (!mountedRef.current || queryVersionRef.current !== queryVersion) return;
@@ -228,10 +230,11 @@ export function TaskHistoryArchive({
     } catch (caught) {
       if (!mountedRef.current || queryVersionRef.current !== queryVersion) return;
       setHistoryError(caught instanceof Error ? caught.message : "加载更早记录失败，请重试。");
+      setHistoryErrorSource("load-more");
     } finally {
       if (mountedRef.current && queryVersionRef.current === queryVersion) setLoadingMore(false);
     }
-  }, [loadingMore, nextCursor, queryRecords]);
+  }, [loading, loadingMore, nextCursor, queryRecords]);
 
   useEffect(() => {
     setFilters((current) => platformId
@@ -271,7 +274,7 @@ export function TaskHistoryArchive({
     }
   }, [expandedRunId, filtered]);
 
-  if (loading) {
+  if (loading && records.length === 0) {
     return <EmptyState variant="loading" eyebrow="正在同步" icon={<Archive size={24} />} title="正在读取任务历史" description="按商品汇总本地记录。" />;
   }
 
@@ -313,8 +316,13 @@ export function TaskHistoryArchive({
       {historyError ? (
         <div className="production-history__load-error" role="alert">
           <span>{historyError} 已加载的记录仍可继续使用。</span>
-          <Button variant="secondary" size="compact" onClick={() => void loadMore()} disabled={!nextCursor || loadingMore}>
-            重试加载
+          <Button
+            variant="secondary"
+            size="compact"
+            onClick={() => historyErrorSource === "load-more" ? void loadMore() : setRetryKey((value) => value + 1)}
+            disabled={historyErrorSource === "load-more" ? !nextCursor || loadingMore : loading}
+          >
+            {historyErrorSource === "load-more" ? "重试加载" : "重试读取"}
           </Button>
         </div>
       ) : null}
@@ -323,7 +331,7 @@ export function TaskHistoryArchive({
       </div>}
       {nextCursor ? (
         <div className="production-history__load-more">
-          <Button variant="secondary" loading={loadingMore} loadingLabel="正在加载更早记录" onClick={() => void loadMore()}>
+          <Button variant="secondary" loading={loadingMore} loadingLabel="正在加载更早记录" disabled={loading} onClick={() => void loadMore()}>
             加载更早记录
           </Button>
         </div>

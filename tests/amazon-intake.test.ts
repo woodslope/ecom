@@ -335,6 +335,18 @@ describe("Amazon direct intake", () => {
     await expect(
       store.getState().startAmazonSession({
         ...input,
+        selectedStyleReferenceId: "preset:clean-retail",
+        files: Array.from(
+          { length: 16 },
+          (_, index) => new File(["x"], `styled-ref-${index}.png`, { type: "image/png" }),
+        ),
+      }),
+    ).resolves.toBeNull();
+    expect(store.getState().planningError).toContain("当前为 17 张");
+
+    await expect(
+      store.getState().startAmazonSession({
+        ...input,
         files: [
           new File([new Uint8Array(8 * 1024 * 1024 + 1)], "too-large.png", {
             type: "image/png",

@@ -19,8 +19,9 @@ export function connectionFeedbackMessage({
   result: ConnectionTestResult | null;
 }): string | null {
   if (testing) return "正在测试文本策划 API...";
+  if (result) return result.message;
   if (draftChanged) return null;
-  return result?.message ?? null;
+  return null;
 }
 
 export async function runConnectionTestSafely(
@@ -184,7 +185,6 @@ export function SettingsDialog({
 
   const testService = async (service: "text" | "image") => {
     setTestingService(service);
-    setDraftChanged(false);
     if (service === "text") setTextResult(null);
     else setImageResult(null);
     try {
@@ -255,14 +255,10 @@ export function SettingsDialog({
   const imageTesting = testingService === "image" || imageConnectionStatus === "testing";
   const textMessage = textTesting
     ? "正在测试文本策划 API..."
-    : draftChanged
-      ? null
-      : textResult?.message ?? textConnectionMessage;
+    : textResult?.message ?? (draftChanged ? null : textConnectionMessage);
   const imageMessage = imageTesting
     ? "正在测试图片生成 API..."
-    : draftChanged
-      ? null
-      : imageResult?.message ?? imageConnectionMessage;
+    : imageResult?.message ?? (draftChanged ? null : imageConnectionMessage);
   const textTone = (textResult?.ok ?? (textConnectionStatus === "success" ? true : undefined))
     ? "success"
     : textResult?.ok === false || textConnectionStatus === "error"

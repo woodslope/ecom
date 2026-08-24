@@ -108,6 +108,7 @@ describe("Taobao intake", () => {
     expect(markup).toContain('aria-label="淘宝分析图片"');
     expect(markup).toContain("正面图.png");
     expect(markup).toContain("生成图片策划");
+    expect(markup).toContain("最多 16 张，合计不超过 8 MiB");
     expect(markup).toContain("生成方案");
     expect(markup).toContain("行业模板");
     expect(markup).not.toContain("淘宝方案");

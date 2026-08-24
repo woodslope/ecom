@@ -192,6 +192,7 @@ export function createV3WorkspacePersistence(options: WorkspacePersistenceOption
     async remove(projectId) {
       await options.runRepository.removeProject(projectId);
       await options.v3Repository.remove?.(projectId);
+      await options.legacyRepository.remove?.(projectId);
     },
   };
 }

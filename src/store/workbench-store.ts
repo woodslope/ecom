@@ -3,9 +3,9 @@ import { useStore } from "zustand";
 
 import { compressImageFile } from "../domain/assets/compress";
 import {
+  assertGenerationReferenceBudget,
+  assertImageFiles,
   GenerationReferencePayloadError,
-  GENERATION_REFERENCE_MAX_COUNT,
-  GENERATION_REFERENCE_MAX_PAYLOAD_BYTES,
   prepareGenerationReferencePayload,
 } from "../domain/assets/reference-payload";
 import {
@@ -684,6 +684,7 @@ export function createWorkbenchStore(
   let activePlanningController: AbortController | null = null;
   let generationRequestId = 0;
   let activeGenerationController: AbortController | null = null;
+  let activeExecutionJobId: string | null = null;
   let exportRequestId = 0;
   let copilotRequestId = 0;
   let activeCopilotController: AbortController | null = null;
@@ -691,13 +692,17 @@ export function createWorkbenchStore(
   let activeIndustryTemplateTransformController: AbortController | null = null;
   const canceledExecutionJobIds = new Set<string>();
   let workspaceWriteQueue: Promise<void> = Promise.resolve();
+  let projectSelectionWriteQueue: Promise<void> = Promise.resolve();
+  let projectContextRequestId = 0;
   const isCurrentLifecycle = (version: number) => version === lifecycleVersion;
 
   const restoreExecutionJobs = async (): Promise<ExecutionJob[]> => {
     const page = await executionJobRepository.list();
     const restored: ExecutionJob[] = [];
     for (const job of page.items) {
-      const next = recoverInterruptedExecutionJob(job, now());
+      const next = job.id === activeExecutionJobId
+        ? job
+        : recoverInterruptedExecutionJob(job, now());
       if (next.updatedAt !== job.updatedAt || next.status !== job.status) {
         await executionJobRepository.put(next);
       }
@@ -709,6 +714,15 @@ export function createWorkbenchStore(
   const enqueueWorkspaceMutation = <T>(operation: () => Promise<T>): Promise<T> => {
     const result = workspaceWriteQueue.then(operation, operation);
     workspaceWriteQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+
+  const enqueueProjectSelectionWrite = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = projectSelectionWriteQueue.then(operation, operation);
+    projectSelectionWriteQueue = result.then(
       () => undefined,
       () => undefined,
     );
@@ -766,6 +780,20 @@ export function createWorkbenchStore(
   };
 
   return createStore<WorkbenchState>((set, get) => {
+    const claimExecutionJobOwnership = (jobId: string, action: string): boolean => {
+      if (activeExecutionJobId) {
+        set({ error: `已有本地执行任务正在运行，请完成或取消后再${action}。` });
+        return false;
+      }
+      activeExecutionJobId = jobId;
+      return true;
+    };
+
+    const releaseExecutionJobOwnership = (jobId: string) => {
+      if (activeExecutionJobId === jobId) activeExecutionJobId = null;
+      canceledExecutionJobIds.delete(jobId);
+    };
+
     const persistJobs = async (jobs: readonly ExecutionJob[]) => {
       await Promise.all(jobs.map((job) => executionJobRepository.put(job)));
       const ids = new Set(jobs.map((job) => job.id));
@@ -775,6 +803,40 @@ export function createWorkbenchStore(
           ...jobs.map((job) => structuredClone(job)),
         ].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
       }));
+    };
+
+    const executionTargetError = (
+      target: ExecutionJob["items"][number]["target"],
+    ): string | null => {
+      const project = get().activeProject;
+      if (!project || project.id !== target.projectId) {
+        return "任务引用的商品项目不存在或尚未载入。";
+      }
+      const session = get().sessions.find((candidate) => candidate.id === target.sessionId);
+      if (
+        !session ||
+        session.projectId !== target.projectId ||
+        session.platformId !== target.platformId ||
+        session.workflowId !== target.workflowId
+      ) {
+        return "任务引用的 Session 不存在或与商品、平台不匹配。";
+      }
+      if (!session.plan?.slots.some((slot) => slot.slotKey === target.slotKey)) {
+        return "任务引用的槽位不存在于当前 Session 策划中。";
+      }
+      const run = session.activeRunId
+        ? get().runs.find((candidate) => candidate.id === session.activeRunId)
+        : undefined;
+      if (
+        !run ||
+        run.projectId !== target.projectId ||
+        run.sessionId !== target.sessionId ||
+        run.platformId !== target.platformId ||
+        run.workflowId !== target.workflowId
+      ) {
+        return "任务引用的 ProductionRun 不存在或与当前 Session 不匹配。";
+      }
+      return null;
     };
 
     const runExecutionJob = async (jobId: string): Promise<ExecutionJob | null> => {
@@ -798,6 +860,18 @@ export function createWorkbenchStore(
         }
 
         const { target } = claimed.currentItem;
+        const targetError = executionTargetError(target);
+        if (targetError) {
+          const failed = failExecutionJobItem(
+            claimed.job,
+            claimed.currentItem.id,
+            targetError,
+            now(),
+          );
+          await persistJobs([failed]);
+          set({ error: targetError });
+          return failed;
+        }
         const version = await get().generateSessionSlot(target.sessionId, target.slotKey);
         const latest = await executionJobRepository.get(jobId);
         if (!latest || latest.status === "canceled") return latest;
@@ -867,7 +941,10 @@ export function createWorkbenchStore(
     copilotMessage: null,
 
     async initialize() {
+      const contextRequestId = ++projectContextRequestId;
       const operationLifecycle = lifecycleVersion;
+      const isCurrentContext = () =>
+        isCurrentLifecycle(operationLifecycle) && contextRequestId === projectContextRequestId;
       set({ loading: true, error: null, resourceRestoreError: null });
       try {
         const [storedProjects, activeProject] = await Promise.all([
@@ -889,7 +966,7 @@ export function createWorkbenchStore(
         } catch (jobsError) {
           jobsRestoreError = `本地任务恢复失败：${errorMessage(jobsError)}。`;
         }
-        if (!isCurrentLifecycle(operationLifecycle)) return;
+        if (!isCurrentContext()) return;
 
         const previousProjectId = get().activeProject?.id;
         if (previousProjectId !== activeProject?.id) {
@@ -962,7 +1039,7 @@ export function createWorkbenchStore(
           restoreErrors.push(`平台策划恢复失败：${errorMessage(error)}`);
         }
 
-        if (!isCurrentLifecycle(operationLifecycle)) {
+        if (!isCurrentContext()) {
           if (assets) revokeAssets(assets, dependencies);
           return;
         }
@@ -995,7 +1072,7 @@ export function createWorkbenchStore(
               : null,
         });
       } catch (error) {
-        if (!isCurrentLifecycle(operationLifecycle)) return;
+        if (!isCurrentContext()) return;
         set({ initialized: true, loading: false, error: errorMessage(error) });
       }
     },
@@ -1008,20 +1085,59 @@ export function createWorkbenchStore(
           : sourceMode === "library"
             ? get().activeProject
             : null;
+        assertImageFiles(input.files);
+        let selectedReferenceIds = [...new Set(input.selectedReferenceAssetIds)];
+        const selectedSources = (
+          await Promise.all(selectedReferenceIds.map((id) => dependencies.assetRepository.get(id)))
+        ).filter((asset): asset is NonNullable<typeof asset> =>
+          Boolean(
+            asset &&
+            asset.metadata.kind === "reference" &&
+            (!project || asset.metadata.projectId === project.id),
+          ),
+        );
+        let selectedStyleReferenceIdInput = input.selectedStyleReferenceId;
+        const styleSource = selectedStyleReferenceIdInput && !selectedStyleReferenceIdInput.startsWith("preset:")
+          ? await dependencies.assetRepository.get(selectedStyleReferenceIdInput)
+          : null;
+        const validStyleSource = styleSource?.metadata.kind === "style-reference" &&
+          (!project || styleSource.metadata.projectId === project.id)
+          ? styleSource
+          : null;
+        const selectedStylePreset = selectedStyleReferenceIdInput?.startsWith("preset:")
+          ? getAmazonStylePreset(selectedStyleReferenceIdInput.slice("preset:".length))
+          : null;
+        const existingPresetStyleMetadata = selectedStylePreset && project && project.scope !== "library"
+          ? (await dependencies.assetRepository.list(project.id)).find(
+              (asset) =>
+                asset.kind === "style-reference" &&
+                asset.styleReference?.sourcePresetId === selectedStylePreset.id &&
+                asset.tags.includes("built-in"),
+            )
+          : undefined;
+        const existingPresetStyle = existingPresetStyleMetadata
+          ? await dependencies.assetRepository.get(existingPresetStyleMetadata.id)
+          : null;
+        const preparedStyleBoard = selectedStylePreset && !existingPresetStyle
+          ? await createStyleReferenceBoardBitmap(selectedStylePreset)
+          : null;
+        assertGenerationReferenceBudget([
+          ...selectedSources.map((asset) => ({ name: asset.metadata.name, size: asset.blob.size })),
+          ...input.files.map((file) => ({ name: file.name, size: file.size })),
+          ...(validStyleSource
+            ? [{ name: validStyleSource.metadata.name, size: validStyleSource.blob.size }]
+            : existingPresetStyle
+              ? [{ name: existingPresetStyle.metadata.name, size: existingPresetStyle.blob.size }]
+              : preparedStyleBoard
+              ? [{ name: `${selectedStylePreset!.label}风格板`, size: preparedStyleBoard.blob.size }]
+              : []),
+        ]);
         if (project && get().activeProject?.id !== project.id) {
           await get().selectProject(project.id);
         }
-        let selectedReferenceIds = [...input.selectedReferenceAssetIds];
-        let selectedStyleReferenceIdInput = input.selectedStyleReferenceId;
         let librarySourceProject: ProductProject | null = null;
         if (sourceMode === "library" && project?.scope === "library") {
           librarySourceProject = project;
-          const selectedSources = await Promise.all(
-            selectedReferenceIds.map((id) => dependencies.assetRepository.get(id)),
-          );
-          const styleSource = selectedStyleReferenceIdInput && !selectedStyleReferenceIdInput.startsWith("preset:")
-            ? await dependencies.assetRepository.get(selectedStyleReferenceIdInput)
-            : null;
           const draft = await get().createProject({
             name: `${project.name} · Amazon任务`,
             scope: "task-draft",
@@ -1046,18 +1162,18 @@ export function createWorkbenchStore(
             });
             selectedReferenceIds.push(copied.metadata.id);
           }
-          if (styleSource?.metadata.kind === "style-reference") {
+          if (validStyleSource) {
             const copied = await dependencies.assetRepository.put({
               projectId: draft.id,
-              blob: styleSource.blob,
+              blob: validStyleSource.blob,
               metadata: {
-                name: styleSource.metadata.name,
+                name: validStyleSource.metadata.name,
                 kind: "style-reference",
-                role: styleSource.metadata.role,
-                tags: [...styleSource.metadata.tags, `source-project:${librarySourceProject.id}`, `source-asset:${styleSource.metadata.id}`],
-                width: styleSource.metadata.width,
-                height: styleSource.metadata.height,
-                styleReference: styleSource.metadata.styleReference,
+                role: validStyleSource.metadata.role,
+                tags: [...validStyleSource.metadata.tags, `source-project:${librarySourceProject.id}`, `source-asset:${validStyleSource.metadata.id}`],
+                width: validStyleSource.metadata.width,
+                height: validStyleSource.metadata.height,
+                styleReference: validStyleSource.metadata.styleReference,
               },
             });
             selectedStyleReferenceIdInput = copied.metadata.id;
@@ -1071,18 +1187,6 @@ export function createWorkbenchStore(
               selectedReferenceIds.includes(asset.metadata.id),
           )
           .map((asset) => asset.metadata);
-        const referenceCount = selectedMetadata.length + input.files.length + (selectedStyleReferenceIdInput ? 1 : 0);
-        const referenceBytes =
-          selectedMetadata.reduce((sum, asset) => sum + asset.size, 0) +
-          input.files.reduce((sum, file) => sum + file.size, 0);
-        if (referenceCount > GENERATION_REFERENCE_MAX_COUNT) {
-          set({ planningError: `参考图最多 ${GENERATION_REFERENCE_MAX_COUNT} 张，当前为 ${referenceCount} 张。` });
-          return null;
-        }
-        if (referenceBytes > GENERATION_REFERENCE_MAX_PAYLOAD_BYTES) {
-          set({ planningError: "参考图总大小超过 8 MiB，请删除部分图片或换更小文件。" });
-          return null;
-        }
         const initialFacts = input.facts
           ? resolveAmazonPlanningFacts(input.facts, input.listingText, "library")
           : resolveAmazonPlanningFacts(project?.facts, input.listingText, sourceMode);
@@ -1137,7 +1241,7 @@ export function createWorkbenchStore(
           } else {
             const preset = getAmazonStylePreset(presetId);
             if (preset) {
-              const board = await createStyleReferenceBoardBitmap(preset);
+              const board = preparedStyleBoard ?? await createStyleReferenceBoardBitmap(preset);
               const storedStyle = await dependencies.assetRepository.put({
                 projectId: project.id,
                 blob: board.blob,
@@ -1278,13 +1382,22 @@ export function createWorkbenchStore(
           ? get().activeProject
           : null;
       try {
-        let selectedReferenceIds = [...input.selectedReferenceAssetIds];
+        let selectedReferenceIds = [...new Set(input.selectedReferenceAssetIds)];
+        const selectedSources = (
+          await Promise.all(selectedReferenceIds.map((id) => dependencies.assetRepository.get(id)))
+        ).filter((asset): asset is NonNullable<typeof asset> =>
+          Boolean(
+            asset &&
+            asset.metadata.kind === "reference" &&
+            (!activeProject || asset.metadata.projectId === activeProject.id),
+          ),
+        );
+        assertGenerationReferenceBudget(
+          selectedSources.map((asset) => ({ name: asset.metadata.name, size: asset.blob.size })),
+        );
         let librarySourceProject: ProductProject | null = null;
         if (sourceMode === "library" && activeProject?.scope === "library") {
           librarySourceProject = activeProject;
-          const selectedSources = await Promise.all(
-            selectedReferenceIds.map((id) => dependencies.assetRepository.get(id)),
-          );
           const draft = await get().createProject({
             name: `${activeProject.name} · 淘宝任务`,
             scope: "task-draft",
@@ -1453,6 +1566,22 @@ export function createWorkbenchStore(
           : sourceMode === "library"
             ? get().activeProject
             : null;
+        assertImageFiles(input.files);
+        const selectedSources = (
+          await Promise.all(
+            [...new Set(input.selectedReferenceAssetIds)].map((id) => dependencies.assetRepository.get(id)),
+          )
+        ).filter((asset): asset is NonNullable<typeof asset> =>
+          Boolean(
+            asset &&
+            asset.metadata.kind === "reference" &&
+            (!sourceProject || asset.metadata.projectId === sourceProject.id),
+          ),
+        );
+        assertGenerationReferenceBudget([
+          ...selectedSources.map((asset) => ({ name: asset.metadata.name, size: asset.blob.size })),
+          ...input.files.map((file) => ({ name: file.name, size: file.size })),
+        ]);
         const previewBaseFacts = input.facts
           ? cloneProductFacts(input.facts)
           : sourceMode === "library" && sourceProject
@@ -1945,7 +2074,10 @@ export function createWorkbenchStore(
     },
 
     async createProject(input) {
+      const contextRequestId = ++projectContextRequestId;
       const operationLifecycle = lifecycleVersion;
+      const isCurrentContext = () =>
+        isCurrentLifecycle(operationLifecycle) && contextRequestId === projectContextRequestId;
       invalidatePlanning();
       invalidateGeneration();
       invalidateExport();
@@ -1973,7 +2105,13 @@ export function createWorkbenchStore(
         const projects = (await dependencies.projectRepository.list()).filter(
           (candidate) => candidate.scope === "library",
         );
-        if (!isCurrentLifecycle(operationLifecycle)) return project;
+        if (!isCurrentContext()) return project;
+        await enqueueProjectSelectionWrite(async () => {
+          if (isCurrentContext()) {
+            await dependencies.projectRepository.setActiveId(project.id);
+          }
+        });
+        if (!isCurrentContext()) return project;
         revokeAssets(get().assets, dependencies);
         set({
           loading: false,
@@ -1999,7 +2137,7 @@ export function createWorkbenchStore(
         });
         return project;
       } catch (error) {
-        if (!isCurrentLifecycle(operationLifecycle)) return null;
+        if (!isCurrentContext()) return null;
         set({ loading: false, error: errorMessage(error) });
         return null;
       }
@@ -2083,6 +2221,7 @@ export function createWorkbenchStore(
       invalidateExport();
       invalidateCopilot();
       invalidateIndustryTemplateTransform();
+      projectContextRequestId += 1;
       lifecycleVersion += 1;
       set({ loading: true, error: null });
       try {
@@ -2126,7 +2265,10 @@ export function createWorkbenchStore(
     },
 
     async selectProject(id) {
+      const selectionRequestId = ++projectContextRequestId;
       const operationLifecycle = lifecycleVersion;
+      const isCurrentSelection = () =>
+        isCurrentLifecycle(operationLifecycle) && selectionRequestId === projectContextRequestId;
       invalidatePlanning();
       invalidateGeneration();
       invalidateExport();
@@ -2163,12 +2305,16 @@ export function createWorkbenchStore(
           workspaceRepository.load(project.id),
         ]);
         nextAssets = loadedAssets.assets;
-        if (!isCurrentLifecycle(operationLifecycle)) {
+        if (!isCurrentSelection()) {
           revokeAssets(nextAssets, dependencies);
           return;
         }
-        await dependencies.projectRepository.setActiveId(project.id);
-        if (!isCurrentLifecycle(operationLifecycle)) {
+        await enqueueProjectSelectionWrite(async () => {
+          if (isCurrentSelection()) {
+            await dependencies.projectRepository.setActiveId(project.id);
+          }
+        });
+        if (!isCurrentSelection()) {
           revokeAssets(nextAssets, dependencies);
           return;
         }
@@ -2205,7 +2351,7 @@ export function createWorkbenchStore(
         if (nextAssets) {
           revokeAssets(nextAssets, dependencies);
         }
-        if (!isCurrentLifecycle(operationLifecycle)) return;
+        if (!isCurrentSelection()) return;
         set({ loading: false, error: errorMessage(error) });
       }
     },
@@ -2225,6 +2371,13 @@ export function createWorkbenchStore(
         get().generationRecoveryRequired
       ) {
         set({ error: "当前有策划、生成、Copilot、导出或恢复任务，请完成后再修改参考素材。" });
+        return [];
+      }
+
+      try {
+        assertImageFiles(files);
+      } catch (error) {
+        set({ error: errorMessage(error) });
         return [];
       }
 
@@ -2543,6 +2696,30 @@ export function createWorkbenchStore(
         .filter((id) => availableReferenceMetadata.has(id));
       const selectedReferenceMetadata = selectedReferenceAssetIds
         .map((id) => availableReferenceMetadata.get(id)!);
+      const selectedStyleMetadata = platformId === "amazon" && planningSession?.selectedStyleReferenceId
+        ? get().assets.find(
+            (asset) =>
+              asset.metadata.id === planningSession.selectedStyleReferenceId &&
+              asset.metadata.kind === "style-reference",
+          )?.metadata
+        : undefined;
+      try {
+        assertImageFiles([
+          ...selectedReferenceMetadata.map((asset) => ({ name: asset.name, type: asset.mimeType })),
+          ...(selectedStyleMetadata
+            ? [{ name: selectedStyleMetadata.name, type: selectedStyleMetadata.mimeType }]
+            : []),
+        ]);
+        assertGenerationReferenceBudget([
+          ...selectedReferenceMetadata.map((asset) => ({ name: asset.name, size: asset.size })),
+          ...(selectedStyleMetadata
+            ? [{ name: selectedStyleMetadata.name, size: selectedStyleMetadata.size }]
+            : []),
+        ]);
+      } catch (error) {
+        set({ planningError: errorMessage(error) });
+        return null;
+      }
       const inputAssessment = assessPlanningInput({
         facts: sourcePlanningFacts,
         productImageCount: selectedReferenceMetadata.length,
@@ -4600,6 +4777,7 @@ export function createWorkbenchStore(
         return null;
       }
       if (
+        activeExecutionJobId ||
         get().loading ||
         get().planningPlatformId ||
         get().generatingSlot ||
@@ -4653,48 +4831,63 @@ export function createWorkbenchStore(
         })),
         now: timestamp,
       });
-      await persistJobs([job]);
-      set({ error: null });
-      return runExecutionJob(job.id);
+      if (!claimExecutionJobOwnership(job.id, "开始批量生成")) return null;
+      try {
+        await persistJobs([job]);
+        set({ error: null });
+        return await runExecutionJob(job.id);
+      } finally {
+        releaseExecutionJobOwnership(job.id);
+      }
     },
 
     async resumeExecutionJob(jobId) {
-      const job = await executionJobRepository.get(jobId);
-      if (!job) {
-        set({ error: "要继续的本地任务不存在。" });
-        return null;
+      if (!claimExecutionJobOwnership(jobId, "继续其他任务")) return null;
+      try {
+        const job = await executionJobRepository.get(jobId);
+        if (!job) {
+          set({ error: "要继续的本地任务不存在。" });
+          return null;
+        }
+        if (job.status !== "paused" && job.status !== "queued") {
+          set({ error: "只有已暂停或排队中的任务可以继续。" });
+          return null;
+        }
+        const activeProjectId = get().activeProject?.id;
+        const projectId = job.items[0]?.target.projectId;
+        if (projectId && activeProjectId !== projectId) {
+          await get().selectProject(projectId);
+        }
+        const queued = { ...job, status: "queued" as const, error: undefined, updatedAt: now() };
+        await persistJobs([queued]);
+        return await runExecutionJob(jobId);
+      } finally {
+        releaseExecutionJobOwnership(jobId);
       }
-      if (job.status !== "paused" && job.status !== "queued") {
-        set({ error: "只有已暂停或排队中的任务可以继续。" });
-        return null;
-      }
-      const activeProjectId = get().activeProject?.id;
-      const projectId = job.items[0]?.target.projectId;
-      if (projectId && activeProjectId !== projectId) {
-        await get().selectProject(projectId);
-      }
-      const queued = { ...job, status: "queued" as const, error: undefined, updatedAt: now() };
-      await persistJobs([queued]);
-      return runExecutionJob(jobId);
     },
 
     async retryExecutionJob(jobId) {
-      const job = await executionJobRepository.get(jobId);
-      if (!job) {
-        set({ error: "要重试的本地任务不存在。" });
-        return null;
+      if (!claimExecutionJobOwnership(jobId, "重试其他任务")) return null;
+      try {
+        const job = await executionJobRepository.get(jobId);
+        if (!job) {
+          set({ error: "要重试的本地任务不存在。" });
+          return null;
+        }
+        if (job.status !== "failed") {
+          set({ error: "只有失败任务可以重试。" });
+          return null;
+        }
+        const projectId = job.items[0]?.target.projectId;
+        if (projectId && get().activeProject?.id !== projectId) {
+          await get().selectProject(projectId);
+        }
+        const retried = retryExecutionJob(job, now());
+        await persistJobs([retried]);
+        return await runExecutionJob(jobId);
+      } finally {
+        releaseExecutionJobOwnership(jobId);
       }
-      if (job.status !== "failed") {
-        set({ error: "只有失败任务可以重试。" });
-        return null;
-      }
-      const projectId = job.items[0]?.target.projectId;
-      if (projectId && get().activeProject?.id !== projectId) {
-        await get().selectProject(projectId);
-      }
-      const retried = retryExecutionJob(job, now());
-      await persistJobs([retried]);
-      return runExecutionJob(jobId);
     },
 
     async cancelExecutionJob(jobId) {
@@ -4703,8 +4896,10 @@ export function createWorkbenchStore(
         set({ error: "要取消的本地任务不存在。" });
         return false;
       }
-      canceledExecutionJobIds.add(jobId);
-      if (job.currentItemId && get().generatingSlot) get().cancelGeneration();
+      if (activeExecutionJobId === jobId) canceledExecutionJobIds.add(jobId);
+      if (activeExecutionJobId === jobId && job.currentItemId && get().generatingSlot) {
+        get().cancelGeneration();
+      }
       await persistJobs([cancelExecutionJob(job, now())]);
       return true;
     },
@@ -5186,6 +5381,7 @@ export function createWorkbenchStore(
     },
 
     dispose() {
+      projectContextRequestId += 1;
       lifecycleVersion += 1;
       invalidatePlanning();
       invalidateGeneration();

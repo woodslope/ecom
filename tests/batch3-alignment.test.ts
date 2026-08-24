@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assertGenerationReferenceBudget,
+  GENERATION_REFERENCE_MAX_COUNT,
   GENERATION_REFERENCE_MAX_PAYLOAD_BYTES,
   GenerationReferencePayloadError,
   prepareGenerationReferencePayload,
@@ -29,10 +31,25 @@ describe("Batch 3 reference payload", () => {
     expect(result.pass).toBe("none");
   });
 
-  it("caps count at 16", async () => {
-    const images = Array.from({ length: 20 }, (_, index) => blobOf(32, `r${index}.png`));
-    const result = await prepareGenerationReferencePayload(images);
-    expect(result.images.length).toBeLessThanOrEqual(16);
+  it("accepts 16 references and rejects a 17th instead of silently truncating generation input", async () => {
+    const accepted = Array.from(
+      { length: GENERATION_REFERENCE_MAX_COUNT },
+      (_, index) => blobOf(32, `r${index}.png`),
+    );
+    await expect(prepareGenerationReferencePayload(accepted)).resolves.toMatchObject({
+      images: expect.any(Array),
+    });
+    const images = [...accepted, blobOf(32, "r16.png")];
+    await expect(prepareGenerationReferencePayload(images)).rejects.toThrow("最多 16 张");
+  });
+
+  it("applies the raw intake byte budget at the exact 8 MiB boundary", () => {
+    expect(() => assertGenerationReferenceBudget([
+      { name: "exact.png", size: GENERATION_REFERENCE_MAX_PAYLOAD_BYTES },
+    ])).not.toThrow();
+    expect(() => assertGenerationReferenceBudget([
+      { name: "too-large.png", size: GENERATION_REFERENCE_MAX_PAYLOAD_BYTES + 1 },
+    ])).toThrow("超过 8 MiB");
   });
 
   it("throws when payload remains above 8 MiB after fallback", async () => {

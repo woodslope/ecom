@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { queryProductionRuns } from "../src/domain/tasks/production-runs";
+import { productionHistoryRevision } from "../src/domain/history/revision";
 import type { ProductProject } from "../src/domain/projects/types";
 import type { ProductionRun } from "../src/domain/workspace/project-workspace";
 import { createMemoryAssetRepository } from "../src/domain/assets/repository";
@@ -48,6 +49,25 @@ function run(overrides: Partial<ProductionRun> & Pick<ProductionRun, "id" | "pro
 }
 
 describe("production history query", () => {
+  it("revises history when any Run status or event list changes, independent of array order", () => {
+    const first = run({ id: "r1", projectId: "p1", workflowId: "amazon-listing" });
+    const second = run({ id: "r2", projectId: "p1", workflowId: "amazon-listing" });
+    const revision = productionHistoryRevision([first, second]);
+
+    expect(productionHistoryRevision([second, first])).toBe(revision);
+    expect(productionHistoryRevision([{ ...first, status: "producing" }, second])).not.toBe(revision);
+    expect(productionHistoryRevision([
+      { ...first, events: [{
+        id: "event-1",
+        runId: first.id,
+        kind: "plan",
+        status: "success",
+        createdAt: first.updatedAt,
+      }] },
+      second,
+    ])).not.toBe(revision);
+  });
+
   it("filters a derived newest-first view without mutating saved runs", () => {
     const records = [
       { project: project("p1", "Cloud Pillow"), run: run({ id: "r1", projectId: "p1", workflowId: "amazon-listing", status: "ready", updatedAt: "2026-07-20T03:00:00.000Z" }) },

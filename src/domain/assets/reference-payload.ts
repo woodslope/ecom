@@ -29,6 +29,11 @@ export interface GenerationReferencePayloadResult {
   notice: string | null;
 }
 
+export interface GenerationReferenceBudgetItem {
+  name: string;
+  size: number;
+}
+
 export class GenerationReferencePayloadError extends Error {
   readonly name = "GenerationReferencePayloadError";
 
@@ -41,8 +46,49 @@ function formatMiB(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
+function formatBudgetMiB(bytes: number): string {
+  const value = bytes / (1024 * 1024);
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)} MiB`;
+}
+
 function totalBytes(images: readonly GenerationReferencePayloadInput[]): number {
   return images.reduce((sum, image) => sum + image.blob.size, 0);
+}
+
+export function assertImageFiles(
+  files: readonly Pick<File, "name" | "type">[],
+): void {
+  const invalidNames = files
+    .filter((file) => !file.type.toLowerCase().startsWith("image/"))
+    .map((file) => file.name || "未命名文件");
+  if (invalidNames.length > 0) {
+    throw new GenerationReferencePayloadError(
+      `仅支持图片文件，请移除：${invalidNames.join("、")}。`,
+    );
+  }
+}
+
+export function assertGenerationReferenceBudget(
+  items: readonly GenerationReferenceBudgetItem[],
+  options: {
+    maxCount?: number;
+    maxPayloadBytes?: number;
+  } = {},
+): { count: number; totalBytes: number } {
+  const maxCount = options.maxCount ?? GENERATION_REFERENCE_MAX_COUNT;
+  const maxPayloadBytes = options.maxPayloadBytes ?? GENERATION_REFERENCE_MAX_PAYLOAD_BYTES;
+  if (items.length > maxCount) {
+    throw new GenerationReferencePayloadError(
+      `参考图最多 ${maxCount} 张，当前为 ${items.length} 张。`,
+    );
+  }
+  const bytes = items.reduce((sum, item) => sum + item.size, 0);
+  if (bytes > maxPayloadBytes) {
+    throw new GenerationReferencePayloadError(
+      `参考图总大小超过 ${formatBudgetMiB(maxPayloadBytes)}，当前为 ${formatBudgetMiB(bytes)}。请删除部分图片或换更小文件后重试。`,
+    );
+  }
+  return { count: items.length, totalBytes: bytes };
 }
 
 async function compressOne(
@@ -72,7 +118,7 @@ async function compressAll(
 
 /**
  * Prepare reference images for an Images API / edit request.
- * Caps count, compresses to AIS primary then fallback edges, enforces 8 MiB total.
+ * Rejects excess count, compresses to AIS primary then fallback edges, enforces 8 MiB total.
  */
 export async function prepareGenerationReferencePayload(
   images: readonly GenerationReferencePayloadInput[],
@@ -95,7 +141,13 @@ export async function prepareGenerationReferencePayload(
     };
   }
 
-  const limited = images.slice(0, maxCount);
+  if (images.length > maxCount) {
+    throw new GenerationReferencePayloadError(
+      `参考图最多 ${maxCount} 张，当前为 ${images.length} 张。请删除部分参考图后重试。`,
+    );
+  }
+
+  const limited = [...images];
   const originalBytes = totalBytes(limited);
 
   if (originalBytes <= maxPayloadBytes) {

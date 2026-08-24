@@ -91,6 +91,13 @@ describe("settings UI", () => {
     ).toBeNull();
     expect(
       connectionFeedbackMessage({
+        draftChanged: true,
+        testing: false,
+        result: { ok: true, message: "当前未保存配置连接成功。" },
+      }),
+    ).toBe("当前未保存配置连接成功。");
+    expect(
+      connectionFeedbackMessage({
         draftChanged: false,
         testing: false,
         result: { ok: true, message: "文本策划 API 连接成功。" },

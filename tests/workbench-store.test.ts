@@ -250,6 +250,28 @@ describe("workbench store", () => {
     ]);
   });
 
+  it("rejects non-image files before compression or asset persistence", async () => {
+    const dependencies = createDependencies();
+    let compressionCalls = 0;
+    const store = createWorkbenchStore({
+      ...dependencies,
+      compressImageFile: async (file) => {
+        compressionCalls += 1;
+        return file;
+      },
+    });
+    await store.getState().createProject({ name: "文件类型校验", facts: productFacts });
+
+    const uploaded = await store.getState().uploadReferenceFiles([
+      new File(["not an image"], "商品说明.txt", { type: "text/plain" }),
+    ]);
+
+    expect(uploaded).toEqual([]);
+    expect(store.getState().error).toContain("商品说明.txt");
+    expect(compressionCalls).toBe(0);
+    expect(await dependencies.assetRepository.list("project_01")).toEqual([]);
+  });
+
   it("rolls back a failed upload batch so retry cannot create hidden duplicates", async () => {
     const projectRepository = createMemoryProjectRepository({
       createId: () => "project_01",
@@ -400,6 +422,74 @@ describe("workbench store", () => {
     ]);
     expect(await projectRepository.getActiveId()).toBe(first.id);
     expect(revoked).toEqual(["blob:switch/1"]);
+  });
+
+  it("keeps the latest overlapping project selection and revokes stale preview URLs", async () => {
+    const projectIds = ["project_01", "project_02"];
+    const assetIds = ["asset_01", "asset_02"];
+    const projectRepository = createMemoryProjectRepository({
+      createId: () => projectIds.shift()!,
+    });
+    const assetRepository = createMemoryAssetRepository({
+      createId: () => assetIds.shift()!,
+    });
+    const workspaceRepository = createMemoryWorkspaceRepository();
+    const first = await projectRepository.create({ name: "较慢项目", facts: productFacts });
+    const second = await projectRepository.create({ name: "最终项目", facts: productFacts });
+    await assetRepository.put({
+      projectId: first.id,
+      blob: new Blob(["first"], { type: "image/png" }),
+      metadata: { name: "first.png", kind: "reference" },
+    });
+    await assetRepository.put({
+      projectId: second.id,
+      blob: new Blob(["second"], { type: "image/png" }),
+      metadata: { name: "second.png", kind: "reference" },
+    });
+    const baseLoad = workspaceRepository.load.bind(workspaceRepository);
+    let releaseFirstWorkspace!: () => void;
+    const firstWorkspaceGate = new Promise<void>((resolve) => {
+      releaseFirstWorkspace = resolve;
+    });
+    workspaceRepository.load = async (projectId) => {
+      if (projectId === first.id) await firstWorkspaceGate;
+      return baseLoad(projectId);
+    };
+    const revoked: string[] = [];
+    let objectUrlSequence = 0;
+    let notifyStaleUrl!: () => void;
+    const staleUrlCreated = new Promise<void>((resolve) => {
+      notifyStaleUrl = resolve;
+    });
+    const store = createWorkbenchStore({
+      projectRepository,
+      assetRepository,
+      workspaceRepository,
+      compressImageFile: async (file) => file,
+      createObjectURL: () => {
+        const url = `blob:race/${++objectUrlSequence}`;
+        if (objectUrlSequence === 1) notifyStaleUrl();
+        return url;
+      },
+      revokeObjectURL: (url) => revoked.push(url),
+    });
+
+    const staleSelection = store.getState().selectProject(first.id);
+    await staleUrlCreated;
+    await store.getState().selectProject(second.id);
+    releaseFirstWorkspace();
+    await staleSelection;
+
+    expect(store.getState().activeProject?.id).toBe(second.id);
+    expect(await projectRepository.getActiveId()).toBe(second.id);
+    expect(store.getState().assets).toEqual([
+      {
+        metadata: expect.objectContaining({ name: "second.png" }),
+        objectUrl: "blob:race/2",
+      },
+    ]);
+    expect(revoked).toEqual(["blob:race/1"]);
+    expect(store.getState().loading).toBe(false);
   });
 
   it("removes an asset from the repository and revokes its object URL", async () => {

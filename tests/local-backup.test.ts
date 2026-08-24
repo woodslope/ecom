@@ -188,4 +188,141 @@ describe("local backup", () => {
       storage: { [LAST_PLATFORM_STORAGE_KEY]: "amazon" },
     }))).not.toThrow();
   });
+
+  it("validates nested asset, Run, event and job records while keeping V1 optional fields compatible", () => {
+    const run = createRun();
+    const job = createExecutionJob({
+      id: "job_01",
+      kind: "batch-generate",
+      targets: [{
+        id: "item_01",
+        projectId: "project_01",
+        sessionId: "session_01",
+        platformId: "amazon",
+        workflowId: "amazon-listing",
+        slotKey: "MAIN",
+      }],
+      now: "2026-07-28T09:00:00.000Z",
+    });
+    const asset = {
+      id: "asset_01",
+      projectId: "project_01",
+      metadata: {
+        id: "asset_01",
+        projectId: "project_01",
+        name: "front.png",
+        kind: "reference",
+        tags: ["front"],
+        mimeType: "image/png",
+        size: 1,
+        createdAt: "2026-07-28T08:00:00.000Z",
+        updatedAt: "2026-07-28T08:00:00.000Z",
+      },
+      dataUrl: "data:image/png;base64,AA==",
+    };
+    const base = {
+      format: "ecom-local-backup",
+      version: 1,
+      exportedAt: "2026-07-28T09:00:00.000Z",
+      storage: {},
+      indexedDb: { assets: [asset], runs: [run], jobs: [job] },
+    };
+
+    expect(() => parseLocalBackup(JSON.stringify(base))).not.toThrow();
+    expect(() => parseLocalBackup(JSON.stringify({
+      ...base,
+      indexedDb: {
+        ...base.indexedDb,
+        runs: [{
+          ...run,
+          contextSnapshot: {
+            ...run.contextSnapshot,
+            planningInput: {
+              sourceMode: "manual",
+              quality: "facts-only",
+              missingFacts: ["商品参考图"],
+              productText: "Title: Travel Pillow",
+              selectedReferenceAssetIds: [],
+            },
+          },
+        }],
+      },
+    }))).not.toThrow();
+    expect(() => parseLocalBackup(JSON.stringify({
+      ...base,
+      indexedDb: {
+        ...base.indexedDb,
+        assets: [{ ...asset, metadata: { ...asset.metadata, tags: "front" } }],
+      },
+    }))).toThrow("素材元数据无效");
+    expect(() => parseLocalBackup(JSON.stringify({
+      ...base,
+      indexedDb: {
+        ...base.indexedDb,
+        runs: [{
+          ...run,
+          contextSnapshot: { ...run.contextSnapshot, selectedReferenceAssetIds: "asset_01" },
+        }],
+      },
+    }))).toThrow("生产记录上下文无效");
+    expect(() => parseLocalBackup(JSON.stringify({
+      ...base,
+      indexedDb: {
+        ...base.indexedDb,
+        runs: [{
+          ...run,
+          events: [{
+            id: "event_01",
+            runId: "another_run",
+            kind: "generate",
+            status: "success",
+            createdAt: run.updatedAt,
+          }],
+        }],
+      },
+    }))).toThrow("生产事件无效");
+    expect(() => parseLocalBackup(JSON.stringify({
+      ...base,
+      indexedDb: {
+        ...base.indexedDb,
+        jobs: [{
+          ...job,
+          items: [{ ...job.items[0], target: { ...job.items[0]!.target, slotKey: 42 } }],
+        }],
+      },
+    }))).toThrow("本地任务项无效");
+  });
+
+  it("rejects invalid nested records before clearing current business data", async () => {
+    const indexedDB = new IDBFactory();
+    const storage = new MemoryStorage();
+    const currentProjects = JSON.stringify({
+      version: 2,
+      projects: [{ id: "current_project", name: "当前商品" }],
+      activeProjectId: "current_project",
+    });
+    storage.setItem(DEFAULT_PROJECT_STORAGE_KEY, currentProjects);
+    const run = createRun();
+    const invalidBackup = {
+      format: "ecom-local-backup",
+      version: 1,
+      exportedAt: "2026-07-28T09:00:00.000Z",
+      storage: {},
+      indexedDb: {
+        assets: [],
+        runs: [{
+          ...run,
+          planSnapshot: {
+            ...run.planSnapshot,
+            slots: [{ slotKey: "MAIN", prompt: "missing required fields" }],
+          },
+        }],
+        jobs: [],
+      },
+    } as unknown as Parameters<typeof restoreLocalBackup>[0];
+
+    await expect(restoreLocalBackup(invalidBackup, { storage, indexedDB }))
+      .rejects.toThrow("生产记录无效");
+    expect(storage.getItem(DEFAULT_PROJECT_STORAGE_KEY)).toBe(currentProjects);
+  });
 });
