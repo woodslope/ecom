@@ -365,13 +365,6 @@ export function PlatformWorkspace({
     ),
   );
   const draftReason = workspaceDraftReason(sourceDirty, slotDirty);
-  const planDescriptionId = planningLocked
-    ? "planning-task-status"
-    : draftReason
-      ? "workspace-draft-status"
-      : planNeedsRefresh
-        ? "plan-freshness-status"
-      : undefined;
 
   useEffect(() => {
     setSourceCollapsed(
@@ -426,6 +419,15 @@ export function PlatformWorkspace({
       generatingSlot?.platformId === platform ||
       copilotTarget,
   );
+  const planDescriptionId = planningLocked
+    ? "planning-task-status"
+    : draftReason
+      ? "workspace-draft-status"
+      : planNeedsRefresh
+        ? "plan-freshness-status"
+        : planActionDisabled && planDisabledReason
+          ? "plan-disabled-status"
+          : undefined;
   const pendingSlotCount = plan
     ? rulePack.slots.filter((rule) => {
         const plannedSlot = plan.slots.find((slot) => slot.slotKey === rule.key);
@@ -512,6 +514,12 @@ export function PlatformWorkspace({
       {planRefreshReason ? (
         <StatusMessage id="plan-freshness-status" tone="warning" live="polite">
           {planRefreshReason}
+        </StatusMessage>
+      ) : null}
+
+      {planDescriptionId === "plan-disabled-status" ? (
+        <StatusMessage id="plan-disabled-status" tone="warning">
+          {planDisabledReason}
         </StatusMessage>
       ) : null}
 

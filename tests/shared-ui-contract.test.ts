@@ -12,6 +12,10 @@ import platformWorkspaceSource from "../src/components/PlatformWorkspace.tsx?raw
 import productionRunCardSource from "../src/components/ProductionRunCard.tsx?raw";
 import settingsDialogSource from "../src/components/SettingsDialog.tsx?raw";
 import slotInspectorSource from "../src/components/SlotInspector.tsx?raw";
+import assetLibrarySource from "../src/components/AssetLibrary.tsx?raw";
+import amazonIntakeSource from "../src/components/AmazonIntake.tsx?raw";
+import localizedFactsReviewSource from "../src/components/LocalizedFactsReview.tsx?raw";
+import taobaoIntakeSource from "../src/components/TaobaoIntake.tsx?raw";
 import promptAssetCenterSource from "../src/components/PromptAssetCenterDialog.tsx?raw";
 import promptProfileSource from "../src/components/PromptProfileDialog.tsx?raw";
 import industryTemplateSource from "../src/components/IndustryTemplateSelector.tsx?raw";
@@ -30,6 +34,8 @@ import {
   StatusMessage,
   Tooltip,
 } from "../src/components/ui";
+import { ExportPanel } from "../src/components/ExportPanel";
+import { ProductContextBar } from "../src/components/ProductContextBar";
 
 describe("shared workbench primitives", () => {
   it("renders the Commerce Ops control and state families", () => {
@@ -158,6 +164,36 @@ describe("shared workbench primitives", () => {
     expect(buttons.match(/disabled=""/g)).toHaveLength(3);
   });
 
+  it("keeps disabled explanations visible and associated with their controls", () => {
+    const exportMarkup = renderToStaticMarkup(
+      createElement(ExportPanel, {
+        platformLabel: "Amazon",
+        completedSlots: 0,
+        totalSlots: 7,
+        exporting: false,
+        compact: true,
+        disabled: true,
+        disabledReason: "请先完成当前图片策划。",
+        onExport: () => undefined,
+        onClearError: () => undefined,
+      }),
+    );
+    const contextMarkup = renderToStaticMarkup(
+      createElement(ProductContextBar, {
+        platformLabel: "淘宝 / 天猫",
+        project: null,
+        statusLabel: "图片策划",
+        detailLabel: "分析详情",
+        onOpenDetails: () => undefined,
+      }),
+    );
+
+    expect(exportMarkup).toContain("请先完成当前图片策划。");
+    expect(exportMarkup).toMatch(/aria-describedby="[^"]+"/);
+    expect(contextMarkup).toContain('aria-label="未命名任务，分析详情"');
+    expect(contextMarkup).not.toContain('aria-label="分析详情"');
+  });
+
   it("protects shared select, compact size, and disabled visual contracts", () => {
     const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
@@ -204,6 +240,25 @@ describe("shared workbench primitives", () => {
     expect(productionRunCardSource).toContain("回看阶段");
     expect(productionRunCardSource).toContain("生成阶段");
     expect(productionRunCardSource).toContain('aria-label="生成阶段列表"');
+    expect(productionRunCardSource).toContain("aria-controls={detailsId}");
+    expect(productionRunCardSource).toContain('id={detailsId}');
+    expect(amazonIntakeSource).toContain('tabIndex={-1}');
+    expect(amazonIntakeSource).toContain('aria-hidden="true"');
+    expect(amazonIntakeSource).toContain("移除文件 ${file.name}");
+    expect(assetLibrarySource).toContain('data-testid="asset-library-upload"');
+    expect(assetLibrarySource).toContain('aria-hidden="true"');
+    expect(industryTemplateSource).toContain("aria-pressed={selectedId === SYSTEM_GENERAL_TEMPLATE_ID}");
+    expect(industryTemplateSource).toContain("aria-pressed={selectedId === pack.id}");
+    expect(localizedFactsReviewSource).not.toContain('live="polite"');
+    expect(promptAssetCenterSource).toContain("aria-describedby={aiRewriteDisabledReason ? aiRewriteReasonId : undefined}");
+    expect(promptAssetCenterSource).toContain("prompt-asset-center__disabled-reason");
+    expect(taobaoIntakeSource).toContain("aria-describedby={reanalyzeDisabledReason ? reanalyzeReasonId : undefined}");
+    expect(taobaoIntakeSource).toContain("taobao-analysis-summary__reanalyze-reason");
+    const actionBarSource = uiSource.slice(
+      uiSource.indexOf("export function ActionBar"),
+      uiSource.indexOf("export function Field"),
+    );
+    expect(actionBarSource).not.toContain("closeLabel?: string;");
     expect(styles).toMatch(/\.app-frame\s*{[^}]*height:\s*100vh/);
     // UI_STYLE_GUIDE §3 desktop workbench columns
     expect(styles).toMatch(

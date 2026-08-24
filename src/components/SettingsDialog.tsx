@@ -81,7 +81,6 @@ export function SettingsDialog({
   loading = false,
   error = null,
   connectionStatus = "idle",
-  connectionMessage = null,
   textConnectionStatus,
   textConnectionMessage = null,
   imageConnectionStatus,
@@ -100,7 +99,6 @@ export function SettingsDialog({
   loading?: boolean;
   error?: string | null;
   connectionStatus?: "idle" | "testing" | "success" | "error";
-  connectionMessage?: string | null;
   textConnectionStatus?: "idle" | "testing" | "success" | "error";
   textConnectionMessage?: string | null;
   imageConnectionStatus?: "idle" | "testing" | "success" | "error";
@@ -547,7 +545,6 @@ export function SettingsDialog({
         {lockReason ? <StatusMessage tone="warning">{lockReason}</StatusMessage> : null}
         {error && !hasFieldError ? <StatusMessage tone="danger" live="assertive">{error}</StatusMessage> : null}
         {saveMessage ? <StatusMessage tone="success" live="polite">{saveMessage}</StatusMessage> : null}
-        {connectionMessage && !textConnectionStatus && !imageConnectionStatus ? null : null}
       </form>
       </Dialog>
       <ConfirmDialog

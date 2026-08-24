@@ -9,7 +9,7 @@ import type { LucideIcon } from "lucide-react";
 import { navigationItems } from "../domain/platforms/registry";
 import type { NavigationItemId } from "../domain/platforms/types";
 import type { RuntimeMode } from "../domain/settings";
-import { StatusChip, Tooltip } from "./ui";
+import { Button, StatusChip, Tooltip } from "./ui";
 
 const iconById: Partial<Record<NavigationItemId, LucideIcon>> = {
   taobao: ShoppingBag,
@@ -47,7 +47,9 @@ export function PlatformRail({
     const isActive = activeItem === item.id;
     return (
       <Tooltip key={item.id} label={item.label} className="rail-tooltip">
-        <button
+        <Button
+          type="button"
+          variant="quiet"
           className={`rail-item rail-item--${item.kind}${isActive ? " rail-item--active" : ""}`}
           onClick={() => onChange(item.id)}
           aria-label={item.label}
@@ -61,7 +63,7 @@ export function PlatformRail({
             <strong>{item.label}</strong>
             <small>{navigationDescriptions[item.id] ?? item.label}</small>
           </span>
-        </button>
+        </Button>
       </Tooltip>
     );
   };
@@ -93,8 +95,9 @@ export function PlatformRail({
             label={`当前运行模式：${runtimeMode === "api" ? "API" : "本地演示"}，点击打开设置`}
             className="rail-tooltip"
           >
-            <button
+            <Button
               type="button"
+              variant="quiet"
               className="runtime-badge-button"
               aria-label={`当前运行模式：${runtimeMode === "api" ? "API" : "本地演示"}，打开设置`}
               onClick={() => onChange("settings")}
@@ -102,7 +105,7 @@ export function PlatformRail({
               <StatusChip tone="mode" className="runtime-badge">
                 <span className="runtime-badge__text">{runtimeMode === "api" ? "API" : "Demo"}</span>
               </StatusChip>
-            </button>
+            </Button>
           </Tooltip>
         </div>
         {renderItem(settingsItem)}

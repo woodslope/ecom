@@ -188,6 +188,39 @@ try {
       await page.getByRole("button", { name: platform, exact: true }).click();
       const requirement = page.locator(".planning-input-requirement");
       assert(await requirement.isVisible(), `${width}px ${platform} 空输入要求不可见`);
+      const planningButton = page.getByRole("button", { name: "生成图片策划", exact: true });
+      const describedBy = await planningButton.getAttribute("aria-describedby");
+      assert(describedBy, `${width}px ${platform} 禁用策划按钮缺少 aria-describedby`);
+      assert(await page.locator(`#${describedBy}`).isVisible(), `${width}px ${platform} 禁用原因不可见`);
+      if (platform === "Amazon") {
+        const hiddenInputState = await page.locator("input.visually-hidden-input").evaluateAll((nodes) =>
+          nodes.map((node) => ({
+            tabIndex: node.tabIndex,
+            ariaHidden: node.getAttribute("aria-hidden"),
+          })),
+        );
+        assert(
+          hiddenInputState.length > 0 && hiddenInputState.every((item) => item.tabIndex === -1 && item.ariaHidden === "true"),
+          `${width}px Amazon 程序触发文件输入仍可聚焦或未从辅助技术树隐藏`,
+        );
+        const uploadButton = page.getByRole("button", { name: "选择图片", exact: true }).first();
+        await uploadButton.focus();
+        await page.keyboard.press("Tab");
+        assert(
+          await page.evaluate(() => !document.activeElement?.matches("input.visually-hidden-input")),
+          `${width}px Amazon Tab 序列仍进入程序触发的隐藏文件输入`,
+        );
+        const advancedSettings = page.locator("details.task-advanced-settings").first();
+        await advancedSettings.evaluate((element) => {
+          if (element instanceof HTMLDetailsElement) element.open = true;
+        });
+        await page.getByRole("button", { name: "管理模板", exact: true }).click();
+        const templateDialog = page.getByRole("dialog", { name: "行业模板库", exact: true });
+        await templateDialog.waitFor({ state: "visible" });
+        const selectedTemplate = templateDialog.locator(".industry-template-card[aria-pressed='true']");
+        assert(await selectedTemplate.count() === 1, `${width}px Amazon 模板库选中卡片缺少 aria-pressed=true`);
+        await templateDialog.getByRole("button", { name: "完成", exact: true }).click();
+      }
       assert((await page.locator(".workbench-chrome__tools").getByRole("button", { name: "新任务", exact: true }).count()) === 0, `${platform} 首次空白任务仍显示冗余新任务入口`);
       const historyTrigger = page.getByRole("button", { name: "历史记录", exact: true });
       await historyTrigger.click();
@@ -522,6 +555,16 @@ try {
     await page.getByRole("button", { name: "历史记录", exact: true }).click();
     await page.locator(".production-run-card").waitFor();
     assert((await page.locator(".production-run-card").count()) === 1, "Amazon 策划后历史未显示");
+    const historyCard = page.locator(".production-run-card").first();
+    const historyToggle = historyCard.locator("button[aria-controls]");
+    const detailsId = await historyToggle.getAttribute("aria-controls");
+    assert(detailsId, "历史卡片展开按钮缺少 aria-controls");
+    const historyDetails = page.locator(`#${detailsId}`);
+    assert(await historyDetails.count() === 1, "历史卡片 aria-controls 未指向稳定详情区域");
+    assert(await historyDetails.isHidden(), "历史卡片收起时详情区域应保持 hidden");
+    await historyToggle.click();
+    assert(await historyDetails.isVisible(), "历史卡片展开后详情区域不可见");
+    await historyToggle.click();
     await page.getByLabel("状态", { exact: true }).selectOption("failed");
     await page.getByText("筛选条件没有结果", { exact: true }).waitFor({ state: "visible" });
     await page.screenshot({ path: resolve(evidenceDir, "governance-history-filter-empty-1280.png"), animations: "disabled" });
@@ -589,6 +632,13 @@ try {
 
     await page.getByText("任务设置", { exact: true }).click();
     await page.getByRole("button", { name: "编辑任务输入", exact: true }).click();
+    const sourceFileInputs = await page.locator(".workbench-source-column input.visually-hidden-input").evaluateAll((nodes) =>
+      nodes.map((node) => ({ tabIndex: node.tabIndex, ariaHidden: node.getAttribute("aria-hidden") })),
+    );
+    assert(
+      sourceFileInputs.length > 0 && sourceFileInputs.every((item) => item.tabIndex === -1 && item.ariaHidden === "true"),
+      "资料库程序触发文件输入仍可聚焦或未从辅助技术树隐藏",
+    );
     const compactSource = await page.evaluate(() => {
       const source = document.querySelector(".workbench-source-column:not([hidden])");
       const slots = document.querySelector(".workbench-panel--slots");

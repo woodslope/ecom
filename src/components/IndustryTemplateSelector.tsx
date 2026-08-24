@@ -306,6 +306,7 @@ export function IndustryTemplateSelector({
             <button
               type="button"
               className={`industry-template-card${selectedId === SYSTEM_GENERAL_TEMPLATE_ID ? " industry-template-card--selected" : ""}`}
+              aria-pressed={selectedId === SYSTEM_GENERAL_TEMPLATE_ID}
               onClick={() => selectForPreview(SYSTEM_GENERAL_TEMPLATE_ID)}
             >
               <span className="industry-template-card__icon"><Layers3 size={16} /></span>
@@ -318,6 +319,7 @@ export function IndustryTemplateSelector({
                   type="button"
                   key={pack.id}
                   className={`industry-template-card${selectedId === pack.id ? " industry-template-card--selected" : ""}`}
+                  aria-pressed={selectedId === pack.id}
                   onClick={() => selectForPreview(pack.id)}
                 >
                   <span className="industry-template-card__icon"><Library size={16} /></span>

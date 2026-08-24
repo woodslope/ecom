@@ -59,6 +59,9 @@ export function AssetLibrary({
               type="file"
               accept="image/*"
               multiple
+              disabled={loading || disabled}
+              tabIndex={-1}
+              aria-hidden="true"
               onChange={changeFiles}
               data-testid="asset-library-upload"
             />

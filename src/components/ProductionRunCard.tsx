@@ -54,6 +54,7 @@ export function ProductionRunCard({ record, expanded, current, assetUrls, busy, 
   const visiblePreviewAssetIds = visiblePreviews.map((event) => event.assetId);
   const visiblePreviewAssetKey = visiblePreviewAssetIds.join("|");
   const hiddenPreviewCount = Math.max(0, previewOutputs.length - visiblePreviews.length);
+  const detailsId = `production-run-details-${run.id}`;
   const lastEvent = run.events.at(-1);
   const canPreview = Boolean(
     run.planningInputSignatureSnapshot &&
@@ -133,7 +134,13 @@ export function ProductionRunCard({ record, expanded, current, assetUrls, busy, 
           {!compact && manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存商品</Button> : null}
           {!compact && canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}
           {!compact && onExport && outputEvents.length > 0 ? <Button variant="secondary" size="compact" disabled={busy} onClick={onExport}><Download size={14} />重新导出</Button> : null}
-          <Button variant="quiet" size="compact" aria-expanded={expanded} onClick={onToggle}>
+          <Button
+            variant="quiet"
+            size="compact"
+            aria-expanded={expanded}
+            aria-controls={detailsId}
+            onClick={onToggle}
+          >
             {expanded ? "收起阶段" : "回看阶段"}
             <ChevronDown size={15} className={expanded ? "production-run-card__chevron--open" : ""} aria-hidden="true" />
           </Button>
@@ -148,40 +155,43 @@ export function ProductionRunCard({ record, expanded, current, assetUrls, busy, 
         </div>
       </div>
 
-      {expanded ? <div className="production-run-card__details">
-        <div className="production-run-card__details-heading">
-          <strong>生成阶段</strong>
-          <code>{run.id}</code>
-        </div>
-        {compact ? (
-          <div className="production-run-card__details-actions">
-            {manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存商品</Button> : null}
-            {canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}
-            {onExport && outputEvents.length > 0 ? <Button variant="secondary" size="compact" disabled={busy} onClick={onExport}><Download size={14} />重新导出</Button> : null}
-          </div>
-        ) : null}
-        <ol className="production-run-events" aria-label="生成阶段列表">
-          {[...run.events].reverse().map((event) => <li key={event.id} className={`production-run-event production-run-event--${event.status}`} aria-label={`阶段：${eventLabels[event.kind]}${event.slotKey ? ` · ${event.slotKey}` : ""}`}>
-            {event.assetId && assetUrls[event.assetId] ? <img src={assetUrls[event.assetId]} alt={`${event.slotKey ?? "历史"} 输出缩略图`} /> : <span className="production-run-event__marker" />}
-            <span><strong>{eventLabels[event.kind]}{event.slotKey ? ` · ${event.slotKey}` : ""}</strong><time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("zh-CN")}</time>{event.artifactFileName ? <code>{event.artifactFileName}</code> : null}</span>
-            {outputEvent(event) && assetUrls[event.assetId!] ? (
-              <ImageTools
-                fileName={`${run.platformId}-${event.slotKey}-${event.versionId ?? "output"}.png`}
-                editingSupported={false}
-                editingDisabledReason="历史快照不可直接改写；请先继续任务或基于记录新建。"
-                showEditingHint={false}
-                busy={busy}
-                onDownload={() => downloadOutput(
-                  assetUrls[event.assetId!]!,
-                  `${run.platformId}-${event.slotKey}-${event.versionId ?? "output"}.png`,
-                )}
-                onUseAsReference={() => onReuse(event.id)}
-                onEdit={() => undefined}
-              />
+      <div id={detailsId} className="production-run-card__details" hidden={!expanded}>
+        {expanded ? (
+          <>
+            <div className="production-run-card__details-heading">
+              <strong>生成阶段</strong>
+              <code>{run.id}</code>
+            </div>
+            {compact ? (
+              <div className="production-run-card__details-actions">
+                {manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存商品</Button> : null}
+                {canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}
+                {onExport && outputEvents.length > 0 ? <Button variant="secondary" size="compact" disabled={busy} onClick={onExport}><Download size={14} />重新导出</Button> : null}
+              </div>
             ) : null}
-          </li>)}
-        </ol>
-      </div> : null}
+            <ol className="production-run-events" aria-label="生成阶段列表">
+              {[...run.events].reverse().map((event) => <li key={event.id} className={`production-run-event production-run-event--${event.status}`} aria-label={`阶段：${eventLabels[event.kind]}${event.slotKey ? ` · ${event.slotKey}` : ""}`}>
+                {event.assetId && assetUrls[event.assetId] ? <img src={assetUrls[event.assetId]} alt={`${event.slotKey ?? "历史"} 输出缩略图`} /> : <span className="production-run-event__marker" />}
+                <span><strong>{eventLabels[event.kind]}{event.slotKey ? ` · ${event.slotKey}` : ""}</strong><time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("zh-CN")}</time>{event.artifactFileName ? <code>{event.artifactFileName}</code> : null}</span>
+                {outputEvent(event) && assetUrls[event.assetId!] ? (
+                  <ImageTools
+                    fileName={`${run.platformId}-${event.slotKey}-${event.versionId ?? "output"}.png`}
+                    editingSupported={false}
+                    editingDisabledReason="历史快照不可直接改写；请先继续任务或基于记录新建。"
+                    busy={busy}
+                    onDownload={() => downloadOutput(
+                      assetUrls[event.assetId!]!,
+                      `${run.platformId}-${event.slotKey}-${event.versionId ?? "output"}.png`,
+                    )}
+                    onUseAsReference={() => onReuse(event.id)}
+                    onEdit={() => undefined}
+                  />
+                ) : null}
+              </li>)}
+            </ol>
+          </>
+        ) : null}
+      </div>
       {run.platformId === "taobao" && run.planningInputSignatureSnapshot && run.slotVersionsSnapshot ? (
         <TaobaoMobilePreview
           open={previewOpen}

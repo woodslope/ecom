@@ -1,7 +1,7 @@
 import { FileText } from "lucide-react";
 
 import type { ProductProject } from "../domain/projects/types";
-import { StatusChip } from "./ui";
+import { Button, StatusChip } from "./ui";
 
 export function ProductContextBar({
   platformLabel,
@@ -34,16 +34,17 @@ export function ProductContextBar({
         <FileText size={17} />
       </span>
       {detailLabel && onOpenDetails ? (
-        <button
+        <Button
           type="button"
           className="product-context-bar__identity"
-          aria-label={detailLabel}
-          title={detailLabel}
+          variant="quiet"
+          aria-label={`${taskName}，${detailLabel}`}
+          title={`${taskName}：${detailLabel}`}
           disabled={disabled}
           onClick={onOpenDetails}
         >
           {identityContent}
-        </button>
+        </Button>
       ) : (
         <div className="product-context-bar__identity" title={taskName}>
           {identityContent}

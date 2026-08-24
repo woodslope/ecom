@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { ArrowRight, Bot, Columns3, Copy, Library, LoaderCircle, Save, ShieldAlert, Square, WandSparkles } from "lucide-react";
 
 import {
@@ -153,6 +153,8 @@ export function SlotInspector({
   const [maskEditorError, setMaskEditorError] = useState<string | null>(null);
   const [industryTemplateMessage, setIndustryTemplateMessage] = useState<string | null>(null);
   const [industryTemplateConfirmOpen, setIndustryTemplateConfirmOpen] = useState(false);
+  const saveDisabledReasonId = useId();
+  const nextSlotDisabledReasonId = useId();
   const [renderedDimensions, setRenderedDimensions] = useState<{
     width: number;
     height: number;
@@ -188,6 +190,14 @@ export function SlotInspector({
       : generationLocked && !generating
         ? generationLockReason
         : undefined;
+  const saveDisabledReason = submitting
+    ? "当前有保存、生成或策划刷新进行中。"
+    : prompt.trim().length === 0
+      ? "请先填写图片提示词再保存。"
+      : undefined;
+  const nextSlotDisabledReason = draftDirty
+    ? "请先在“文案”中保存当前修改，再切换槽位。"
+    : undefined;
   const activeVersion = activeSlotVersion(versionState);
   const activeVersionIsCurrent = activeVersion
     ? isSlotVersionCurrent(slot, activeVersion, planningInputSignature)
@@ -746,17 +756,17 @@ export function SlotInspector({
                 variant="secondary"
                 size="compact"
                 disabled={submitting || prompt.trim().length === 0}
-                title={
-                  submitting
-                    ? "当前有保存、生成或策划刷新进行中。"
-                    : prompt.trim().length === 0
-                      ? "请先填写图片提示词再保存。"
-                      : undefined
-                }
+                title={saveDisabledReason}
+                aria-describedby={saveDisabledReason ? saveDisabledReasonId : undefined}
               >
                 <Save size={15} />
                 {busy ? "保存中…" : hasExternalText ? "保存外部文案与提示词" : "保存文案与提示词"}
               </Button>
+            ) : null}
+            {activePane === "copy" && saveDisabledReason ? (
+              <StatusMessage id={saveDisabledReasonId} className="slot-inspector__disabled-reason">
+                {saveDisabledReason}
+              </StatusMessage>
             ) : null}
             {nextSlotAction && activeVersion ? (
               <GenerationActions
@@ -773,15 +783,23 @@ export function SlotInspector({
         }
         primary={
           nextSlotAction ? (
-            <Button
-              size="compact"
-              disabled={submitting || draftDirty}
-              title={draftDirty ? "请先在“文案”中保存当前修改，再切换槽位。" : undefined}
-              onClick={nextSlotAction.onSelect}
-            >
-              {nextSlotAction.label}
-              <ArrowRight size={15} />
-            </Button>
+            <>
+              <Button
+                size="compact"
+                disabled={submitting || draftDirty}
+                title={nextSlotDisabledReason}
+                aria-describedby={nextSlotDisabledReason ? nextSlotDisabledReasonId : undefined}
+                onClick={nextSlotAction.onSelect}
+              >
+                {nextSlotAction.label}
+                <ArrowRight size={15} />
+              </Button>
+              {nextSlotDisabledReason ? (
+                <StatusMessage id={nextSlotDisabledReasonId} className="slot-inspector__disabled-reason">
+                  {nextSlotDisabledReason}
+                </StatusMessage>
+              ) : null}
+            </>
           ) : (
             <GenerationActions
               hasVersion={Boolean(activeVersion)}

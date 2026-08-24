@@ -182,7 +182,6 @@ export function App() {
     settingsLoading,
     settingsError,
     connectionTestStatus,
-    connectionTestMessage,
     textConnectionTestStatus,
     textConnectionTestMessage,
     imageConnectionTestStatus,
@@ -720,7 +719,6 @@ export function App() {
       settingsLoading={settingsLoading}
       settingsError={settingsError}
       connectionTestStatus={connectionTestStatus}
-      connectionTestMessage={connectionTestMessage}
       textConnectionTestStatus={textConnectionTestStatus}
       textConnectionTestMessage={textConnectionTestMessage}
       imageConnectionTestStatus={imageConnectionTestStatus}

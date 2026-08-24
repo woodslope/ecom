@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Bot, Bookmark, BookmarkCheck, Library, Plus, RotateCcw, Trash2 } from "lucide-react";
 
 import {
@@ -37,6 +37,7 @@ export function PromptAssetCenterDialog({
   onAIRewrite: () => void;
   onClose: () => void;
 }) {
+  const aiRewriteReasonId = useId();
   const storage = typeof window !== "undefined" ? window.localStorage : null;
   const [assets, setAssets] = useState<SlotPromptAsset[]>([]);
   const [defaultAssetId, setDefaultAssetId] = useState<string | null>(null);
@@ -265,6 +266,7 @@ export function PromptAssetCenterDialog({
               variant="secondary"
               disabled={Boolean(aiRewriteDisabledReason)}
               title={aiRewriteDisabledReason}
+              aria-describedby={aiRewriteDisabledReason ? aiRewriteReasonId : undefined}
               onClick={() => {
                 onClose();
                 onAIRewrite();
@@ -274,6 +276,11 @@ export function PromptAssetCenterDialog({
               AI 改写
             </Button>
           </div>
+          {aiRewriteDisabledReason ? (
+            <StatusMessage id={aiRewriteReasonId} className="prompt-asset-center__disabled-reason">
+              {aiRewriteDisabledReason}
+            </StatusMessage>
+          ) : null}
 
           {selectedAsset ? (
             <Button variant="quiet" size="compact" onClick={saveNewVersion}>

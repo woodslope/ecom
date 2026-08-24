@@ -32,7 +32,6 @@ describe("settings UI", () => {
         loading: false,
         error: null,
         connectionStatus: "idle",
-        connectionMessage: null,
         onClose: () => undefined,
         onSave: async () => true,
         onTest: async () => ({ ok: true, message: "连接成功" }),
@@ -109,7 +108,6 @@ describe("settings UI", () => {
         open: true,
         settings: apiSettings,
         connectionStatus: "success",
-        connectionMessage: "旧配置连接成功",
         onClose: () => undefined,
       }),
     );
@@ -150,7 +148,7 @@ describe("settings UI", () => {
         open: true,
         settings: apiSettings,
         connectionStatus: "testing",
-        connectionMessage: "正在测试文本策划 API...",
+        textConnectionStatus: "testing",
         onClose: () => undefined,
       }),
     );

@@ -1,4 +1,5 @@
 import { Download, ImagePlus, ScanLine } from "lucide-react";
+import { useId } from "react";
 
 import { Button, IconButton, StatusMessage } from "./ui";
 
@@ -21,6 +22,7 @@ export function ImageTools({
   onUseAsReference: () => void;
   onEdit: () => void;
 }) {
+  const editingReasonId = useId();
   return (
     <div className="image-tools" aria-label="图片工具">
       <IconButton label={`下载 ${fileName}`} disabled={busy} onClick={onDownload}>
@@ -35,13 +37,14 @@ export function ImageTools({
         size="compact"
         disabled={busy || !editingSupported}
         title={!editingSupported ? editingDisabledReason : undefined}
+        aria-describedby={!editingSupported && showEditingHint ? editingReasonId : undefined}
         onClick={onEdit}
       >
         <ScanLine size={15} />
         局部编辑
       </Button>
       {!editingSupported && showEditingHint ? (
-        <StatusMessage className="image-tools__hint">{editingDisabledReason}</StatusMessage>
+        <StatusMessage id={editingReasonId} className="image-tools__hint">{editingDisabledReason}</StatusMessage>
       ) : null}
     </div>
   );

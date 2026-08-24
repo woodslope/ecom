@@ -81,6 +81,9 @@ export function amazonOptionsFromControls(
 
 export function controlsFromPlan(plan?: PlatformPlan | null): AmazonSessionControlsState {
   const session = plan?.amazonSession;
+  // Older persisted plans used one combined Amazon mode. Keep them readable as
+  // Listing defaults until the user explicitly replans; remove after migration
+  // confirms no stored session emits legacy-combined.
   if (!session || session.plannerMode === "legacy-combined") {
     return {
       marketplaceId: session?.marketplaceId ?? DEFAULT_AMAZON_MARKETPLACE_ID,

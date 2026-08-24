@@ -58,6 +58,25 @@ describe("Task 5 UI contracts", () => {
     expect(markup).toContain("导出失败，请重试。");
   });
 
+  it("keeps compact export disabled reasons in the DOM", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ExportPanel, {
+        platformLabel: "Amazon",
+        completedSlots: 1,
+        totalSlots: 7,
+        exporting: false,
+        compact: true,
+        disabled: true,
+        disabledReason: "请先完成当前图片策划。",
+        onExport: () => undefined,
+        onClearError: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("请先完成当前图片策划。");
+    expect(markup).toMatch(/aria-describedby="[^"]+"/);
+  });
+
   it("renders restored task batches with platform, result, and artifact", () => {
     const markup = renderToStaticMarkup(
       createElement(TaskHistory, {

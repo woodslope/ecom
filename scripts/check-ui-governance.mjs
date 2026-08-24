@@ -288,6 +288,96 @@ function walkTsx(dir, out = []) {
       );
     }
   }
+
+  // Raw buttons are reserved for controls whose semantics are the domain object
+  // itself: selection cards, version cards, preview thumbnails, and canvas tools.
+  // Navigation, context actions, and file actions must use Button/IconButton.
+  const rawButtonExceptions = new Map([
+    ["src/components/SlotBoard.tsx", { label: "领域选择卡", count: 1, marker: "slot-card" }],
+    ["src/components/VersionStrip.tsx", { label: "版本卡", count: 1, marker: "version-tile" }],
+    ["src/components/IndustryTemplateSelector.tsx", { label: "领域选择卡", count: 2, marker: "industry-template-card" }],
+    ["src/components/PromptAssetCenterDialog.tsx", { label: "Prompt 资产卡", count: 2, marker: "prompt-asset-card" }],
+    ["src/components/AmazonMobilePreview.tsx", { label: "预览缩略图", count: 1, marker: "amazon-phone-preview__thumb" }],
+    ["src/components/TaobaoMobilePreview.tsx", { label: "预览缩略图", count: 1, marker: "taobao-phone-preview__thumb" }],
+    ["src/components/MaskEditorDialog.tsx", { label: "画布工具", count: null, marker: "mask-editor" }],
+  ]);
+  for (const file of files) {
+    const rel = relative(root, file).replaceAll("\\", "/");
+    const source = read(file);
+    const rawCount = (source.match(/<button\b/g) ?? []).length;
+    if (rawCount === 0) continue;
+    const exception = rawButtonExceptions.get(rel);
+    if (!exception) {
+      fail(`${rel}: raw <button> is outside the approved domain/card exceptions; use Button or IconButton.`);
+      continue;
+    }
+    if (exception.count !== null && rawCount !== exception.count) {
+      fail(`${rel}: expected ${exception.count} raw ${exception.label} button(s), found ${rawCount}; update the exception only with an explicit semantic review.`);
+    }
+    if (!source.includes(exception.marker)) {
+      fail(`${rel}: raw button exception must retain the ${exception.label} marker "${exception.marker}".`);
+    }
+    if ((source.match(/type="button"/g) ?? []).length < rawCount) {
+      fail(`${rel}: every approved raw button must declare type="button".`);
+    }
+  }
+
+  const semanticSources = new Map([
+    ["AmazonIntake.tsx", read(join(componentsDir, "AmazonIntake.tsx"))],
+    ["AssetLibrary.tsx", read(join(componentsDir, "AssetLibrary.tsx"))],
+    ["IndustryTemplateSelector.tsx", read(join(componentsDir, "IndustryTemplateSelector.tsx"))],
+    ["ProductContextBar.tsx", read(join(componentsDir, "ProductContextBar.tsx"))],
+    ["ProductionRunCard.tsx", read(join(componentsDir, "ProductionRunCard.tsx"))],
+    ["LocalizedFactsReview.tsx", read(join(componentsDir, "LocalizedFactsReview.tsx"))],
+    ["ExportPanel.tsx", read(join(componentsDir, "ExportPanel.tsx"))],
+    ["ImageTools.tsx", read(join(componentsDir, "ImageTools.tsx"))],
+    ["GenerationActions.tsx", read(join(componentsDir, "GenerationActions.tsx"))],
+    ["PromptAssetCenterDialog.tsx", read(join(componentsDir, "PromptAssetCenterDialog.tsx"))],
+    ["TaobaoIntake.tsx", read(join(componentsDir, "TaobaoIntake.tsx"))],
+    ["SlotInspector.tsx", read(join(componentsDir, "SlotInspector.tsx"))],
+    ["SettingsDialog.tsx", read(join(componentsDir, "SettingsDialog.tsx"))],
+    ["AppShell.tsx", read(join(componentsDir, "AppShell.tsx"))],
+  ]);
+  const inputContract = /className="visually-hidden-input"[\s\S]*?tabIndex=\{-1\}[\s\S]*?aria-hidden="true"/;
+  for (const name of ["AmazonIntake.tsx", "AssetLibrary.tsx"]) {
+    if (!inputContract.test(semanticSources.get(name))) {
+      fail(`${name}: programmatic visually-hidden input must use tabIndex={-1} and aria-hidden="true".`);
+    }
+  }
+  const templateSource = semanticSources.get("IndustryTemplateSelector.tsx");
+  if ((templateSource.match(/aria-pressed=\{selectedId ===/g) ?? []).length < 2) {
+    fail("IndustryTemplateSelector.tsx: every template selection card must expose aria-pressed.");
+  }
+  const contextSource = semanticSources.get("ProductContextBar.tsx");
+  if (contextSource.includes("aria-label={detailLabel}") || !contextSource.includes("${taskName}，${detailLabel}")) {
+    fail("ProductContextBar.tsx: detail action name must retain the current task name in its accessible label.");
+  }
+  const runSource = semanticSources.get("ProductionRunCard.tsx");
+  if (!runSource.includes("aria-controls={detailsId}") || !runSource.includes("id={detailsId}")) {
+    fail("ProductionRunCard.tsx: history toggle and details region must share a stable aria-controls/id relationship.");
+  }
+  if (semanticSources.get("LocalizedFactsReview.tsx").includes('live="polite"')) {
+    fail("LocalizedFactsReview.tsx: static explanatory StatusMessage must keep live=\"off\".");
+  }
+  for (const [name, needles] of [
+    ["ExportPanel.tsx", ["aria-describedby={disabledReason ? disabledReasonId : undefined}", "export-panel__disabled-reason"]],
+    ["ImageTools.tsx", ["aria-describedby={!editingSupported && showEditingHint ? editingReasonId : undefined}", "image-tools__hint"]],
+    ["GenerationActions.tsx", ["aria-describedby={disabledReason ? disabledReasonId : undefined}", "generation-actions__hint"]],
+    ["PromptAssetCenterDialog.tsx", ["aria-describedby={aiRewriteDisabledReason ? aiRewriteReasonId : undefined}", "prompt-asset-center__disabled-reason"]],
+    ["TaobaoIntake.tsx", ["aria-describedby={reanalyzeDisabledReason ? reanalyzeReasonId : undefined}", "taobao-analysis-summary__reanalyze-reason"]],
+    ["SlotInspector.tsx", ["aria-describedby={saveDisabledReason ? saveDisabledReasonId : undefined}", "slot-inspector__disabled-reason"]],
+  ]) {
+    const source = semanticSources.get(name);
+    if (needles.some((needle) => !source.includes(needle))) {
+      fail(`${name}: disabled controls must expose a visible reason and associate it with aria-describedby.`);
+    }
+  }
+  if (semanticSources.get("SettingsDialog.tsx").includes("connectionMessage")) {
+    fail("SettingsDialog.tsx: retired connectionMessage prop must stay removed.");
+  }
+  if (semanticSources.get("AppShell.tsx").includes("context-bar")) {
+    fail("AppShell.tsx: retired hidden context-bar test hook must stay removed.");
+  }
 }
 
 // --- 3. Workbench module columns must use Panel, not hand-written panel shells ---

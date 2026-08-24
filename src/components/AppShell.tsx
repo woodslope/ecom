@@ -16,7 +16,6 @@ export function AppShell({
   settingsLoading = false,
   settingsError = null,
   connectionTestStatus = "idle",
-  connectionTestMessage = null,
   textConnectionTestStatus = "idle",
   textConnectionTestMessage = null,
   imageConnectionTestStatus = "idle",
@@ -36,7 +35,6 @@ export function AppShell({
   settingsLoading?: boolean;
   settingsError?: string | null;
   connectionTestStatus?: "idle" | "testing" | "success" | "error";
-  connectionTestMessage?: string | null;
   textConnectionTestStatus?: "idle" | "testing" | "success" | "error";
   textConnectionTestMessage?: string | null;
   imageConnectionTestStatus?: "idle" | "testing" | "success" | "error";
@@ -121,9 +119,6 @@ export function AppShell({
         </div>
       </div>
 
-      {/* Keep a stable test hook for smoke after top bar removal */}
-      <div className="context-bar" data-testid="context-bar" hidden aria-hidden="true" />
-
       <div
         ref={desktopGateRef}
         className="desktop-only-gate"
@@ -156,7 +151,6 @@ export function AppShell({
         loading={settingsLoading}
         error={settingsError}
         connectionStatus={connectionTestStatus}
-        connectionMessage={connectionTestMessage}
         textConnectionStatus={textConnectionTestStatus}
         textConnectionMessage={textConnectionTestMessage}
         imageConnectionStatus={imageConnectionTestStatus}

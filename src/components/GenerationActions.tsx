@@ -8,6 +8,7 @@ import {
   Square,
   X,
 } from "lucide-react";
+import { useId } from "react";
 
 import { getPlatformRulePack } from "../domain/platforms/registry";
 import type { PlatformId } from "../domain/platforms/types";
@@ -129,6 +130,7 @@ export function GenerationActions({
   variant?: "primary" | "secondary";
   onGenerate: () => void;
 }) {
+  const disabledReasonId = useId();
   return (
     <div className="generation-actions">
       <div className="generation-actions__primary">
@@ -139,6 +141,7 @@ export function GenerationActions({
           variant={variant}
           size="compact"
           disabled={generating || disabled}
+          aria-describedby={disabledReason ? disabledReasonId : undefined}
           onClick={onGenerate}
         >
           {generating ? (
@@ -152,7 +155,7 @@ export function GenerationActions({
         </Button>
       </div>
       {disabledReason ? (
-        <StatusMessage className="generation-actions__hint">{disabledReason}</StatusMessage>
+        <StatusMessage id={disabledReasonId} className="generation-actions__hint">{disabledReason}</StatusMessage>
       ) : null}
     </div>
   );

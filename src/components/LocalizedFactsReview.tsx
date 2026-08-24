@@ -72,7 +72,7 @@ export function LocalizedFactsReview({
         </StatusChip>
       </header>
 
-      <StatusMessage tone={draft.status === "pending" ? "warning" : "neutral"} live="polite">
+      <StatusMessage tone={draft.status === "pending" ? "warning" : "neutral"}>
         {draft.status === "pending"
           ? "自动本地化未完成。请检查并手动补充站点语言，品牌、型号、SKU 与数字会继续保持原值。"
           : "确认后，图片策划会固定使用这份站点语言版本；之后修改主档不会自动覆盖当前任务。"}

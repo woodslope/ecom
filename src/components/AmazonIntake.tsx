@@ -389,6 +389,8 @@ export function AmazonIntake({
               accept="image/*"
               multiple
               disabled={disabled}
+              tabIndex={-1}
+              aria-hidden="true"
               onChange={changeFiles}
             />
           </div>
@@ -427,16 +429,19 @@ export function AmazonIntake({
                 <li key={`${file.name}-${index}`}>
                   <FileText size={14} aria-hidden="true" />
                   <span>{file.name}</span>
-                  <button
+                  <Button
+                    variant="quiet"
+                    size="compact"
                     type="button"
                     disabled={disabled}
+                    aria-label={`移除文件 ${file.name}`}
                     onClick={() => {
                       setFiles((current) => current.filter((_, i) => i !== index));
                       setDirty(true);
                     }}
                   >
                     移除
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>

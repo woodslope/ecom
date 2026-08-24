@@ -121,6 +121,8 @@ export function IconButton({
   );
 }
 
+// Compatibility export for restored/third-party consumers. Remove only after a
+// separately approved API cleanup confirms there are no business-view users.
 export function Badge({
   tone = "neutral",
   className = "",
@@ -249,7 +251,6 @@ export function ActionBar({
   secondary?: ReactNode;
   status?: ReactNode;
   ariaLabel?: string;
-  closeLabel?: string;
   className?: string;
 }) {
   return (
@@ -549,6 +550,8 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  // Callers hide the parent dialog while this replaces it so the shared modal
+  // stack keeps one active focus trap. Revisit when nested modal ownership changes.
   return (
     <Dialog
       open={open}

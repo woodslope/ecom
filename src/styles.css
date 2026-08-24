@@ -417,10 +417,6 @@ textarea:focus-visible {
   background: var(--shell);
 }
 
-.context-bar {
-  display: none !important;
-}
-
 .dialog__eyebrow {
   display: block;
   margin-bottom: 2px;
@@ -2307,6 +2303,13 @@ select.select-control__input:disabled + .select-control__icon {
   gap: 8px;
 }
 
+.export-panel--compact .export-panel__disabled-reason {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .export-panel__error {
   display: flex;
   align-items: center;
@@ -3793,6 +3796,18 @@ select.select-control__input:disabled + .select-control__icon {
   gap: var(--space-2);
 }
 
+.taobao-analysis-summary__footer {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.taobao-analysis-summary__reanalyze-reason {
+  color: var(--text-muted);
+  font-size: var(--font-caption);
+  line-height: var(--line-caption);
+}
+
 .dialog.taobao-analysis-summary {
   width: min(620px, calc(100vw - 24px));
 }
@@ -4587,6 +4602,10 @@ select.select-control__input:disabled + .select-control__icon {
   padding: var(--space-3) var(--space-4);
   border-top: 1px solid var(--border);
   background: var(--surface-soft);
+}
+
+.production-run-card__details[hidden] {
+  display: none;
 }
 
 .production-run-card__details-heading {
@@ -5579,6 +5598,10 @@ select.select-control__input:disabled + .select-control__icon {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+}
+
+.prompt-asset-center__disabled-reason {
+  margin: var(--space-2) 0 0;
 }
 
 .prompt-asset-center__create {

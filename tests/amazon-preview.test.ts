@@ -202,5 +202,7 @@ describe("Amazon mobile content preview", () => {
 
     expect(compactMarkup).not.toContain("手机预览");
     expect(expandedMarkup).toContain("手机预览");
+    expect(compactMarkup).toMatch(/aria-expanded="false"[^>]*aria-controls="[^"]+"/);
+    expect(compactMarkup).toMatch(/id="[^"]+"[^>]*class="production-run-card__details" hidden=""/);
   });
 });

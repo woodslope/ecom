@@ -203,6 +203,8 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - `StatusMessage` is static by default. Set `live="polite"` only for dynamic progress/success and `live="assertive"` for blocking failures; do not make explanatory copy a live region.
 - Tooltips name unfamiliar rail and icon actions; required workflow information cannot live only in a tooltip.
 - Menus and popovers share border, radius, shadow, active, disabled, and z-index rules.
+- Programmatic upload inputs stay out of the Tab order and assistive-technology tree; a named upload Button owns focus. A native file input directly wrapped by a user-facing `<label>` may retain its browser-native focus behavior.
+- A disabled reason is visible beside the affected action and referenced with `aria-describedby`; `title` is supplemental only. Compact delivery strips keep the reason to one line.
 
 ### Prompt assets
 
@@ -293,6 +295,7 @@ For a visual pass, browser rendering is the acceptance source of truth. Automate
 - Claims that tests or source review prove the user experience
 - A second `:root { … }` token block later in `styles.css` (cascade overrides of tokens are forbidden; component rules may still refine layout)
 - Business views assembling `button button--primary` class strings instead of the `Button` primitive
+- Raw `<button>` in business views except domain selection cards, version cards, preview thumbnails, and canvas tools; navigation, context actions, and file actions use `Button` / `IconButton`
 - New hard-coded brand hex values outside the top `:root` token block (semantic one-offs on the dark rail chrome are the only temporary exception while that region is still being tokenized)
 
 ## 12. Visual Consistency Governance (minimal loop)
@@ -324,7 +327,7 @@ pnpm test:browser:governance
 pnpm test:ui:acceptance  # complete gate + timestamped manifest
 ```
 
-`scripts/check-ui-governance.mjs` enforces: one `:root` token block, guide-aligned primary / rail / type tokens, state-text and focus contrast thresholds, shared modal/live-region ownership, no business `button--*` class assembly, workbench modules on `Panel` + `hideHeader` for filled inspector, stable skeleton hooks in `AppShell` / `PlatformWorkspace`, no legacy mobile-pane hooks, and no return of retired zero-consumer component/CSS families.
+`scripts/check-ui-governance.mjs` enforces: one `:root` token block, guide-aligned primary / rail / type tokens, state-text and focus contrast thresholds, shared modal/live-region ownership, no business `button--*` class assembly, the explicit raw-button exception list, upload/context/history semantic contracts, workbench modules on `Panel` + `hideHeader` for filled inspector, stable skeleton hooks in `AppShell` / `PlatformWorkspace`, no legacy mobile-pane hooks, and no return of retired zero-consumer component/CSS families.
 
 Browser and full acceptance output goes to `artifacts/cross-platform-ais/runs/<timestamp>/manifest.json`; `artifacts/cross-platform-ais/latest.json` points to the most recent batch. The manifest records suite type, Git SHA/dirty state, tool versions, commands, viewports and conditions, test counts and bundle size when the full suite runs, plus the exact screenshot list. `check:bundle` limits the Vite business entry chunk to `500 kB`.
 

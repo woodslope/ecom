@@ -32,6 +32,8 @@ describe("image tools UI", () => {
     expect(enabled).toContain("局部编辑");
     expect(disabled).toContain("当前图片服务不支持显式遮罩编辑。");
     expect(disabled).toContain("disabled");
+    expect(disabled).toMatch(/aria-describedby="[^"]+"/);
+    expect(disabled).toMatch(/id="[^"]+"[^>]*>当前图片服务不支持显式遮罩编辑。/);
   });
 
   it("renders a bounded mask editor with complete edit controls and a guarded save", () => {

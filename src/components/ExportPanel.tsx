@@ -1,4 +1,5 @@
 import { Archive, LoaderCircle, PackageCheck, X } from "lucide-react";
+import { useId } from "react";
 
 import { Button, IconButton, StatusChip, StatusMessage } from "./ui";
 
@@ -31,6 +32,7 @@ export function ExportPanel({
   onClearError: () => void;
   compact?: boolean;
 }) {
+  const disabledReasonId = useId();
   const missingCount = Math.max(0, totalSlots - completedSlots);
   const ready = totalSlots > 0 && missingCount === 0;
   const title = ready
@@ -70,6 +72,7 @@ export function ExportPanel({
         disabled={disabled || exporting || totalSlots === 0}
         onClick={onExport}
         title={disabledReason || detail}
+        aria-describedby={disabledReason ? disabledReasonId : undefined}
       >
         {exporting ? <LoaderCircle className="spin" size={15} /> : <Archive size={15} />}
         {buttonLabel}
@@ -82,8 +85,8 @@ export function ExportPanel({
           </IconButton>
         </StatusMessage>
       ) : null}
-      {!compact && disabledReason ? (
-        <span className="export-panel__disabled-reason">{disabledReason}</span>
+      {disabledReason ? (
+        <span id={disabledReasonId} className="export-panel__disabled-reason">{disabledReason}</span>
       ) : null}
     </section>
   );

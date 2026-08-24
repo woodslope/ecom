@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, FileText, ImagePlus, LoaderCircle, Pencil, Plus, Sparkles, Square, Upload } from "lucide-react";
 
 import type { ProductFacts, ProductProject } from "../domain/projects/types";
@@ -61,6 +61,7 @@ export function TaobaoAnalysisSummary({
   reanalyzeDisabled?: boolean;
   reanalyzeDisabledReason?: string;
 }) {
+  const reanalyzeReasonId = useId();
   const findingCount = analysis.missingFacts.length + analysis.warnings.length;
 
   return (
@@ -73,14 +74,22 @@ export function TaobaoAnalysisSummary({
       onClose={onClose}
       footer={
         onReanalyze ? (
-          <Button
-            variant="secondary"
-            disabled={reanalyzeDisabled}
-            title={reanalyzeDisabledReason}
-            onClick={onReanalyze}
-          >
-            重新分析
-          </Button>
+          <div className="taobao-analysis-summary__footer">
+            <Button
+              variant="secondary"
+              disabled={reanalyzeDisabled}
+              title={reanalyzeDisabledReason}
+              aria-describedby={reanalyzeDisabledReason ? reanalyzeReasonId : undefined}
+              onClick={onReanalyze}
+            >
+              重新分析
+            </Button>
+            {reanalyzeDisabledReason ? (
+              <span id={reanalyzeReasonId} className="taobao-analysis-summary__reanalyze-reason">
+                {reanalyzeDisabledReason}
+              </span>
+            ) : null}
+          </div>
         ) : undefined
       }
     >
@@ -315,7 +324,7 @@ export function TaobaoIntake({
             loading={loading}
             loadingLabel="生成图片策划中..."
             title={analyzeDisabledReason}
-            aria-describedby={assessment.quality === "empty" ? "taobao-planning-requirement" : undefined}
+            aria-describedby={lockedReason ? "taobao-planning-lock" : assessment.quality === "empty" ? "taobao-planning-requirement" : undefined}
             onClick={() => void submit()}
           >
             <Sparkles size={16} />
@@ -334,7 +343,7 @@ export function TaobaoIntake({
         </StatusMessage>
       ) : null}
       {lockedReason ? (
-        <StatusMessage live="polite" className="planning-task-status">
+        <StatusMessage id="taobao-planning-lock" live="polite" className="planning-task-status">
           <span className="generation-task-status__copy">
             <LoaderCircle className="spin" size={16} />
             <strong>{lockedReason}</strong>
