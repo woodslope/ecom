@@ -106,22 +106,25 @@ function PlatformHistoryPane({
           />
         </section>
       ) : null}
-      <Suspense fallback={<StatusMessage live="polite">正在载入历史记录...</StatusMessage>}>
-        <TaskHistoryArchive
-          projects={projects}
-          historyProjects={historyProjects}
-          activeProjectId={activeProjectId}
-          activeRunIds={activeRunIds}
-          platformId={platform}
-          onResumeRun={onResumeRun}
-          onForkRun={onForkRun}
-          onReuseImage={onReuseImage}
-          onExportRun={onExportRun}
-          historyQueryService={historyQueryService}
-          refreshKey={historyRefreshKey}
-          compact
-        />
-      </Suspense>
+      <section className="platform-history-pane__records" aria-label="生产记录">
+        <h3>生产记录</h3>
+        <Suspense fallback={<StatusMessage live="polite">正在载入历史记录...</StatusMessage>}>
+          <TaskHistoryArchive
+            projects={projects}
+            historyProjects={historyProjects}
+            activeProjectId={activeProjectId}
+            activeRunIds={activeRunIds}
+            platformId={platform}
+            onResumeRun={onResumeRun}
+            onForkRun={onForkRun}
+            onReuseImage={onReuseImage}
+            onExportRun={onExportRun}
+            historyQueryService={historyQueryService}
+            refreshKey={historyRefreshKey}
+            compact
+          />
+        </Suspense>
+      </section>
     </Dialog>
   );
 }

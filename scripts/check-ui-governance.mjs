@@ -121,8 +121,16 @@ function walkTsx(dir, out = []) {
   }
 
   for (const [foreground, background, threshold, label] of [
+    ["text-muted", "page", 4.5, "muted text on page"],
+    ["text-muted", "surface", 4.5, "muted text on surface"],
+    ["text-muted", "surface-soft", 4.5, "muted text on soft surface"],
+    ["placeholder-text", "surface", 4.5, "placeholder text on surface"],
+    ["text-secondary", "page", 4.5, "secondary text on page"],
     ["success-text", "success-soft", 4.5, "success status text"],
+    ["warning-text", "warning-soft", 4.5, "warning status text"],
     ["danger-text", "danger-soft", 4.5, "danger status text"],
+    ["ink-text-muted", "rail", 4.5, "rail text on rail"],
+    ["ink-text-muted", "ink-soft", 4.5, "rail text on dark hover surface"],
     ["focus-ring", "surface", 3, "focus ring on surface"],
     ["focus-ring", "page", 3, "focus ring on page"],
     ["focus-ring", "rail", 3, "focus ring on rail"],
@@ -137,6 +145,41 @@ function walkTsx(dir, out = []) {
       fail(
         `styles.css ${label} must reach ${threshold}:1 (${foreground} on ${background}; received ${ratio?.toFixed(2) ?? "non-hex or missing token"}).`,
       );
+    }
+  }
+
+  // Typography and shape declarations must consume semantic tokens. The few
+  // literal values below are structural exceptions documented in the guide.
+  const governedCss = afterRoot;
+  const directFontSizes = (governedCss.match(/font-size:\s*[^;]+;/g) ?? [])
+    .filter((declaration) => !declaration.includes("var(--"));
+  if (directFontSizes.length > 0) {
+    fail(`business CSS contains hard-coded font-size declarations (${directFontSizes.join(", ")}). Use a typography token.`);
+  }
+  const directLineHeights = (governedCss.match(/line-height:\s*[^;]+;/g) ?? [])
+    .filter((declaration) => !declaration.includes("var(--"))
+    .filter((declaration) => !/line-height:\s*1\s*;/.test(declaration));
+  if (directLineHeights.length > 0) {
+    fail(`business CSS contains hard-coded line-height declarations (${directLineHeights.join(", ")}). Use a line-height token.`);
+  }
+  const directRadii = (governedCss.match(/border-radius:\s*[^;]+;/g) ?? [])
+    .filter((declaration) => !declaration.includes("var(--"))
+    .filter((declaration) => !/border-radius:\s*(?:0|50%|999px|inherit|0\s+2px\s+2px\s+0)\s*;/.test(declaration));
+  if (directRadii.length > 0) {
+    fail(`business CSS contains non-token border-radius declarations (${directRadii.join(", ")}). Use a radius token or document a structural exception.`);
+  }
+  const directShadows = (governedCss.match(/box-shadow:\s*[^;]+;/g) ?? [])
+    .filter((declaration) => !declaration.includes("var(--"))
+    .filter((declaration) => !/box-shadow:\s*(?:none|0\s+0\s+0\s+[23]px\s+var\(--primary-soft\))\s*;/.test(declaration));
+  if (directShadows.length > 0) {
+    fail(`business CSS contains non-token box-shadow declarations (${directShadows.join(", ")}). Use a shadow token or document a structural exception.`);
+  }
+
+  const typographyTokens = [...tokenBlock.matchAll(/(--(?:font|line)-[\w-]+)\s*:/g)].map((match) => match[1]);
+  for (const token of new Set(typographyTokens)) {
+    const references = [...governedCss.matchAll(new RegExp("var\\(" + token + "(?:[,)]|\\s)", "g"))];
+    if (references.length === 0) {
+      fail(`declared typography token ${token} has no CSS consumer; remove it or add a documented consumer.`);
     }
   }
 
@@ -221,6 +264,8 @@ function walkTsx(dir, out = []) {
     warning: "#c88719",
     danger: "#d0443a",
     "danger-text": "#b8322a",
+    "text-muted": "#62707e",
+    "placeholder-text": "#62707e",
     "focus-ring": "#3b82f6",
   })) {
     if (!guide.includes(`\`--${name}\`: \`${value}\``)) {

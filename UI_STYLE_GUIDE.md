@@ -27,7 +27,8 @@ For ecommerce operators and designers, the workspace turns product facts and ref
 - `--rail-muted`: `#A6B0BA`
 - `--text`: `#14191F`
 - `--text-secondary`: `#475569`
-- `--text-muted`: `#6B7785`
+- `--text-muted`: `#62707E`
+- `--placeholder-text`: `#62707E`
 - `--border`: `#D8DEE5`
 - `--border-strong`: `#BCC6D1`
 - `--focus-ring`: `#3B82F6`
@@ -68,14 +69,14 @@ Digital cobalt represents the active workflow, selection, and primary action. AP
 - Compact labels: `12px / 18px`, weight `600–700` → CSS `--font-label` / `--line-label`.
 - Helper text: `12px / 18px`, weight `400` → CSS `--font-helper` / `--line-helper`.
 - Caption / dense meta: `11px / 16px` → CSS `--font-caption` / `--line-caption`. Prefer this over ad-hoc `9–10px` text.
-- Metric values: `28px / 34px` → CSS `--font-metric` / `--line-metric`.
 - Dialog titles: `18px / 26px` → CSS `--font-dialog-title` / `--line-dialog-title`.
 - Micro markers: `10px / 14px` → CSS `--font-micro` / `--line-micro`; reserve for compact numeric markers only.
 - Context labels: `14px / 20px` → CSS `--font-context` / `--line-context`.
 - Toolbar titles: `16px / 22px` → CSS `--font-toolbar` / `--line-toolbar`.
 - Command headings: `20px / 28px` → CSS `--font-command` / `--line-command`.
-- Value and stat exceptions: `22px / 28px` and `20px / 26px` → CSS `--font-value` / `--line-value` and `--font-stat` / `--line-stat`.
+- Value exception: `22px / 28px` → CSS `--font-value` / `--line-value`; use only for compact result counts such as the history overflow marker.
 - No viewport-based font scaling, no negative letter spacing, and no forced uppercase on Chinese eyebrows.
+- All business typography consumes the semantic tokens above. Direct `font-size` or `line-height` literals are prohibited; fixed-height controls may retain `line-height: 1`, and structural dots / asymmetric edge treatments may retain their explicit geometry.
 
 ### Spacing And Dimensions
 
@@ -342,6 +343,7 @@ Still out of scope for this minimal loop (add only when pain is repeated): Story
 - Library, source, history, compliance, export, shell runtime, and Amazon consumers share the same status and control primitives.
 - 淘宝分析、固定 5+7 槽位、手机预览和历史导出继续复用同一套 `Panel`、`Button`、`StatusChip`、`Dialog`、`MediaSlot` 和 `ActionBar`；生产记录样式只引用已声明的视觉 Token。
 - Success/danger text tokens and the solid focus-ring token meet the governed contrast thresholds; status feedback opts into polite/assertive live regions only when it is dynamic.
+- Muted text uses `--text-muted` only where it remains readable on page, surface, and soft-surface backgrounds. `--disabled-text` is a documented state exception for disabled controls, not a normal reading color; rail text uses the separate dark-chrome tokens.
 - Every centered dialog and history sidebar uses the shared overlay stack, background isolation, topmost-only nested behavior, focus trap, and focus return.
 - Production history loads 50 Runs per page, preserves already loaded records when an older-page read fails, and exposes retry; browser evidence exercises 120 records and both initial/older-page recovery paths.
 - Browser evidence covers the production shell and opened history drawer, Listing/A+, settings, mask states, loading/error, the full supported desktop matrix, `899px` gate, compact-source overlay, dark preference, reduced motion, forced colors, DPR 2, and 125% zoom-equivalent rendering.

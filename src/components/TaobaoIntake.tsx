@@ -348,7 +348,7 @@ export function TaobaoIntake({
         </StatusMessage>
       ) : null}
       <details className="task-advanced-settings">
-        <summary><span>策划参数</span><small>{selectedProfile?.label ?? "干净零售"} · {industryTemplate?.name ?? "通用模板"}</small><ChevronDown size={15} /></summary>
+        <summary><span>任务设置</span><small>{selectedProfile?.label ?? "干净零售"} · {industryTemplate?.name ?? "通用模板"}</small><ChevronDown size={15} /></summary>
         <div className="task-advanced-settings__body">
           <section className="planning-settings-group">
             <div className="planning-settings-group__heading">

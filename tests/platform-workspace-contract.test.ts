@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import appSource from "../src/App.tsx?raw";
+import amazonIntakeSource from "../src/components/AmazonIntake.tsx?raw";
 import platformWorkspaceSource from "../src/components/PlatformWorkspace.tsx?raw";
+import taobaoIntakeSource from "../src/components/TaobaoIntake.tsx?raw";
 import {
   PlatformWorkspace,
   shouldDefaultCollapseSource,
@@ -60,6 +62,16 @@ describe("platform workspace contract", () => {
     expect(appSource).toContain('className="platform-history-trigger"');
     expect(appSource).toContain("历史记录");
     expect(appSource).toContain('closeLabel="关闭历史记录"');
+    expect(appSource).toContain('aria-label="进行中任务"');
+    expect(appSource).toContain('aria-label="生产记录"');
+    expect(appSource).toContain(">生产记录</h3>");
+  });
+
+  it("uses the same task-settings label before and after planning", () => {
+    expect(amazonIntakeSource).toContain("任务设置");
+    expect(amazonIntakeSource).not.toContain("策划参数");
+    expect(taobaoIntakeSource).toContain("任务设置");
+    expect(taobaoIntakeSource).not.toContain("策划参数");
   });
 
   it("blocks silent slot switches while the selected slot draft is dirty", () => {

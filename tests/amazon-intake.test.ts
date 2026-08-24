@@ -418,6 +418,8 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).toContain("策划检查");
     expect(directMarkup).toContain("交付检查");
     expect(directMarkup).toContain('class="task-advanced-settings"');
+    expect(directMarkup).toContain("任务设置");
+    expect(directMarkup).not.toContain("策划参数");
     expect(directMarkup).toContain("style-reference-picker--embedded");
     expect(directMarkup).not.toContain("选择已有商品");
     expect(directMarkup).not.toContain("手动填写");

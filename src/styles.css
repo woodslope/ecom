@@ -14,7 +14,8 @@
   --rail-muted: #a6b0ba;
   --text: #14191f;
   --text-secondary: #475569;
-  --text-muted: #6b7785;
+  --text-muted: #62707e;
+  --placeholder-text: #62707e;
   --border: #d8dee5;
   --border-strong: #bcc6d1;
   --focus-ring: #3b82f6;
@@ -55,8 +56,7 @@
   --line-helper: 18px;
   --font-caption: 11px;
   --line-caption: 16px;
-  --font-metric: 28px;
-  --line-metric: 34px;
+  --line-history-heading: 12px;
   --font-dialog-title: 18px;
   --line-dialog-title: 26px;
   --font-micro: 10px;
@@ -69,8 +69,6 @@
   --line-command: 28px;
   --font-value: 22px;
   --line-value: 28px;
-  --font-stat: 20px;
-  --line-stat: 26px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -131,6 +129,12 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--placeholder-text);
+  opacity: 1;
 }
 
 button {
@@ -2434,8 +2438,8 @@ select.select-control__input:disabled + .select-control__icon {
 }
 
 .dialog.dialog--sidebar.platform-history-pane > .dialog__body {
-  gap: var(--space-3);
-  padding: var(--space-3);
+  gap: var(--space-2);
+  padding: var(--space-2);
 }
 
 .dialog.dialog--sidebar > .dialog__body {
@@ -4055,8 +4059,8 @@ select.select-control__input:disabled + .select-control__icon {
 .workbench-toolbar h1 {
   margin: 0;
   color: var(--text);
-  font-size: var(--font-toolbar);
-  line-height: var(--line-toolbar);
+  font-size: var(--font-page-title);
+  line-height: var(--line-page-title);
   font-weight: 700;
 }
 
@@ -4285,6 +4289,11 @@ select.select-control__input:disabled + .select-control__icon {
   white-space: normal;
 }
 
+.production-history--compact .production-run-card__eyeline,
+.production-history--compact .production-run-card__chips {
+  grid-column: 1;
+}
+
 .production-history--compact .production-run-card__chips,
 .production-history--compact .production-run-card__actions {
   max-width: none;
@@ -4398,25 +4407,28 @@ select.select-control__input:disabled + .select-control__icon {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  padding: 15px 16px 10px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-2);
 }
 
 .production-run-card__identity {
   display: grid;
-  gap: var(--space-2);
+  grid-column: 1 / -1;
+  gap: 2px;
   min-width: 0;
 }
 
 .production-run-card__identity > strong {
   overflow: hidden;
-  font-size: 15px;
+  font-size: var(--font-section);
+  line-height: var(--line-section);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .production-run-card__eyeline {
   display: flex;
+  grid-column: 1;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-3);
@@ -4427,8 +4439,17 @@ select.select-control__input:disabled + .select-control__icon {
 .production-run-card__facts,
 .production-run-event time {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-caption);
+  line-height: var(--line-caption);
   font-style: normal;
+}
+
+.production-run-card__eyeline .status-chip {
+  flex: 0 0 auto;
+}
+
+.production-run-card__eyeline > span:last-child {
+  color: var(--text-secondary);
 }
 
 .production-run-event code {
@@ -4447,6 +4468,7 @@ select.select-control__input:disabled + .select-control__icon {
 }
 
 .production-run-card__chips {
+  grid-column: 2;
   justify-content: flex-end;
 }
 
@@ -4458,8 +4480,8 @@ select.select-control__input:disabled + .select-control__icon {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  gap: 12px 18px;
-  padding: 4px 16px 16px;
+  gap: var(--space-2) var(--space-4);
+  padding: 0 var(--space-4) var(--space-2);
 }
 
 .production-run-card__gallery {
@@ -4487,7 +4509,7 @@ select.select-control__input:disabled + .select-control__icon {
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--surface-soft);
 }
 
@@ -4500,9 +4522,9 @@ select.select-control__input:disabled + .select-control__icon {
 .production-run-card__thumbnail figcaption {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
   font-weight: 650;
-  line-height: 1.25;
+  line-height: var(--line-caption);
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4524,20 +4546,23 @@ select.select-control__input:disabled + .select-control__icon {
 
 .production-run-card__thumbnail--more strong {
   color: var(--text);
-  font-size: var(--font-dialog-title);
+  font-size: var(--font-value);
+  line-height: var(--line-value);
 }
 
 .production-run-card__thumbnail--more small {
-  font-size: 11px;
+  font-size: var(--font-caption);
+  line-height: var(--line-caption);
 }
 
 .production-run-card__gallery-empty {
-  min-height: 74px;
+  min-height: 32px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--font-body);
+  line-height: var(--line-body);
 }
 
 .production-run-card__actions {
@@ -4551,14 +4576,15 @@ select.select-control__input:disabled + .select-control__icon {
 
 .production-run-card__facts {
   grid-column: 1 / -1;
-  padding-top: 10px;
+  gap: var(--space-2) var(--space-3);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--border);
 }
 
 .production-run-card__details {
   display: grid;
-  gap: 12px;
-  padding: 14px 16px 16px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-top: 1px solid var(--border);
   background: var(--surface-soft);
 }
@@ -4573,7 +4599,8 @@ select.select-control__input:disabled + .select-control__icon {
 .production-run-card__details-heading code {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
+  line-height: var(--line-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4594,7 +4621,7 @@ select.select-control__input:disabled + .select-control__icon {
   min-height: 52px;
   padding: 7px 9px;
   background: var(--surface-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
 }
 
 .production-run-event img,
@@ -4640,6 +4667,61 @@ select.select-control__input:disabled + .select-control__icon {
   white-space: nowrap;
 }
 
+/* Compact history drawer owner: keep four records scannable above the fold. */
+.production-history--compact .production-run-card__header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-1) var(--space-2);
+  padding: 2px var(--space-3);
+}
+
+.production-history--compact .production-run-card__identity,
+.production-history--compact .production-run-card__eyeline,
+.production-history--compact .production-run-card__chips {
+  grid-column: 1 / -1;
+}
+
+.production-history--compact .production-run-card__identity {
+  gap: 0;
+}
+
+.production-history--compact .production-run-card__identity > strong {
+  font-size: var(--font-body);
+  line-height: var(--line-body);
+}
+
+.production-history--compact .production-run-card__eyeline {
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--font-caption);
+  line-height: var(--line-caption);
+}
+
+.production-history--compact .production-run-card__chips {
+  justify-content: flex-start;
+}
+
+.production-history--compact .production-run-card__results {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  padding: 0 var(--space-3) var(--space-1);
+}
+
+.production-history--compact .production-run-card__gallery-empty {
+  min-height: 28px;
+}
+
+.production-history--compact .production-run-card__actions {
+  max-width: none;
+  justify-content: flex-start;
+}
+
+.production-history--compact .production-run-card__facts {
+  display: none;
+}
+
+.production-history--compact .production-history__list {
+  gap: var(--space-1);
+}
+
 /* Navigation owner */
 .rail-brand {
   display: flex;
@@ -4663,7 +4745,7 @@ select.select-control__input:disabled + .select-control__icon {
 
 .rail-brand__copy strong {
   color: var(--ink-text);
-  font-size: 15px;
+  font-size: var(--font-context);
   line-height: var(--line-context);
 }
 
@@ -4728,9 +4810,9 @@ select.select-control__input:disabled + .select-control__icon {
 .rail-item__copy strong {
   overflow: hidden;
   color: inherit;
-  font-size: 13px;
+  font-size: var(--font-body);
   font-weight: 600;
-  line-height: 18px;
+  line-height: var(--line-body);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4972,7 +5054,8 @@ select.select-control__input:disabled + .select-control__icon {
 .style-reference-picker__hint,
 .style-reference-picker__selected span {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-caption);
+  line-height: var(--line-caption);
 }
 
 .style-reference-picker__hint {
@@ -4999,7 +5082,7 @@ select.select-control__input:disabled + .select-control__icon {
   aspect-ratio: 3 / 2;
   object-fit: cover;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
 }
 
 .style-reference-picker__selected .icon-button {
@@ -5655,8 +5738,8 @@ select.select-control__input:disabled + .select-control__icon {
 .listing-paste textarea {
   min-height: 120px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--font-helper);
+  line-height: var(--line-helper);
 }
 
 /* Amazon shell and the three work modules */
@@ -5689,9 +5772,9 @@ select.select-control__input:disabled + .select-control__icon {
 .workbench-chrome__brand h1 {
   margin: 0;
   color: var(--text);
-  font-size: var(--font-section);
+  font-size: var(--font-toolbar);
   font-weight: 700;
-  line-height: var(--line-section);
+  line-height: var(--line-toolbar);
 }
 
 .workbench-chrome__context {
@@ -6036,18 +6119,25 @@ select.select-control__input:disabled + .select-control__icon {
   gap: var(--space-2);
 }
 
-.platform-history-pane__active {
+.platform-history-pane__active,
+.platform-history-pane__records {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 
-.platform-history-pane__active > h3 {
+.platform-history-pane__active > h3,
+.platform-history-pane__records > h3 {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin: 0;
   color: var(--text-secondary);
   font-size: var(--font-label);
+  line-height: var(--line-caption);
+}
+
+.platform-history-pane__records > h3 {
+  line-height: var(--line-history-heading);
 }
 
 .platform-history-pane__active > h3 span {

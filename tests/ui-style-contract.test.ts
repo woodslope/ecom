@@ -17,6 +17,8 @@ const commerceOpsTokens = {
   "surface-soft": "#f0f3f6",
   text: "#14191f",
   "text-secondary": "#475569",
+  "text-muted": "#62707e",
+  "placeholder-text": "#62707e",
   primary: "#2563eb",
   "primary-hover": "#1d4ed8",
   "primary-soft": "#eaf1ff",
@@ -79,8 +81,17 @@ describe("Commerce Ops visual contract", () => {
   });
 
   it("keeps state text and keyboard focus above the contrast gates", () => {
+    for (const background of ["page", "surface", "surface-soft"]) {
+      expect(contrast(cssToken("text-muted")!, cssToken(background)!), `muted on ${background}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(contrast(cssToken("placeholder-text")!, cssToken("surface")!), "placeholder on surface").toBeGreaterThanOrEqual(4.5);
+    expect(contrast(cssToken("text-secondary")!, cssToken("page")!), "secondary on page").toBeGreaterThanOrEqual(4.5);
     expect(contrast(cssToken("success-text")!, cssToken("success-soft")!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(cssToken("warning-text")!, cssToken("warning-soft")!)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(cssToken("danger-text")!, cssToken("danger-soft")!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(cssToken("ink-text-muted")!, cssToken("rail")!), "rail text on rail").toBeGreaterThanOrEqual(4.5);
+    expect(contrast(cssToken("ink-text-muted")!, cssToken("ink-soft")!), "rail text on dark surface").toBeGreaterThanOrEqual(4.5);
+    expect(contrast(cssToken("disabled-text")!, cssToken("disabled-surface")!), "disabled text is an explicit state exception").toBeLessThan(4.5);
     for (const background of ["surface", "page", "rail", "ink-soft"]) {
       expect(contrast(cssToken("focus-ring")!, cssToken(background)!), background).toBeGreaterThanOrEqual(3);
     }

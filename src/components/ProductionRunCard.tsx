@@ -81,14 +81,13 @@ export function ProductionRunCard({ record, expanded, current, assetUrls, busy, 
     <article ref={cardRef} className={`production-run-card${current ? " production-run-card--current" : ""}`}>
       <header className="production-run-card__header">
         <div className="production-run-card__identity">
-          <span className="production-run-card__eyeline">
-            <time dateTime={run.updatedAt}>{new Date(run.updatedAt).toLocaleString("zh-CN")}</time>
-            <em>{workflowLabels[run.workflowId]}</em>
-          </span>
           <strong>{project.name}</strong>
         </div>
-        <div className="production-run-card__chips">
+        <div className="production-run-card__eyeline">
+          <time dateTime={run.updatedAt}>{new Date(run.updatedAt).toLocaleString("zh-CN")}</time>
+          <em>{workflowLabels[run.workflowId]}</em>
           <StatusChip tone={run.status === "ready" ? "success" : run.status === "failed" ? "warning" : "info"}>{statusLabels[run.status]}</StatusChip>
+          <span>最后阶段：{lastEvent ? eventLabels[lastEvent.kind] : "无事件"}</span>
           <StatusChip tone="neutral">{previewOutputs.length} 张</StatusChip>
           <StatusChip tone="neutral">{run.events.length} 个阶段</StatusChip>
           {!compact ? <StatusChip tone="neutral">{run.source === "api" ? "API" : "Demo"}</StatusChip> : null}
@@ -143,7 +142,6 @@ export function ProductionRunCard({ record, expanded, current, assetUrls, busy, 
         <div className="production-run-card__facts">
           {!compact ? <span>{run.planSnapshot.slots.length} 个槽位</span> : null}
           {!compact ? <span>{previewOutputs.length} 张结果</span> : null}
-          <span>最后阶段：{lastEvent ? eventLabels[lastEvent.kind] : "无事件"}</span>
           {!compact ? <span>{manual ? "当前任务填写" : "已保存任务资料"}</span> : null}
           {!compact && !manual ? <span>来源商品：{record.sourceProject?.name ?? "已删除商品"}</span> : null}
           {!compact && run.deposit ? <span>已保存：{new Date(run.deposit.depositedAt).toLocaleString("zh-CN")}</span> : null}

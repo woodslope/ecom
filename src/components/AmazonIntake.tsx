@@ -289,7 +289,7 @@ export function AmazonIntake({
         </StatusMessage>
       ) : null}
       <details className="task-advanced-settings">
-        <summary><span>策划参数</span><small>{amazonControlsSummary(controls)}</small><ChevronDown size={15} /></summary>
+        <summary><span>任务设置</span><small>{amazonControlsSummary(controls)}</small><ChevronDown size={15} /></summary>
         <div className="task-advanced-settings__body">
           <AmazonSessionControls
             value={controls}

@@ -193,6 +193,7 @@ try {
       await historyTrigger.click();
       const historyDialog = page.getByRole("dialog", { name: `${platform}历史记录`, exact: true });
       assert(await historyDialog.isVisible(), `${width}px ${platform} 历史抽屉未打开`);
+      assert(await historyDialog.getByRole("heading", { name: "生产记录", exact: true }).isVisible(), `${width}px ${platform} 历史抽屉缺少生产记录分组`);
       await assertModalIsolation(page, `${width}px ${platform} 历史抽屉`);
       await page.keyboard.press("Escape");
       assert(!(await historyDialog.isVisible()), `${width}px ${platform} Escape 未关闭历史抽屉`);
@@ -314,6 +315,35 @@ try {
     await page.getByRole("button", { name: "历史记录", exact: true }).click();
     await page.locator(".production-run-card").first().waitFor({ state: "visible" });
     assert((await page.locator(".production-run-card").count()) === 50, "120 条历史首屏不是 50 条");
+    const visibleHistoryCardMetrics = await page.locator(".production-run-card").evaluateAll((nodes) => {
+      const body = nodes[0]?.closest("[role=dialog]")?.querySelector(".dialog__body")?.getBoundingClientRect();
+      if (!body) return { count: 0, body: null, cards: [] };
+      const cards = nodes.map((node) => {
+        const rect = node.getBoundingClientRect();
+        return { top: Math.round(rect.top), bottom: Math.round(rect.bottom), height: Math.round(rect.height) };
+      });
+      return { count: cards.filter((rect) => rect.top >= body.top && rect.bottom <= body.bottom).length, body: { top: Math.round(body.top), bottom: Math.round(body.bottom) }, cards: cards.slice(0, 5) };
+    });
+    assert(visibleHistoryCardMetrics.count >= 4, `1280px 历史抽屉首屏完整可扫描记录不足 4 条：${JSON.stringify(visibleHistoryCardMetrics)}`);
+    const historyGeometry = await page.locator(".production-run-card").first().evaluate((card) => {
+      const header = card.querySelector(".production-run-card__header");
+      const meta = card.querySelector(".production-run-card__eyeline");
+      const results = card.querySelector(".production-run-card__results");
+      const headerStyle = header ? getComputedStyle(header) : null;
+      const metaStyle = meta ? getComputedStyle(meta) : null;
+      const resultsStyle = results ? getComputedStyle(results) : null;
+      return {
+        fontSize: metaStyle?.fontSize,
+        lineHeight: metaStyle?.lineHeight,
+        headerPaddingTop: headerStyle?.paddingTop,
+        resultsGap: resultsStyle?.gap,
+        scrollWidth: card.scrollWidth,
+        clientWidth: card.clientWidth,
+      };
+    });
+    assert(historyGeometry.fontSize === "11px" && historyGeometry.lineHeight === "16px", `历史元数据未消费 caption token：${JSON.stringify(historyGeometry)}`);
+    assert(Number.parseFloat(historyGeometry.headerPaddingTop ?? "99") <= 4, `历史卡片顶部内边距未收紧：${JSON.stringify(historyGeometry)}`);
+    assert(historyGeometry.scrollWidth <= historyGeometry.clientWidth, `历史卡片出现横向溢出：${JSON.stringify(historyGeometry)}`);
     const loadEarlier = page.getByRole("button", { name: "加载更早记录", exact: true });
     await loadEarlier.click();
     await page.getByText(/模拟加载更早记录失败.*已加载的记录仍可继续使用/).waitFor({ state: "visible" });
