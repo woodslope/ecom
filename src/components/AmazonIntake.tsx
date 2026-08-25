@@ -293,7 +293,8 @@ export function AmazonIntake({
         </Panel>
 
         <Panel title="商品图" className="amazon-intake__references">
-          <button
+          <Button
+            variant="quiet"
             type="button"
             className={`reference-upload${isDraggingFiles ? " reference-upload--dragging" : ""}`}
             disabled={disabled}
@@ -308,7 +309,7 @@ export function AmazonIntake({
               <strong>添加本次任务商品图</strong>
               <small>最多 16 张，8 MiB 内</small>
             </span>
-          </button>
+          </Button>
           <input
             ref={fileInputRef}
             className="visually-hidden-input"

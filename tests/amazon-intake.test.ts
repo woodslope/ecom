@@ -407,7 +407,7 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).toContain('aria-label="Amazon Listing 原文"');
     expect(directMarkup).toContain('type="file"');
     expect(directMarkup).toContain("AI策划");
-    expect(directMarkup).toContain("图片策划");
+    expect(directMarkup).not.toContain("图片策划");
     expect(directMarkup).toContain('title="请填写商品资料或添加至少一张商品图。"');
     expect(directMarkup).toContain('aria-describedby="amazon-planning-requirement"');
     expect(directMarkup).toContain('id="amazon-planning-requirement"');

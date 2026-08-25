@@ -15,7 +15,7 @@
   --text: #14191f;
   --text-secondary: #475569;
   --text-muted: #62707e;
-  --placeholder-text: var(--disabled-text);
+  --placeholder-text: var(--text-muted);
   --border: #d8dee5;
   --border-strong: #bcc6d1;
   --focus-ring: #3b82f6;

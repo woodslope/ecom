@@ -283,7 +283,8 @@ describe("Amazon A+ workflow", () => {
     expect(markup).toContain("外部标题（图片外）");
     expect(markup).toContain("外部正文（图片外）");
     expect(markup).toContain("复制外部文案");
-    expect(markup).toContain("保存外部文案与提示词");
+    expect(markup).toContain("保存</button>");
+    expect(markup).not.toContain("保存外部文案与提示词");
     expect(markup).not.toContain('aria-label="可见文案"');
   });
 

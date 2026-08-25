@@ -401,8 +401,8 @@ function walkTsx(dir, out = []) {
     fail("ProductContextBar.tsx: detail action name must retain the current task name in its accessible label.");
   }
   const runSource = semanticSources.get("ProductionRunCard.tsx");
-  if (!runSource.includes("aria-controls={detailsId}") || !runSource.includes("id={detailsId}")) {
-    fail("ProductionRunCard.tsx: history toggle and details region must share a stable aria-controls/id relationship.");
+  if (runSource.includes("production-run-card__details") || runSource.includes("回看阶段")) {
+    fail("ProductionRunCard.tsx: retired inline history details must stay removed; the history drawer owns the compact Run card.");
   }
   if (semanticSources.get("LocalizedFactsReview.tsx").includes('live="polite"')) {
     fail("LocalizedFactsReview.tsx: static explanatory StatusMessage must keep live=\"off\".");
@@ -576,7 +576,7 @@ function walkTsx(dir, out = []) {
   const intake = read(join(componentsDir, "AmazonIntake.tsx"));
 
   for (const needle of [
-    'className="aplus-module-summary"',
+    "A+模板编排",
     "moduleDraft",
     'title="编排 A+ 模块"',
     "应用编排",

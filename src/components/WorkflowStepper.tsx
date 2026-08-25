@@ -1,4 +1,5 @@
 import type { PlatformId } from "../domain/platforms/types";
+import { Button } from "./ui";
 
 export type WorkflowStage = "prepare" | "review" | "produce" | "deliver";
 
@@ -64,14 +65,16 @@ export function WorkflowStepper({
               aria-current={isCurrent ? "step" : undefined}
             >
               {selectable ? (
-                <button
+                <Button
+                  variant="quiet"
+                  size="compact"
                   type="button"
                   className="workbench-stepper__button"
                   aria-label={`前往${step.label}`}
                   onClick={() => onStageSelect?.(step.id)}
                 >
                   {content}
-                </button>
+                </Button>
               ) : content}
             </li>
           );

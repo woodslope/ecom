@@ -153,7 +153,11 @@ export function GenerationActions({
         </Button>
         {errorMessage ? <span className="generation-actions__error-message" role="alert">{errorMessage}</span> : null}
       </div>
-      {disabledReason ? <span id={disabledReasonId} className="visually-hidden">{disabledReason}</span> : null}
+      {disabledReason ? (
+        <StatusMessage id={disabledReasonId} className="generation-actions__hint" live="off">
+          {disabledReason}
+        </StatusMessage>
+      ) : null}
     </div>
   );
 }

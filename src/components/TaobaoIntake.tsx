@@ -358,7 +358,8 @@ export function TaobaoIntake({
           <ProductFactsForm facts={facts} disabled={controlsDisabled} onChange={(next) => { setFacts(next); setDirty(true); }} />
         </Panel>
         <Panel title="商品图" className="taobao-intake__asset-panel">
-          <button
+          <Button
+            variant="quiet"
             type="button"
             className={`reference-upload${isDraggingFiles ? " reference-upload--dragging" : ""}`}
             disabled={controlsDisabled}
@@ -376,7 +377,7 @@ export function TaobaoIntake({
               <strong>添加本次任务商品图</strong>
               <small>最多 16 张，8 MiB 内</small>
             </span>
-          </button>
+          </Button>
           <input
             ref={fileInputRef}
             className="visually-hidden-input"

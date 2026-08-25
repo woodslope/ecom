@@ -28,7 +28,7 @@ For ecommerce operators and designers, the workspace turns product facts and ref
 - `--text`: `#14191F`
 - `--text-secondary`: `#475569`
 - `--text-muted`: `#62707E`
-- `--placeholder-text`: `var(--disabled-text)` (the lightest placeholder-text role)
+- `--placeholder-text`: `var(--text-muted)` (readable secondary input guidance)
 - `--border`: `#D8DEE5`
 - `--border-strong`: `#BCC6D1`
 - `--focus-ring`: `#3B82F6`
@@ -135,11 +135,11 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - Dense task-input and analysis details open through the shared sidebar `Dialog` variant. Expanding details must not push the production grid or create a second page scroll owner.
 - Amazon with no active plan uses a focused intake surface: session parameters, Listing source, references, and one planning action. It may create a draft product/session atomically and must not render empty production columns.
 - Amazon Listing source belongs to the platform session and must never silently overwrite shared facts. The current UI keeps parsed values inside the task; a future sync action would require a separate product decision and explicit user confirmation.
-- Amazon A+ keeps one compact module summary in both preparation and planned states. `编排模块` always opens the same dialog; changes remain dialog-local until `应用编排`, while cancel/close discards them. The applied list defines the current task's slot count and order, and changing an existing plan marks it for replanning.
+- Amazon A+ keeps one `A+模板编排` entry in the mode toolbar. It always opens the same dialog; changes remain dialog-local until `应用编排`, while cancel/close discards them. The applied list defines the current task's slot count and order, and changing an existing plan marks it for replanning.
 - Amazon and Taobao preparation use `当前模板` as the single visible strategy input. The template owns industry direction, audience, style preference, forbidden content, and slot-level guidance; output settings remain separate. Legacy style/profile fields are no longer part of the preparation surface.
 - Delivery readiness stays hidden before the first usable output. Once output exists, the delivery strip remains single-line unless it is showing an error or recovery decision.
 - Partial slot completion remains part of `逐图生成`; `交付检查` means all required slots are complete or the operator explicitly enters a partial-delivery review.
-- Each platform owns its history pane. Events, recovery, fork, reuse, and re-export remain inside the selected Run and never mix across platforms.
+- Each platform owns its history pane. Run cards keep the current status, result thumbnails, resume, preview, re-export, and deletion actions together and never mix records across platforms.
 
 ### Desktop minimum width
 
@@ -349,7 +349,7 @@ Still out of scope for this minimal loop (add only when pain is repeated): Story
 - Library, source, history, compliance, export, shell runtime, and Amazon consumers share the same status and control primitives.
 - 淘宝分析、固定 5+7 槽位、手机预览和历史导出继续复用同一套 `Panel`、`Button`、`StatusChip`、`Dialog`、`MediaSlot` 和 `ActionBar`；生产记录样式只引用已声明的视觉 Token。
 - Success/danger text tokens and the solid focus-ring token meet the governed contrast thresholds; status feedback opts into polite/assertive live regions only when it is dynamic.
-- Muted text uses `--text-muted` only where it remains readable on page, surface, and soft-surface backgrounds. Placeholder text uses the lighter `--disabled-text` state exception and is intentionally secondary to entered values; rail text uses the separate dark-chrome tokens.
+- Muted and placeholder text use `--text-muted` where they remain readable on page, surface, and soft-surface backgrounds. `--disabled-text` remains reserved for disabled controls; rail text uses the separate dark-chrome tokens.
 - Every centered dialog and history sidebar uses the shared overlay stack, background isolation, topmost-only nested behavior, focus trap, and focus return.
 - Production history loads 50 Runs per page, preserves already loaded records when an older-page read fails, and exposes retry; browser evidence exercises 120 records and both initial/older-page recovery paths.
 - Browser evidence covers the production shell and opened history drawer, Listing/A+, settings, mask states, loading/error, the full supported desktop matrix, `899px` gate, compact-source overlay, dark preference, reduced motion, forced colors, DPR 2, and 125% zoom-equivalent rendering.

@@ -30,7 +30,7 @@ const commerceOpsTokens = {
   text: "#14191f",
   "text-secondary": "#475569",
   "text-muted": "#62707e",
-  "placeholder-text": "#8a96a3",
+  "placeholder-text": "#62707e",
   primary: "#2563eb",
   "primary-hover": "#1d4ed8",
   "primary-soft": "#eaf1ff",
@@ -57,7 +57,7 @@ function cssToken(name: string, seen = new Set<string>()): string | undefined {
 const guideTokenValues: Record<string, string> = {
   ...commerceOpsTokens,
   shell: "var(--page)",
-  "placeholder-text": "var(--disabled-text)",
+  "placeholder-text": "var(--text-muted)",
   ai: "var(--text-secondary)",
   "ai-soft": "var(--surface-soft)",
   "ai-border": "var(--border)",
@@ -69,6 +69,7 @@ const guideTokenValues: Record<string, string> = {
 
 const semanticAliases: Record<string, string> = {
   shell: "var(--page)",
+  "placeholder-text": "var(--text-muted)",
   ai: "var(--text-secondary)",
   "ai-soft": "var(--surface-soft)",
   "ai-border": "var(--border)",
@@ -149,7 +150,7 @@ describe("Commerce Ops visual contract", () => {
     for (const background of ["page", "surface", "surface-soft"]) {
       expect(contrast(cssToken("text-muted")!, cssToken(background)!), `muted on ${background}`).toBeGreaterThanOrEqual(4.5);
     }
-    expect(contrast(cssToken("placeholder-text")!, cssToken("surface")!), "placeholder on surface").toBeGreaterThanOrEqual(3);
+    expect(contrast(cssToken("placeholder-text")!, cssToken("surface")!), "placeholder on surface").toBeGreaterThanOrEqual(4.5);
     expect(contrast(cssToken("text-secondary")!, cssToken("page")!), "secondary on page").toBeGreaterThanOrEqual(4.5);
     expect(contrast(cssToken("success-text")!, cssToken("success-soft")!)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(cssToken("warning-text")!, cssToken("warning-soft")!)).toBeGreaterThanOrEqual(4.5);
