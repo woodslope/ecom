@@ -4,11 +4,7 @@ import { History, RefreshCw, X } from "lucide-react";
 import { AppShell } from "./components/AppShell";
 import { AmazonWorkspace } from "./components/AmazonWorkspace";
 import { ExecutionJobPanel } from "./components/ExecutionJobPanel";
-import {
-  CopilotTaskStatus,
-  GenerationFailureStatus,
-  GenerationTaskStatus,
-} from "./components/GenerationActions";
+import { CopilotTaskStatus } from "./components/GenerationActions";
 import { ConfirmLeaveDialog } from "./components/ConfirmLeaveDialog";
 import { PlatformWorkspace } from "./components/PlatformWorkspace";
 import { TaobaoWorkspace } from "./components/TaobaoWorkspace";
@@ -52,8 +48,8 @@ function PlatformHistoryPane({
   onCancelJob,
   onResumeRun,
   onForkRun,
-  onReuseImage,
   onExportRun,
+  onDeleteRun,
   historyQueryService,
   historyRefreshKey,
 }: {
@@ -71,8 +67,8 @@ function PlatformHistoryPane({
   onCancelJob: (jobId: string) => void;
   onResumeRun: (record: ProductionRunRecord) => void;
   onForkRun: (record: ProductionRunRecord) => void;
-  onReuseImage: (record: ProductionRunRecord, eventId: string) => void;
   onExportRun: (record: ProductionRunRecord) => void;
+  onDeleteRun: (record: ProductionRunRecord) => Promise<boolean>;
   historyQueryService: HistoryQueryService | null;
   historyRefreshKey: string;
 }) {
@@ -88,7 +84,6 @@ function PlatformHistoryPane({
       id={id}
       open={open}
       title="历史记录"
-      eyebrow={`${getPlatformRulePack(platform).label}工作流`}
       ariaLabel={`${getPlatformRulePack(platform).label}历史记录`}
       closeLabel="关闭历史记录"
       variant="sidebar"
@@ -107,7 +102,6 @@ function PlatformHistoryPane({
         </section>
       ) : null}
       <section className="platform-history-pane__records" aria-label="生产记录">
-        <h3>生产记录</h3>
         <Suspense fallback={<StatusMessage live="polite">正在载入历史记录...</StatusMessage>}>
           <TaskHistoryArchive
             projects={projects}
@@ -117,8 +111,8 @@ function PlatformHistoryPane({
             platformId={platform}
             onResumeRun={onResumeRun}
             onForkRun={onForkRun}
-            onReuseImage={onReuseImage}
             onExportRun={onExportRun}
+            onDeleteRun={onDeleteRun}
             historyQueryService={historyQueryService}
             refreshKey={historyRefreshKey}
             compact
@@ -145,6 +139,7 @@ export function App() {
   const [navigationWarning, setNavigationWarning] = useState<string | null>(null);
   const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
   const [exportFeedback, setExportFeedback] = useState<string | null>(null);
+  const [warningVisible, setWarningVisible] = useState(false);
   const [pendingLeave, setPendingLeave] = useState<
     | { kind: "nav"; item: NavigationItemId }
     | null
@@ -171,7 +166,6 @@ export function App() {
     planningPlatformId,
     planningError,
     generatingSlot,
-    generationCanceling,
     generationRecoveryRequired,
     generationError,
     generationErrorTarget,
@@ -187,9 +181,6 @@ export function App() {
     imageConnectionTestStatus,
     imageConnectionTestMessage,
     copilotTarget,
-    copilotFeedbackTarget,
-    copilotError,
-    copilotMessage,
     initialize,
     startAmazonSession,
     analyzeTaobaoProduct,
@@ -197,7 +188,6 @@ export function App() {
     confirmLocalizedFacts,
     updateActiveProject,
     uploadReferenceFiles,
-    createStyleReference,
     removeAsset,
     planPlatform,
     selectAmazonPlannerMode,
@@ -213,19 +203,16 @@ export function App() {
     retryExecutionJob,
     cancelExecutionJob,
     generateMaskedVersion,
-    cancelGeneration,
     activateSlotVersion,
     resumeRun,
     forkRun,
-    reuseRunImageAsReference,
+    removeRun,
     reuseGeneratedImageAsReference,
-    clearGenerationError,
     exportPlatform,
     exportRun,
     clearExportError,
     saveRuntimeSettings,
     testRuntimeConnection,
-    runCopilotCommand,
     cancelCopilot,
     retryActiveProjectResources,
     clearResourceRestoreError,
@@ -247,6 +234,31 @@ export function App() {
     return () => window.removeEventListener("beforeunload", preventUnsavedExit);
   }, [workspaceDirtyReason]);
 
+  useEffect(() => {
+    if (!uploadFeedback) return;
+    const timer = window.setTimeout(() => setUploadFeedback(null), 3600);
+    return () => window.clearTimeout(timer);
+  }, [uploadFeedback]);
+
+  useEffect(() => {
+    if (!exportFeedback) return;
+    const timer = window.setTimeout(() => setExportFeedback(null), 3600);
+    return () => window.clearTimeout(timer);
+  }, [exportFeedback]);
+
+  useEffect(() => {
+    setWarningVisible(Boolean(warning));
+    if (!warning) return;
+    const timer = window.setTimeout(() => setWarningVisible(false), 5200);
+    return () => window.clearTimeout(timer);
+  }, [warning]);
+
+  useEffect(() => {
+    if (!navigationWarning) return;
+    const timer = window.setTimeout(() => setNavigationWarning(null), 5200);
+    return () => window.clearTimeout(timer);
+  }, [navigationWarning]);
+
   const handleWorkspaceDirtyChange = useCallback((reason: string | null) => {
     setWorkspaceDirtyReason(reason);
     if (!reason) setNavigationWarning(null);
@@ -254,14 +266,14 @@ export function App() {
 
   const blockUnsavedNavigation = () => {
     if (!workspaceDirtyReason) return false;
-    setNavigationWarning(`${workspaceDirtyReason} 可保存、丢弃后再继续，或取消。`);
+    setNavigationWarning(`${workspaceDirtyReason} 离开后内容会丢失，请取消或放弃并离开。`);
     return true;
   };
   const requestNavigation = (item: NavigationItemId) => {
     if (item === activeItem) return;
     if (workspaceDirtyReason) {
       setPendingLeave({ kind: "nav", item });
-      setNavigationWarning(`${workspaceDirtyReason} 可保存、丢弃后再继续，或取消。`);
+      setNavigationWarning(`${workspaceDirtyReason} 离开后内容会丢失，请取消或放弃并离开。`);
       return;
     }
     changeActiveItem(item);
@@ -278,15 +290,6 @@ export function App() {
       writeLastPlatform(window.localStorage, pending.item);
     }
   };
-  const savePendingLeave = async () => {
-    // ProductSourcePanel owns the draft, so return to the panel without implying
-    // that the dialog itself has saved anything.
-    setNavigationWarning(
-      `${workspaceDirtyReason ?? "有未保存修改"} 请先在当前任务中保存，再切换。`,
-    );
-    setPendingLeave(null);
-  };
-
   const save = async (input: UpdateProductProjectInput) => Boolean(await updateActiveProject(input));
   const upload = async (files: File[]) => {
     const beforeIds = new Set(assets.map((asset) => asset.metadata.id));
@@ -352,16 +355,6 @@ export function App() {
     clearPlanningError();
     if (item === "taobao" || item === "amazon") {
       writeLastPlatform(window.localStorage, item);
-    }
-  };
-  const openGenerationErrorTarget = () => {
-    if (!generationErrorTarget) return;
-    const target = generationErrorTarget;
-    setActiveItem(target.platformId);
-    clearPlanningError();
-    writeLastPlatform(window.localStorage, target.platformId);
-    if (plans[target.platformId]?.slots.some((slot) => slot.slotKey === target.slotKey)) {
-      void selectPlannedSlot(target.platformId, target.slotKey);
     }
   };
   const downloadExport = (exported: NonNullable<Awaited<ReturnType<typeof exportPlatform>>>) => {
@@ -491,11 +484,9 @@ export function App() {
               if (!confirmed) return;
               await planPlatform("amazon", currentSession.options);
             }}
-            onCreateStyleReference={createStyleReference}
-            onRemoveAsset={removeAsset}
             onWorkspaceDirtyChange={handleWorkspaceDirtyChange}
           >
-            {(contextBar) => <PlatformWorkspace
+            {(_contextBar) => <PlatformWorkspace
               platform="amazon"
               activeProject={currentProject}
               assets={currentAssets}
@@ -514,15 +505,10 @@ export function App() {
               generatingSlot={generatingSlot}
               generationRecoveryRequired={generationRecoveryRequired}
               generationErrorTarget={generationErrorTarget}
+              generationError={generationError}
               copilotTarget={copilotTarget}
-              copilotFeedbackTarget={copilotFeedbackTarget}
-              copilotError={copilotError}
-              copilotMessage={copilotMessage}
               exporting={exportingPlatform === "amazon"}
               exportError={exportErrorPlatform === "amazon" ? exportError : null}
-              onSave={save}
-              onUpload={upload}
-              onRemove={remove}
               onPlan={(amazonOptions) => planPlatform("amazon", amazonOptions)}
               onAmazonPlannerModeChange={selectAmazonPlannerMode}
               onCancelPlanning={cancelPlanning}
@@ -554,13 +540,8 @@ export function App() {
               }
               onExport={() => void exportCurrentPlatform("amazon")}
               onClearExportError={clearExportError}
-              onCopilotCommand={(slotKey, command) =>
-                void runCopilotCommand("amazon", slotKey, command)
-              }
-              onCancelCopilot={cancelCopilot}
               onWorkspaceDirtyChange={handleWorkspaceDirtyChange}
               historyAction={historyAction}
-              contextBar={contextBar}
             />}
           </AmazonWorkspace>
         ) : (
@@ -585,12 +566,6 @@ export function App() {
             onStartNewTask={() => startNewTask("taobao")}
             historyAction={historyAction}
             onWorkspaceDirtyChange={handleWorkspaceDirtyChange}
-            stylePresetId={
-              currentTaobaoSession?.options &&
-              "stylePresetId" in currentTaobaoSession.options
-                ? (currentTaobaoSession.options as { stylePresetId?: string | null }).stylePresetId
-                : null
-            }
             onReanalyze={() => void reopenTaobaoAnalysis(currentTaobaoSession?.id)}
             reanalyzeDisabled={Boolean(
               loading ||
@@ -600,14 +575,12 @@ export function App() {
                 workspaceDirtyReason,
             )}
             reanalyzeDisabledReason={
-              workspaceDirtyReason
-                ? `${workspaceDirtyReason} 保存后再重新分析。`
-                : planningPlatformId || generatingSlot || exportingPlatform
-                  ? "当前有进行中的任务，请完成后再重新分析。"
-                  : undefined
+              planningPlatformId || generatingSlot || exportingPlatform
+                ? "当前有进行中的任务，请完成后再重新分析。"
+                : undefined
             }
           >
-            {(contextBar) => <PlatformWorkspace
+            {(_contextBar) => <PlatformWorkspace
               platform="taobao"
               activeProject={currentProject}
               assets={currentAssets}
@@ -625,15 +598,10 @@ export function App() {
               generatingSlot={generatingSlot}
               generationRecoveryRequired={generationRecoveryRequired}
               generationErrorTarget={generationErrorTarget}
+              generationError={generationError}
               copilotTarget={copilotTarget}
-              copilotFeedbackTarget={copilotFeedbackTarget}
-              copilotError={copilotError}
-              copilotMessage={copilotMessage}
               exporting={exportingPlatform === "taobao"}
               exportError={exportErrorPlatform === "taobao" ? exportError : null}
-              onSave={save}
-              onUpload={upload}
-              onRemove={remove}
               onPlan={() => planPlatform("taobao")}
               onAmazonPlannerModeChange={selectAmazonPlannerMode}
               onCancelPlanning={cancelPlanning}
@@ -665,13 +633,8 @@ export function App() {
               }
               onExport={() => void exportCurrentPlatform("taobao")}
               onClearExportError={clearExportError}
-              onCopilotCommand={(slotKey, command) =>
-                void runCopilotCommand("taobao", slotKey, command)
-              }
-              onCancelCopilot={cancelCopilot}
               onWorkspaceDirtyChange={handleWorkspaceDirtyChange}
               historyAction={historyAction}
-              contextBar={contextBar}
             />}
           </TaobaoWorkspace>
         )}
@@ -689,20 +652,26 @@ export function App() {
           onResumeJob={(jobId) => void resumeExecutionJob(jobId)}
           onRetryJob={(jobId) => void retryExecutionJob(jobId)}
           onCancelJob={(jobId) => void cancelExecutionJob(jobId)}
-          onResumeRun={(record) => void resumeRun(record.run.id).then((resumed) => {
+          onResumeRun={(record) => {
+            setHistoryOpen(false);
+            void resumeRun(record.run.id).then((resumed) => {
             if (resumed) {
               if (activeItem === "taobao" || activeItem === "amazon") clearNewTask(activeItem);
               changeActiveItem(activeItem);
             }
-          })}
-          onForkRun={(record) => void forkRun(record.run.id).then((session) => {
+            });
+          }}
+          onForkRun={(record) => {
+            setHistoryOpen(false);
+            void forkRun(record.run.id).then((session) => {
             if (session) {
               if (activeItem === "taobao" || activeItem === "amazon") clearNewTask(activeItem);
               changeActiveItem(activeItem);
             }
-          })}
-          onReuseImage={(record, eventId) => void reuseRunImageAsReference(record.run.id, eventId)}
+            });
+          }}
           onExportRun={(record) => void exportHistoryRun(record.run.id)}
+          onDeleteRun={(record) => removeRun(record.run.id)}
           historyQueryService={historyQueryService}
           historyRefreshKey={productionHistoryRevision(runs)}
           />
@@ -731,25 +700,32 @@ export function App() {
       onExportLocalBackup={exportLocalBackup}
       onImportLocalBackup={importLocalBackup}
     >
-      <div className="workspace-content-stack">
-        {!initialized && loading ? <StatusMessage live="polite">正在恢复本地商品资料与图片...</StatusMessage> : null}
-        {warning ? <StatusMessage tone="warning" live="polite">{warning}</StatusMessage> : null}
+      <div className="app-toast-region" aria-label="状态提示">
+        {!initialized && loading ? (
+          <StatusMessage live="polite" className="app-toast app-toast--loading">
+            正在恢复本地商品资料与图片...
+          </StatusMessage>
+        ) : null}
+        {warning && warningVisible ? (
+          <StatusMessage tone="warning" live="polite" className="app-toast">
+            {warning}
+          </StatusMessage>
+        ) : null}
         {navigationWarning ? (
-          <StatusMessage tone="warning" live="polite">{navigationWarning}</StatusMessage>
+          <StatusMessage tone="warning" live="polite" className="app-toast">
+            {navigationWarning}
+          </StatusMessage>
         ) : null}
         {uploadFeedback ? (
-          <StatusMessage tone="success" live="polite" className="upload-feedback-banner">
+          <StatusMessage tone="success" live="polite" className="app-toast upload-feedback-banner">
             <span>{uploadFeedback}</span>
-            <IconButton
-              label="关闭上传反馈"
-              onClick={() => setUploadFeedback(null)}
-            >
+            <IconButton label="关闭上传反馈" onClick={() => setUploadFeedback(null)}>
               <X size={15} />
             </IconButton>
           </StatusMessage>
         ) : null}
         {exportFeedback ? (
-          <StatusMessage tone="success" live="polite" className="export-feedback-banner" data-testid="export-feedback">
+          <StatusMessage tone="success" live="polite" className="app-toast export-feedback-banner" data-testid="export-feedback">
             <span>{exportFeedback}</span>
             <IconButton label="关闭导出反馈" onClick={() => setExportFeedback(null)}>
               <X size={15} />
@@ -757,7 +733,7 @@ export function App() {
           </StatusMessage>
         ) : null}
         {resourceRestoreError ? (
-          <StatusMessage tone="danger" live="assertive" className="workbench-error">
+          <StatusMessage tone="danger" live="assertive" className="app-toast workbench-error">
             <span>{resourceRestoreError}</span>
             <span className="status-message__actions">
               <Button
@@ -778,30 +754,17 @@ export function App() {
           </StatusMessage>
         ) : null}
         {error ? (
-          <StatusMessage tone="danger" live="assertive" className="workbench-error">
+          <StatusMessage tone="danger" live="assertive" className="app-toast workbench-error">
             <span>{error}</span>
             <IconButton label="关闭错误提示" onClick={clearError}>
               <X size={15} />
             </IconButton>
           </StatusMessage>
         ) : null}
-        {generatingSlot ? (
-          <GenerationTaskStatus
-            target={generatingSlot}
-            canceling={generationCanceling}
-            onCancel={cancelGeneration}
-          />
-        ) : null}
+      </div>
+      <div className="workspace-content-stack">
         {copilotTarget ? (
           <CopilotTaskStatus target={copilotTarget} onCancel={cancelCopilot} />
-        ) : null}
-        {!generatingSlot && generationError && generationErrorTarget ? (
-          <GenerationFailureStatus
-            target={generationErrorTarget}
-            message={generationError}
-            onOpen={openGenerationErrorTarget}
-            onClear={clearGenerationError}
-          />
         ) : null}
         {activeView}
       </div>
@@ -809,10 +772,9 @@ export function App() {
         open={pendingLeave !== null}
         description={
           workspaceDirtyReason
-            ? `${workspaceDirtyReason} 离开前请先在资料面板保存，或丢弃修改后继续。`
-            : "当前有未保存修改。离开前请先保存或丢弃。"
+            ? `${workspaceDirtyReason} 离开后内容会丢失，请取消或放弃并离开。`
+            : "当前有未保存内容，离开后会丢失，请取消或放弃并离开。"
         }
-        onSave={() => void savePendingLeave()}
         onDiscard={discardPendingLeave}
         onCancel={() => {
           setPendingLeave(null);

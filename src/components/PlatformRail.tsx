@@ -8,8 +8,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { navigationItems } from "../domain/platforms/registry";
 import type { NavigationItemId } from "../domain/platforms/types";
-import type { RuntimeMode } from "../domain/settings";
-import { Button, StatusChip, Tooltip } from "./ui";
+import { Button, Tooltip } from "./ui";
 
 const iconById: Partial<Record<NavigationItemId, LucideIcon>> = {
   taobao: ShoppingBag,
@@ -20,24 +19,22 @@ const iconById: Partial<Record<NavigationItemId, LucideIcon>> = {
 const navigationDescriptions: Partial<Record<NavigationItemId, string>> = {
   taobao: "主图与详情图任务",
   amazon: "Listing / A+ 图片任务",
-  settings: "Demo / API 连接",
+  settings: "API 连接",
 };
 
 const navigationGroups: Array<{
   label: string;
   ids: NavigationItemId[];
 }> = [
-  { label: "平台", ids: ["taobao", "amazon"] },
+  { label: "平台", ids: ["amazon", "taobao"] },
 ];
 
 export function PlatformRail({
   activeItem,
   onChange,
-  runtimeMode = "demo",
 }: {
   activeItem: NavigationItemId;
   onChange: (item: NavigationItemId) => void;
-  runtimeMode?: RuntimeMode;
 }) {
   const settingsItem = navigationItems.find((item) => item.id === "settings")!;
 
@@ -90,24 +87,6 @@ export function PlatformRail({
         ))}
       </nav>
       <div className="platform-rail__footer">
-        <div className="platform-rail__runtime">
-          <Tooltip
-            label={`当前运行模式：${runtimeMode === "api" ? "API" : "本地演示"}，点击打开设置`}
-            className="rail-tooltip"
-          >
-            <Button
-              type="button"
-              variant="quiet"
-              className="runtime-badge-button"
-              aria-label={`当前运行模式：${runtimeMode === "api" ? "API" : "本地演示"}，打开设置`}
-              onClick={() => onChange("settings")}
-            >
-              <StatusChip tone="mode" className="runtime-badge">
-                <span className="runtime-badge__text">{runtimeMode === "api" ? "API" : "Demo"}</span>
-              </StatusChip>
-            </Button>
-          </Tooltip>
-        </div>
         {renderItem(settingsItem)}
       </div>
     </aside>

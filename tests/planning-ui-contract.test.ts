@@ -140,9 +140,8 @@ describe("planning workspace UI contract", () => {
 
     expect(markup).toContain("可见文案");
     expect(markup).toContain("模型提示词（英文，可复制）");
-    expect(markup).toContain("策划依据");
+    expect(markup).toContain("中文策划说明");
     expect(markup).toContain("模型负面约束（英文）");
-    expect(markup).toContain("保存文案与提示词");
     expect(markup).toContain(slot.visibleCopy);
     expect(markup).toContain("Create an Amazon");
     expect(markup).toContain('aria-label="槽位身份"');

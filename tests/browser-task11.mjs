@@ -84,8 +84,8 @@ async function resumeAmazonTask(page) {
   const history = page.getByRole("dialog", { name: "Amazon历史记录", exact: true });
   await history.waitFor({ state: "visible" });
   await history.getByRole("button", { name: "继续任务", exact: true }).first().click();
+  await history.waitFor({ state: "hidden" });
   await page.locator(".slot-card").first().waitFor({ state: "attached" });
-  await history.getByRole("button", { name: "关闭历史记录", exact: true }).click();
 }
 
 await mkdir(evidenceDir, { recursive: true });
@@ -109,12 +109,10 @@ try {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   assert(await page.evaluate(() => window.devicePixelRatio === 2), "遮罩验收未在 DPR 2 环境运行");
   await page.getByRole("button", { name: "Amazon", exact: true }).click();
-  await page.getByText("粘贴 Amazon Listing（可选）", { exact: true }).click();
   await page.getByLabel("Amazon Listing 原文", { exact: true }).fill(
     "Title: Cloud Travel Neck Pillow\n- Memory foam support\n- Foldable for carry-on",
   );
-  await page.getByRole("button", { name: "填入空字段", exact: true }).click();
-  await page.getByRole("button", { name: "生成图片策划", exact: true }).click();
+  await page.getByRole("button", { name: "AI策划", exact: true }).click();
   await page.getByRole("button", { name: "确认并生成策划", exact: true }).click();
   await page.locator(".slot-card").filter({ hasText: "PT01" }).click();
   await page.getByRole("button", { name: "生成图片", exact: true }).click();

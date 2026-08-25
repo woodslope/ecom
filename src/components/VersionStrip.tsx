@@ -49,9 +49,7 @@ export function VersionStrip({
                   ? current
                     ? "当前版本"
                     : "旧草稿版本"
-                  : version.source === "demo"
-                    ? "Demo"
-                    : "API"}
+                  : "API"}
               </span>
             </span>
           </button>

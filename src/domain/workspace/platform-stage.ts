@@ -15,7 +15,7 @@ export type PlatformStage = AmazonStage;
 
 export type PlatformPrimaryAction =
   | AmazonPrimaryAction
-  | { kind: "plan"; label: "生成图片策划" | "重新策划" }
+  | { kind: "plan"; label: "AI策划" | "重新策划" }
   | { kind: "generate"; label: "生成当前图片"; slotKey: string }
   | { kind: "select"; label: "继续下一槽位"; slotKey: string }
   | { kind: "export"; label: "导出完整交付包" };
@@ -120,14 +120,14 @@ export function getPlatformPrimaryAction(input: {
         : input.session;
       return getAmazonPrimaryAction(withPlan);
     }
-    return { kind: "plan", label: "生成图片策划" };
+    return { kind: "plan", label: "AI策划" };
   }
 
   const stage = getPlatformStage(input);
   if (stage === "prepare" || !input.plan) {
     return {
       kind: "plan",
-      label: input.hasTaobaoAnalysis || input.session?.taobaoAnalysis ? "重新策划" : "生成图片策划",
+      label: input.hasTaobaoAnalysis || input.session?.taobaoAnalysis ? "重新策划" : "AI策划",
     };
   }
   if (stage === "deliver") {

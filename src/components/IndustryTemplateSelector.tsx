@@ -240,7 +240,7 @@ export function IndustryTemplateSelector({
   return (
     <>
       <div className="industry-template-selector">
-        <Field label="当前模板" hint="模板提供行业方向；商品事实仍由本次 AI 策划补全。">
+        <Field label="行业模板">
           <Select
             name="industryTemplate"
             aria-label="行业模板"
@@ -269,12 +269,14 @@ export function IndustryTemplateSelector({
           </Select>
         </Field>
         <div className="industry-template-selector__actions">
-          <IconButton type="button" label="管理模板" disabled={disabled} onClick={openLibrary}>
-            <Library size={14} />
-          </IconButton>
-          <StatusChip tone={currentValue.source === "system" ? "neutral" : "info"}>
-            {currentValue.slots.length} 个槽位
-          </StatusChip>
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={disabled}
+            onClick={openLibrary}
+          >
+            管理模板
+          </Button>
         </div>
       </div>
 
@@ -282,7 +284,6 @@ export function IndustryTemplateSelector({
         open={dialogOpen && !deleteConfirmOpen}
         variant="sidebar"
         title="行业模板库"
-        eyebrow={`${rulePack.label} · ${scope.workflowId}`}
         className="industry-template-dialog"
         onClose={() => {
           if (!transforming) setDialogOpen(false);
@@ -299,7 +300,6 @@ export function IndustryTemplateSelector({
             <div className="industry-template-library__heading">
               <div>
                 <strong>模板</strong>
-                <span>通用模板＋行业版本</span>
               </div>
               <StatusChip tone="info">{packs.length + 1}</StatusChip>
             </div>
@@ -336,7 +336,6 @@ export function IndustryTemplateSelector({
             <div className="industry-template-library__toolbar">
               <div>
                 <strong>{selectedSnapshot.name}</strong>
-                <span>{selectedSnapshot.description || "按当前平台槽位提供可复用行业方向。"}</span>
               </div>
               <div className="industry-template-library__toolbar-actions">
                 <Button type="button" variant="quiet" size="compact" onClick={markDefault}>

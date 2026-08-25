@@ -42,7 +42,7 @@ export function VersionCompareDialog({
               <div className="version-compare-tile__header">
                 <strong>V{i + 1}</strong>
                 <span>
-                  {version.source === "demo" ? "Demo" : "API"}
+                  API
                 </span>
               </div>
               <div className="version-compare-tile__media">

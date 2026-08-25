@@ -16,6 +16,8 @@ import assetLibrarySource from "../src/components/AssetLibrary.tsx?raw";
 import amazonIntakeSource from "../src/components/AmazonIntake.tsx?raw";
 import localizedFactsReviewSource from "../src/components/LocalizedFactsReview.tsx?raw";
 import taobaoIntakeSource from "../src/components/TaobaoIntake.tsx?raw";
+import taobaoWorkspaceSource from "../src/components/TaobaoWorkspace.tsx?raw";
+import productFactsFormSource from "../src/components/ProductFactsForm.tsx?raw";
 import promptAssetCenterSource from "../src/components/PromptAssetCenterDialog.tsx?raw";
 import promptProfileSource from "../src/components/PromptProfileDialog.tsx?raw";
 import industryTemplateSource from "../src/components/IndustryTemplateSelector.tsx?raw";
@@ -103,8 +105,7 @@ describe("shared workbench primitives", () => {
     const dialog = renderToStaticMarkup(
       createElement(Dialog, {
         open: true,
-        title: "连接与生成模式",
-        eyebrow: "运行设置",
+        title: "运行设置",
         variant: "sidebar",
         onClose: () => undefined,
         children: createElement("p", null, "设置内容"),
@@ -198,13 +199,13 @@ describe("shared workbench primitives", () => {
     const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
     expect(appShellSource.match(/<Select\b/g) ?? []).toHaveLength(0);
-    expect(settingsDialogSource.match(/<SegmentedControl\b/g)).toHaveLength(2);
+    expect(settingsDialogSource.match(/<SegmentedControl\b/g)).toHaveLength(1);
     expect(appShellSource).not.toMatch(/<select\b/);
     expect(settingsDialogSource).not.toMatch(/<select\b/);
 
     expect(appSource).toContain('size="compact"');
     expect(platformWorkspaceSource).toContain('size="compact"');
-    expect(slotInspectorSource.match(/size="compact"/g)?.length ?? 0).toBeGreaterThanOrEqual(5);
+    expect(slotInspectorSource.match(/size="compact"/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
     expect(styles).toMatch(/--control-height:\s*32px/);
     expect(styles).toMatch(/--control-height-compact:\s*32px/);
     expect(styles).toMatch(/\.button--normal\s*{[^}]*min-height:\s*var\(--control-height\)/);
@@ -237,11 +238,10 @@ describe("shared workbench primitives", () => {
     expect(styles).not.toContain("--rail-width-compact");
     expect(styles).toMatch(/--ink-elevated:\s*#2a3037/i);
     expect(styles).toMatch(/\.app-frame\s*{[^}]*width:\s*100%/);
-    expect(productionRunCardSource).toContain("回看阶段");
-    expect(productionRunCardSource).toContain("生成阶段");
-    expect(productionRunCardSource).toContain('aria-label="生成阶段列表"');
-    expect(productionRunCardSource).toContain("aria-controls={detailsId}");
-    expect(productionRunCardSource).toContain('id={detailsId}');
+    expect(productionRunCardSource).not.toContain("回看阶段");
+    expect(productionRunCardSource).not.toContain("收起阶段");
+    expect(productionRunCardSource).toContain("手机预览");
+    expect(productionRunCardSource).not.toContain("production-run-card__details");
     expect(amazonIntakeSource).toContain('tabIndex={-1}');
     expect(amazonIntakeSource).toContain('aria-hidden="true"');
     expect(amazonIntakeSource).toContain("移除文件 ${file.name}");
@@ -254,6 +254,13 @@ describe("shared workbench primitives", () => {
     expect(promptAssetCenterSource).toContain("prompt-asset-center__disabled-reason");
     expect(taobaoIntakeSource).toContain("aria-describedby={reanalyzeDisabledReason ? reanalyzeReasonId : undefined}");
     expect(taobaoIntakeSource).toContain("taobao-analysis-summary__reanalyze-reason");
+    expect(taobaoWorkspaceSource).toContain("reanalyzeDisabledReason");
+    expect(productFactsFormSource).toContain('placeholder="每行一条卖点"');
+    expect(productFactsFormSource).toContain('placeholder="每行一条，例如：材质：记忆棉"');
+    expect(productFactsFormSource).toContain('placeholder="每行一条禁用说法"');
+    expect(styles).toMatch(
+      /\.product-facts-form__heading\s*\{[^}]*display:\s*flex[^}]*align-items:\s*baseline/s,
+    );
     const actionBarSource = uiSource.slice(
       uiSource.indexOf("export function ActionBar"),
       uiSource.indexOf("export function Field"),
@@ -300,8 +307,8 @@ describe("shared workbench primitives", () => {
     expect(slotInspectorSource).toContain("<SegmentedControl");
     expect(slotInspectorSource).toContain('ariaLabel="槽位检查视图"');
     expect(slotInspectorSource).toContain('hidden={activePane !== "versions"}');
-    expect(slotInspectorSource).toContain('hidden={activePane !== "checks"}');
-    expect(slotInspectorSource).toContain('hidden={activePane !== "copilot"}');
+    expect(slotInspectorSource).not.toContain('hidden={activePane !== "checks"}');
+    expect(slotInspectorSource).not.toContain('hidden={activePane !== "copilot"}');
     expect(slotInspectorSource).toContain("disabled={submitting || draftDirty}");
     expect(slotInspectorSource).not.toContain("inspector-section__toggle");
     expect(slotInspectorSource).not.toContain("slot-inspector__strategy-toggle");

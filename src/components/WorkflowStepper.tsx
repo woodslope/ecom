@@ -2,18 +2,16 @@ import type { PlatformId } from "../domain/platforms/types";
 
 export type WorkflowStage = "prepare" | "review" | "produce" | "deliver";
 
-const WORKFLOW_STEPS: Array<{ id: WorkflowStage; label: string; hint: string }> = [
-  { id: "prepare", label: "准备", hint: "商品事实与参考图" },
-  { id: "review", label: "策划检查", hint: "确认槽位与 Prompt" },
-  { id: "produce", label: "逐图生产", hint: "生成并选择版本" },
-  { id: "deliver", label: "交付检查", hint: "预览、合规与导出" },
+const WORKFLOW_STEPS: Array<{ id: WorkflowStage; label: string }> = [
+  { id: "prepare", label: "准备资料" },
+  { id: "review", label: "生成交付" },
 ];
 
 const COMPACT_STEP_LABELS: Record<WorkflowStage, string> = {
-  prepare: "准备",
-  review: "策划",
-  produce: "生产",
-  deliver: "交付",
+  prepare: "准备资料",
+  review: "生成交付",
+  produce: "生成交付",
+  deliver: "生成交付",
 };
 
 export function WorkflowStepper({
@@ -22,15 +20,18 @@ export function WorkflowStepper({
   completedSlots,
   totalSlots,
   compact = false,
+  selectableStages = [],
+  onStageSelect,
 }: {
   platform: PlatformId;
   stage: WorkflowStage;
   completedSlots: number;
   totalSlots: number;
   compact?: boolean;
+  selectableStages?: readonly WorkflowStage[];
+  onStageSelect?: (stage: WorkflowStage) => void;
 }) {
-  const currentIndex = WORKFLOW_STEPS.findIndex((step) => step.id === stage);
-  const progressLabel = totalSlots > 0 ? `${completedSlots}/${totalSlots} 个槽位已完成` : "等待策划";
+  const currentIndex = stage === "prepare" ? 0 : 1;
   return (
     <div
       className={`workbench-chrome__progress-row${compact ? " workbench-chrome__progress-row--compact" : ""}`}
@@ -40,26 +41,42 @@ export function WorkflowStepper({
         {WORKFLOW_STEPS.map((step, index) => {
           const isCurrent = index === currentIndex;
           const isComplete = index < currentIndex;
+          const selectable = Boolean(
+            onStageSelect &&
+              (step.id === "prepare"
+                ? selectableStages.includes("prepare")
+                : selectableStages.some((candidate) => candidate !== "prepare")),
+          );
+          const content = (
+            <>
+              <span className="workbench-stepper__marker" aria-hidden="true">
+                {isComplete ? "✓" : index + 1}
+              </span>
+              <span className="workbench-stepper__copy">
+                <strong>{compact ? COMPACT_STEP_LABELS[step.id] : step.label}</strong>
+              </span>
+            </>
+          );
           return (
             <li
               key={step.id}
               className={`workbench-stepper__item${isCurrent ? " is-current" : ""}${isComplete ? " is-complete" : ""}`}
               aria-current={isCurrent ? "step" : undefined}
             >
-              <span className="workbench-stepper__marker" aria-hidden="true">
-                {isComplete ? "✓" : index + 1}
-              </span>
-              <span className="workbench-stepper__copy">
-                <strong>{compact ? COMPACT_STEP_LABELS[step.id] : step.label}</strong>
-                {compact ? null : <small>{step.hint}</small>}
-              </span>
+              {selectable ? (
+                <button
+                  type="button"
+                  className="workbench-stepper__button"
+                  aria-label={`前往${step.label}`}
+                  onClick={() => onStageSelect?.(step.id)}
+                >
+                  {content}
+                </button>
+              ) : content}
             </li>
           );
         })}
       </ol>
-      {compact ? null : (
-        <span className="workbench-chrome__progress-summary">{progressLabel}</span>
-      )}
     </div>
   );
 }

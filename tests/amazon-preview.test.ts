@@ -180,29 +180,16 @@ describe("Amazon mobile content preview", () => {
     const compactMarkup = renderToStaticMarkup(createElement(ProductionRunCard, {
       record,
       compact: true,
-      expanded: false,
       current: false,
       assetUrls: {},
-      onToggle: () => undefined,
       onResume: () => undefined,
       onFork: () => undefined,
-      onReuse: () => undefined,
-    }));
-    const expandedMarkup = renderToStaticMarkup(createElement(ProductionRunCard, {
-      record,
-      compact: true,
-      expanded: true,
-      current: false,
-      assetUrls: {},
-      onToggle: () => undefined,
-      onResume: () => undefined,
-      onFork: () => undefined,
-      onReuse: () => undefined,
     }));
 
-    expect(compactMarkup).not.toContain("手机预览");
-    expect(expandedMarkup).toContain("手机预览");
-    expect(compactMarkup).toMatch(/aria-expanded="false"[^>]*aria-controls="[^"]+"/);
-    expect(compactMarkup).toMatch(/id="[^"]+"[^>]*class="production-run-card__details" hidden=""/);
+    expect(compactMarkup).toContain("手机预览");
+    expect(compactMarkup).toContain('aria-label="MAIN 尚未生成"');
+    expect(compactMarkup).not.toContain("尚无生成结果");
+    expect(compactMarkup).not.toContain("回看阶段");
+    expect(compactMarkup).not.toContain("production-run-card__details");
   });
 });

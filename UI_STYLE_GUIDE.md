@@ -20,7 +20,7 @@ For ecommerce operators and designers, the workspace turns product facts and ref
 ### Color
 
 - `--page`: `#F3F5F7`
-- `--shell`: `#F3F5F7`
+- `--shell`: `var(--page)` (same canvas value, kept as a shell role)
 - `--surface`: `#FFFFFF`
 - `--surface-soft`: `#F0F3F6`
 - `--rail`: `#20252B`
@@ -28,7 +28,7 @@ For ecommerce operators and designers, the workspace turns product facts and ref
 - `--text`: `#14191F`
 - `--text-secondary`: `#475569`
 - `--text-muted`: `#62707E`
-- `--placeholder-text`: `#62707E`
+- `--placeholder-text`: `var(--disabled-text)` (the lightest placeholder-text role)
 - `--border`: `#D8DEE5`
 - `--border-strong`: `#BCC6D1`
 - `--focus-ring`: `#3B82F6`
@@ -40,9 +40,9 @@ For ecommerce operators and designers, the workspace turns product facts and ref
 - `--primary-soft`: `#EAF1FF`
 - `--primary-border`: `#B8CCFF`
 - `--on-primary`: `#FFFFFF`
-- `--ai`: `#475569`
-- `--ai-soft`: `#F0F3F6`
-- `--ai-border`: `#D8DEE5`
+- `--ai`: `var(--text-secondary)`
+- `--ai-soft`: `var(--surface-soft)`
+- `--ai-border`: `var(--border)`
 - `--success`: `#0F8B6E`
 - `--success-text`: `#0B735C`
 - `--success-soft`: `#E5F5F0`
@@ -58,7 +58,7 @@ For ecommerce operators and designers, the workspace turns product facts and ref
 - `--taobao`: `#E85D22`
 - `--amazon`: `#1C2E3A`
 
-Digital cobalt represents the active workflow, selection, and primary action. API and Demo are neutral operating modes rather than warning or AI colors. Green, amber, and red retain success, warning, and error meaning. Orange appears only in platform identity, promotion, or marketing semantics.
+Digital cobalt represents the active workflow, selection, and primary action. API is a neutral operating mode rather than a warning or AI color. Green, amber, and red retain success, warning, and error meaning. Orange appears only in platform identity, promotion, or marketing semantics.
 
 ### Typography
 
@@ -81,7 +81,8 @@ Digital cobalt represents the active workflow, selection, and primary action. AP
 ### Spacing And Dimensions
 
 - Spacing scale: `4, 8, 12, 16, 20, 24, 32` → CSS `--space-1` … `--space-7`.
-- Desktop platform rail stays at `72px` → CSS `--rail-width`; it only switches Taobao / Amazon, while the always-visible Demo/API mode and settings remain in the footer. There is no second compact-width token or rail variant.
+- Repeated `gap`, `padding`, and `margin` values on this scale must use the matching `--space-*` token. Non-scale values remain only for component geometry, media bounds, pseudo-element offsets, borders, or documented asymmetric treatments.
+- Desktop platform rail stays at `72px` → CSS `--rail-width`; it only switches Taobao / Amazon, while the always-visible API status and settings remain in the footer. There is no second compact-width token or rail variant.
 - Top context band: not rendered; the page toolbar owns context and actions.
 - All controls: `32px` high → CSS `--control-height` and `--control-height-compact`; normal and compact buttons, inputs, selects, and icon buttons share one height, with icon buttons remaining square.
 - Slot thumbnail: stable aspect ratio from its rule pack; no content-driven resizing.
@@ -104,16 +105,17 @@ Digital cobalt represents the active workflow, selection, and primary action. AP
 
 Dark operational chrome reuses these tokens instead of one-off hex:
 
-- `--ink`: `#20252B` (aligned with `--rail`)
+- `--ink`: `var(--rail)` (aligned with `--rail`)
 - `--ink-elevated`: `#2A3037` (elevated dark surface)
 - `--ink-soft`: `#313841` (hover / soft fill on ink)
 - `--ink-border`: `#414A55`
 - `--ink-text`: `#F8FAFC`
-- `--ink-text-muted`: `#A6B0BA`
+- `--ink-text-muted`: `var(--rail-muted)`
 - `--accent-warm`: `#F59E0B` (reserved platform or promotion accent)
-- `--accent-warm-text`: `#14191F`
-- `--brand-mark-bg`: `#EAF1FF`
+- `--accent-warm-text`: `var(--text)`
+- `--brand-mark-bg`: `var(--primary-soft)`
 - `--overlay-soft`, `--media-scrim`, `--white-surface-overlay`, `--shadow-subtle`, `--shadow-card`, `--shadow-drawer`, `--shadow-dialog`, `--gate-backdrop`, and `--shadow-gate` own local overlays and elevation values. Component rules must reference these tokens instead of repeating rgba shadows or scrims.
+- Same-value aliases are allowed only when the roles are intentionally coupled (for example `--shell` → `--page` or `--ai-soft` → `--surface-soft`). Semantically independent roles keep separate variables even when their current color is equal.
 
 ## 4. Layout Ownership
 
@@ -134,7 +136,7 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - Amazon with no active plan uses a focused intake surface: session parameters, Listing source, references, and one planning action. It may create a draft product/session atomically and must not render empty production columns.
 - Amazon Listing source belongs to the platform session and must never silently overwrite shared facts. The current UI keeps parsed values inside the task; a future sync action would require a separate product decision and explicit user confirmation.
 - Amazon A+ keeps one compact module summary in both preparation and planned states. `编排模块` always opens the same dialog; changes remain dialog-local until `应用编排`, while cancel/close discards them. The applied list defines the current task's slot count and order, and changing an existing plan marks it for replanning.
-- Amazon style input has two explicit layers: `生成方案` owns planning strategy and base visual guidance, while `视觉参考` optionally supplies a hidden visual reference for secondary Listing images and A+ (never MAIN). Choosing an internal or custom reference synchronizes its source preset back to the base style. Custom-reference creation and deletion state that they affect the current product; deleting a reference does not delete existing plans or images.
+- Amazon and Taobao preparation use `当前模板` as the single visible strategy input. The template owns industry direction, audience, style preference, forbidden content, and slot-level guidance; output settings remain separate. Legacy style/profile fields are no longer part of the preparation surface.
 - Delivery readiness stays hidden before the first usable output. Once output exists, the delivery strip remains single-line unless it is showing an error or recovery decision.
 - Partial slot completion remains part of `逐图生成`; `交付检查` means all required slots are complete or the operator explicitly enters a partial-delivery review.
 - Each platform owns its history pane. Events, recovery, fork, reuse, and re-export remain inside the selected Run and never mix across platforms.
@@ -152,7 +154,7 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - Every rail item exposes the same label through a tooltip and `aria-label`.
 - Active navigation is location only: use one shared active row treatment and a single left accent line. Do not show persistent platform-color markers on inactive items.
 - Runtime mode and settings live in the rail footer; they do not compete with the production order.
-- The runtime badge is always visible as `Demo` or `API` and opens settings; mode details and connection configuration remain inside the settings dialog.
+- The rail footer only exposes the settings entry; do not add a persistent runtime-mode badge.
 - Below the desktop minimum width, show the desktop-only gate instead of a mobile navigation.
 - Unimplemented platforms do not appear as selectable active items.
 
@@ -237,7 +239,6 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - Success: show the result and the next available action.
 - Error: show what failed, what remains safe, and how to retry or change input.
 - Restored: identify which local project and platform were restored.
-- Demo: label mock planning and mock images at the decision point.
 - API mode: show provider/model status without exposing the API key.
 
 ## 8. Copy Rules
@@ -255,6 +256,7 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 ## 9. Implementation Ownership
 
 - CSS variables in the single top-level `:root` block of `src/styles.css` are the token source of truth. Keep them in sync with §3 of this file.
+- Shared spacing values must consume `--space-1` … `--space-7`; one-off geometry is kept local and must remain covered by the governance exception list.
 - Shared React primitives in `src/components/ui.tsx` own buttons, icon buttons, selects, fields, dialogs, tooltips, panels, empty-state variants, `StatusChip`, `SegmentedControl`, `MediaSlot`, `ActionBar`, and status surfaces. `Badge` remains a compatibility primitive; business status should use `StatusChip`.
 - Workbench module columns (当前资料 / 平台交付槽位 / 槽位检查器) must render through `Panel` (or a thin wrapper around it). Do not hand-write `<section class="panel">` shells in business views.
 - When a module owns its own chrome bands (e.g. filled 槽位检查器), use `Panel` with `hideHeader` rather than a parallel DOM structure.
@@ -267,6 +269,7 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - `SlotInspector` owns one fixed four-view switcher for `文案 / 版本 / 检查 / Copilot` between the identity header and scrollable body; only one detail view is active, and the current result remains visible in every view. Strategy, evidence, negative constraints, and compliance belong to `检查`; version selection and image actions belong to `版本`. Do not reintroduce independent accordions for these concerns.
 - The slot footer may show save only while the `文案` view owns the editable form. Generation remains the result commit action, and navigation to the next slot must stay blocked while the current slot has unsaved copy or Prompt changes.
 - Domain-specific slot cards and version tiles stay with their owning components until a second real consumer proves that a shared primitive would remove duplication.
+- A selector has one owner within the same cascade scope. Contextual responsive or rail-specific overrides are the only allowed repeated-selector exceptions and must remain listed in the governance checker.
 - Platform rule packs own platform labels, colors, dimensions, slots, prompt rules, compliance rules, and export names.
 - Page components must not redefine shared tokens or platform rules with one-off constants.
 
@@ -327,7 +330,7 @@ pnpm test:browser:governance
 pnpm test:ui:acceptance  # complete gate + timestamped manifest
 ```
 
-`scripts/check-ui-governance.mjs` enforces: one `:root` token block, guide-aligned primary / rail / type tokens, state-text and focus contrast thresholds, shared modal/live-region ownership, no business `button--*` class assembly, the explicit raw-button exception list, upload/context/history semantic contracts, workbench modules on `Panel` + `hideHeader` for filled inspector, stable skeleton hooks in `AppShell` / `PlatformWorkspace`, no legacy mobile-pane hooks, and no return of retired zero-consumer component/CSS families.
+`scripts/check-ui-governance.mjs` enforces: one `:root` token block, guide-aligned primary / rail / type tokens, resolved alias contrast checks, no raw spacing-scale literals, one selector owner per cascade scope (with explicit contextual exceptions), state-text and focus contrast thresholds, shared modal/live-region ownership, no business `button--*` class assembly, the explicit raw-button exception list, upload/context/history semantic contracts, workbench modules on `Panel` + `hideHeader` for filled inspector, stable skeleton hooks in `AppShell` / `PlatformWorkspace`, no legacy mobile-pane hooks, and no return of retired zero-consumer component/CSS families.
 
 Browser and full acceptance output goes to `artifacts/cross-platform-ais/runs/<timestamp>/manifest.json`; `artifacts/cross-platform-ais/latest.json` points to the most recent batch. The manifest records suite type, Git SHA/dirty state, tool versions, commands, viewports and conditions, test counts and bundle size when the full suite runs, plus the exact screenshot list. `check:bundle` limits the Vite business entry chunk to `500 kB`.
 
@@ -346,7 +349,7 @@ Still out of scope for this minimal loop (add only when pain is repeated): Story
 - Library, source, history, compliance, export, shell runtime, and Amazon consumers share the same status and control primitives.
 - 淘宝分析、固定 5+7 槽位、手机预览和历史导出继续复用同一套 `Panel`、`Button`、`StatusChip`、`Dialog`、`MediaSlot` 和 `ActionBar`；生产记录样式只引用已声明的视觉 Token。
 - Success/danger text tokens and the solid focus-ring token meet the governed contrast thresholds; status feedback opts into polite/assertive live regions only when it is dynamic.
-- Muted text uses `--text-muted` only where it remains readable on page, surface, and soft-surface backgrounds. `--disabled-text` is a documented state exception for disabled controls, not a normal reading color; rail text uses the separate dark-chrome tokens.
+- Muted text uses `--text-muted` only where it remains readable on page, surface, and soft-surface backgrounds. Placeholder text uses the lighter `--disabled-text` state exception and is intentionally secondary to entered values; rail text uses the separate dark-chrome tokens.
 - Every centered dialog and history sidebar uses the shared overlay stack, background isolation, topmost-only nested behavior, focus trap, and focus return.
 - Production history loads 50 Runs per page, preserves already loaded records when an older-page read fails, and exposes retry; browser evidence exercises 120 records and both initial/older-page recovery paths.
 - Browser evidence covers the production shell and opened history drawer, Listing/A+, settings, mask states, loading/error, the full supported desktop matrix, `899px` gate, compact-source overlay, dark preference, reduced motion, forced colors, DPR 2, and 125% zoom-equivalent rendering.

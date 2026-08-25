@@ -36,9 +36,13 @@ export function StyleReferencePicker({
     (asset) => asset.metadata.kind === "style-reference" && asset.metadata.tags.includes("custom"),
   );
   const selectedCustomAsset = customAssets.find((asset) => asset.metadata.id === value);
+  const selectedPreset = value?.startsWith("preset:")
+    ? AMAZON_STYLE_PRESETS.find((preset) => preset.id === value.slice("preset:".length))
+    : undefined;
   const selectedPresetId = value?.startsWith("preset:")
     ? value.slice(7)
     : selectedCustomAsset?.metadata.styleReference?.sourcePresetId ?? basePresetId;
+  const showReferenceSelect = !selectedPreset || customAssets.length > 0;
   const [editorOpen, setEditorOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -76,6 +80,7 @@ export function StyleReferencePicker({
           <span>可选图片参考，只用于附图与 A+；主图不套用</span>
         </div>
         <IconButton
+          className="icon-button--secondary"
           disabled={disabled || !canCreate}
           label="新建参考"
           onClick={() => setEditorOpen(true)}
@@ -83,34 +88,49 @@ export function StyleReferencePicker({
           <Pencil size={14} />
         </IconButton>
       </div>
-      <Field label="当前参考">
-        <Select
-          aria-label="视觉参考"
-          value={value ?? "none"}
-          disabled={disabled}
-          onChange={(event) =>
-            changeStyleReference(event.target.value === "none" ? null : event.target.value)
-          }
-        >
-          <option value="none">仅文本风格（不附图）</option>
-          <optgroup label="内置风格">
-            {AMAZON_STYLE_PRESETS.map((preset) => (
-              <option key={preset.id} value={`preset:${preset.id}`}>
-                {preset.label}
+      {selectedPreset && !showReferenceSelect ? (
+        <div className="style-reference-picker__linked" aria-label="当前参考">
+          <span>
+            <strong>跟随生成方案</strong>
+            {selectedPreset.label} · 用于附图与 A+；主图不套用
+          </span>
+          <Button
+            variant="quiet"
+            size="compact"
+            disabled={disabled}
+            onClick={() => onChange(null)}
+          >
+            仅文本风格
+          </Button>
+        </div>
+      ) : (
+        <Field label="当前参考">
+          <Select
+            aria-label="视觉参考"
+            value={value ?? "none"}
+            disabled={disabled}
+            onChange={(event) =>
+              changeStyleReference(event.target.value === "none" ? null : event.target.value)
+            }
+          >
+            {selectedPreset ? (
+              <option value={value ?? ""}>
+                跟随生成方案（{selectedPreset.label}）
               </option>
-            ))}
-          </optgroup>
-          {customAssets.length > 0 ? (
-            <optgroup label="我的风格">
-              {customAssets.map((asset) => (
-                <option key={asset.metadata.id} value={asset.metadata.id}>
-                  {asset.metadata.styleReference?.name ?? asset.metadata.name}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-        </Select>
-      </Field>
+            ) : null}
+            <option value="none">仅文本风格（不附图）</option>
+            {customAssets.length > 0 ? (
+              <optgroup label="我的风格">
+                {customAssets.map((asset) => (
+                  <option key={asset.metadata.id} value={asset.metadata.id}>
+                    {asset.metadata.styleReference?.name ?? asset.metadata.name}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+          </Select>
+        </Field>
+      )}
       {value && !value.startsWith("preset:") ? (
         <div className="style-reference-picker__selected">
           {selectedCustomAsset ? (

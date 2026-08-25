@@ -1,23 +1,8 @@
-import { ChevronDown } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import type { PlatformId } from "../domain/platforms/types";
 import type { WorkflowStage } from "./WorkflowStepper";
 import { WorkflowStepper } from "./WorkflowStepper";
-
-const WORKFLOW_STAGE_LABELS: Record<WorkflowStage, string> = {
-  prepare: "准备",
-  review: "策划检查",
-  produce: "逐图生产",
-  deliver: "交付检查",
-};
-
-const WORKFLOW_STAGE_INDEX: Record<WorkflowStage, number> = {
-  prepare: 1,
-  review: 2,
-  produce: 3,
-  deliver: 4,
-};
 
 export function PlatformWorkflowShell({
   platform,
@@ -28,6 +13,8 @@ export function PlatformWorkflowShell({
   contextBar,
   historyAction,
   actions,
+  selectableStages,
+  onStageSelect,
   children,
   className = "",
 }: {
@@ -39,24 +26,11 @@ export function PlatformWorkflowShell({
   contextBar?: ReactNode;
   historyAction?: ReactNode;
   actions?: ReactNode;
+  selectableStages?: readonly WorkflowStage[];
+  onStageSelect?: (stage: WorkflowStage) => void;
   children: ReactNode;
   className?: string;
 }) {
-  const progressLabel = totalSlots > 0 ? `${completedSlots}/${totalSlots}` : "等待策划";
-  const [progressMenuOpen, setProgressMenuOpen] = useState(false);
-
-  useEffect(() => {
-    if (!progressMenuOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setProgressMenuOpen(false);
-      }
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [progressMenuOpen]);
-
   return (
     <div className={`platform-workflow-shell${className ? ` ${className}` : ""}`}>
       <header
@@ -66,30 +40,20 @@ export function PlatformWorkflowShell({
         <div className="workbench-chrome__main">
           <div className="workbench-chrome__brand">
             <h1>{title}</h1>
-            <details
-              className="workbench-chrome__progress-menu"
-              open={progressMenuOpen}
-              onToggle={(event) => setProgressMenuOpen(event.currentTarget.open)}
-            >
-              <summary aria-label={`当前步骤 ${WORKFLOW_STAGE_INDEX[stage]} / 4，展开完整流程`}>
-                <span className="workbench-chrome__progress-marker" aria-hidden="true">
-                  {WORKFLOW_STAGE_INDEX[stage]}
-                </span>
-                <span>{WORKFLOW_STAGE_LABELS[stage]}</span>
-                <small>{progressLabel}</small>
-                <ChevronDown size={13} aria-hidden="true" />
-              </summary>
-              <div className="workbench-chrome__progress-popover">
-                <WorkflowStepper
-                  platform={platform}
-                  stage={stage}
-                  completedSlots={completedSlots}
-                  totalSlots={totalSlots}
-                />
-              </div>
-            </details>
           </div>
-          {contextBar ? <div className="workbench-chrome__context">{contextBar}</div> : null}
+          <div className="workbench-chrome__center">
+            <div className="workbench-chrome__workflow">
+              <WorkflowStepper
+                platform={platform}
+                stage={stage}
+                completedSlots={completedSlots}
+                totalSlots={totalSlots}
+                selectableStages={selectableStages}
+                onStageSelect={onStageSelect}
+              />
+            </div>
+            {contextBar ? <div className="workbench-chrome__context">{contextBar}</div> : null}
+          </div>
           {historyAction || actions ? (
             <div className="workbench-chrome__tools">
               {historyAction}

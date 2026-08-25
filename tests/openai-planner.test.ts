@@ -399,6 +399,37 @@ describe("OpenAIPlanner", () => {
     expect(systemPrompt).toContain("strategy and evidence are user-facing planning notes");
     expect(systemPrompt).toContain("prompt and negativePrompt must use natural-English model instructions and evidence labels");
     expect(systemPrompt).toContain("Do not put Chinese planning explanations");
+    expect(systemPrompt).toContain("strategy must be a detailed Simplified Chinese planning card");
+    expect(systemPrompt).toContain("prompt is the complete professional US English image-generation prompt");
+  });
+
+  it("passes original Amazon Listing text as first-class planning source material", async () => {
+    const candidate = completeAmazonCandidate();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(candidate) } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const planner = new OpenAIPlanner({
+      endpoint: "https://provider.example/v1/chat/completions",
+      apiKey: "test-secret-key",
+      model: "planning-model",
+      fetch: fetchMock,
+    });
+
+    await planner.plan(
+      { ...project, listingText: "Title: CloudRest Memory Foam Travel Pillow\n\nAbout this item\n- Folds small" },
+      amazonRulePack,
+      new AbortController().signal,
+    );
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(body.messages[1]?.content).toContain("originalListingText");
+    expect(body.messages[1]?.content).toContain("CloudRest Memory Foam Travel Pillow");
+    expect(body.messages[1]?.content).toContain("Folds small");
   });
 
   it("accepts localized Unicode visible copy for the selected Amazon marketplace", async () => {

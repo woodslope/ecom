@@ -90,7 +90,7 @@ describe("shared platform stage", () => {
         hasTaobaoAnalysis: false,
         plan: null,
       }),
-    ).toEqual({ kind: "plan", label: "生成图片策划" });
+    ).toEqual({ kind: "plan", label: "AI策划" });
   });
 
   it("delegates Amazon stages to existing session helpers", () => {
@@ -114,7 +114,7 @@ describe("shared platform stage", () => {
     expect(getPlatformStage({ platform: "amazon", session })).toBe("prepare");
     expect(getPlatformPrimaryAction({ platform: "amazon", session })).toEqual({
       kind: "plan",
-      label: "生成图片策划",
+      label: "AI策划",
     });
   });
 });

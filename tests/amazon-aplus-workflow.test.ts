@@ -326,11 +326,11 @@ describe("Amazon A+ workflow", () => {
       }),
     );
 
-    expect(prepareMarkup).toContain("策划时按此顺序生成槽位");
-    expect(prepareMarkup).toContain("编排模块");
+    expect(prepareMarkup).toContain("A+模板编排");
+    expect(prepareMarkup).not.toContain("策划时按此顺序生成槽位");
     expect(prepareMarkup).not.toContain("删除第 1 个模块");
-    expect(plannedMarkup).toContain("应用修改后需重新策划");
-    expect(plannedMarkup).toContain("编排模块");
+    expect(plannedMarkup).toContain("A+模板编排");
+    expect(plannedMarkup).not.toContain("应用修改后需重新策划");
     expect(plannedMarkup).not.toContain("删除第 1 个模块");
   });
 });

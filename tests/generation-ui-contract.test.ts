@@ -10,7 +10,6 @@ import {
 import { VersionStrip } from "../src/components/VersionStrip";
 import { AssetLibrary } from "../src/components/AssetLibrary";
 import {
-  copilotDraftDisabledReason,
   isSlotDraftDirty,
   SlotInspector,
 } from "../src/components/SlotInspector";
@@ -130,8 +129,6 @@ describe("generation UI contract", () => {
     );
 
     expect(firstMarkup).toContain("生成图片");
-    expect(firstMarkup).toContain("本地 Demo mock");
-    expect(apiMarkup).toContain("API 图片生成");
     expect(apiMarkup).not.toContain("本地 Demo mock");
     expect(pendingMarkup).toContain("正在生成");
     expect(pendingMarkup).not.toContain("取消生成");
@@ -157,13 +154,6 @@ describe("generation UI contract", () => {
     expect(isSlotDraftDirty(slot, "Saved copy", "Saved prompt")).toBe(false);
     expect(isSlotDraftDirty(slot, "Unsaved copy", "Saved prompt")).toBe(true);
     expect(isSlotDraftDirty(slot, "Saved copy", "Unsaved prompt")).toBe(true);
-  });
-
-  it("requires saving a dirty slot draft before Copilot can run", () => {
-    expect(copilotDraftDisabledReason(false)).toBeUndefined();
-    expect(copilotDraftDisabledReason(true)).toBe(
-      "当前 Prompt 或可见文案尚未保存，请先保存文案与提示词后再使用 Copilot。",
-    );
   });
 
   it("keeps an off-screen generation failure attributable and recoverable", () => {
@@ -240,15 +230,16 @@ describe("generation UI contract", () => {
     );
 
     expect(markup).toContain('aria-label="槽位检查视图"');
-    expect(markup.match(/segmented-control__option[^>]*aria-pressed="(?:true|false)"/g)).toHaveLength(4);
+    expect(markup.match(/segmented-control__option[^>]*aria-pressed="(?:true|false)"/g)).toHaveLength(2);
     expect(markup).toContain('aria-label="文案与提示词"');
-    expect(markup.match(/hidden=""/g)).toHaveLength(3);
+    expect(markup.match(/hidden=""/g)).toHaveLength(1);
     expect(markup).toContain('aria-label="版本与图片工具" hidden=""');
-    expect(markup).toContain('aria-label="策划与合规检查" hidden=""');
+    expect(markup).not.toContain('aria-label="策划与合规检查"');
+    expect(markup).not.toContain('aria-label="AI Copilot"');
     expect(markup).not.toContain('aria-expanded=');
   });
 
-  it("shows a current generated version as complete instead of keeping the planning gap badge", () => {
+  it("hides redundant completion and runtime badges for a current generated version", () => {
     const currentVersionState: SlotVersionState = {
       ...versionState,
       versions: versionState.versions.map((version) =>
@@ -279,8 +270,9 @@ describe("generation UI contract", () => {
       markup.indexOf("</header>"),
     );
 
-    expect(identityHeader).toContain("已完成");
+    expect(identityHeader).not.toContain("已完成");
     expect(identityHeader).not.toContain("待补资料");
+    expect(identityHeader).not.toContain(">API<");
   });
 
   it("distinguishes actual, requested, and target upload image sizes", () => {

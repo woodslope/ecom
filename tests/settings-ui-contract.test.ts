@@ -45,7 +45,8 @@ describe("settings UI", () => {
     expect(markup).toContain("测试文本 API");
     expect(markup).toContain("测试图片 API");
     expect(markup).toContain("填写到 /v1");
-    expect(markup).toContain('aria-label="运行模式"');
+    expect(markup).not.toContain('aria-label="运行模式"');
+    expect(markup).not.toContain("本地演示");
     expect(markup).toContain('aria-label="API Key"');
     expect(markup).toContain('type="password"');
     expect(markup).toContain('aria-label="显示文本 API Key"');
@@ -54,10 +55,8 @@ describe("settings UI", () => {
     expect(markup.match(/sk-password-field-only/g)).toHaveLength(1);
     expect(markup).toContain("测试连接");
     expect(markup).toContain("保存设置");
-    expect(markup).toContain("未加密的浏览器本地数据");
-    expect(markup).toContain("文本与图片服务地址");
-    expect(markup).toContain("清空此字段");
-    expect(markup).toContain("同时删除本地项目与素材");
+    expect(markup).toContain("运行设置");
+    expect(markup).not.toContain("API Key 会作为未加密的浏览器本地数据保存");
     expect(markup).toContain("本地数据备份");
     expect(markup).toContain("导出本地备份");
     expect(markup).toContain("恢复本地备份");
@@ -65,7 +64,7 @@ describe("settings UI", () => {
     expect(markup).not.toContain("API 配置尚未启用");
   });
 
-  it("keeps runtime mode visible in the platform rail and links it to settings", () => {
+  it("keeps the settings destination available in the platform rail", () => {
     const markup = renderToStaticMarkup(
       createElement(AppShell, {
         activeItem: "amazon",
@@ -75,9 +74,8 @@ describe("settings UI", () => {
       }),
     );
 
-    expect(markup).toContain("runtime-badge");
-    expect(markup).toContain("当前运行模式：API");
-    expect(markup).toContain("打开设置");
+    expect(markup).toContain('aria-label="设置"');
+    expect(markup).not.toContain("runtime-badge");
   });
 
   it("does not reuse an old connection result after the draft changes", () => {

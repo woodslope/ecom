@@ -17,15 +17,14 @@ describe("reference-image follow-up plans", () => {
     const markup = renderToStaticMarkup(
       createElement(PlatformRail, {
         activeItem: "amazon",
-        runtimeMode: "api",
         onChange: () => undefined,
       }),
     );
 
     expect(markup).toContain('class="platform-rail"');
     expect(markup).not.toContain("platform-rail--compact");
-    expect(markup).toContain("runtime-badge");
-    expect(markup).toContain("API");
+    expect(markup).toContain('aria-label="设置"');
+    expect(markup).not.toContain("runtime-badge");
     expect(appSource).toContain('activeItem === "amazon"');
     expect(appSource).not.toContain("compactRail");
     expect(appSource).toContain("platform-page-layout");
@@ -34,11 +33,9 @@ describe("reference-image follow-up plans", () => {
     expect(styles).not.toContain("--rail-width-compact");
   });
 
-  it("opens a scoped Prompt asset center from the selected slot inspector", () => {
-    expect(slotInspectorSource).toContain("PromptAssetCenterDialog");
-    expect(slotInspectorSource).toContain("Prompt 资产");
-    expect(slotInspectorSource).toContain('onCopilotCommand("rewrite-prompt")');
-    expect(styles).toContain(".prompt-asset-center");
-    expect(styles).toContain(".prompt-asset-center-dialog.dialog--sidebar");
+  it("keeps Prompt asset controls out of the selected slot inspector", () => {
+    expect(slotInspectorSource).not.toContain("PromptAssetCenterDialog");
+    expect(slotInspectorSource).not.toContain("Prompt 资产");
+    expect(slotInspectorSource).not.toContain("slot-inspector__prompt-heading");
   });
 });

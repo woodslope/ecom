@@ -64,7 +64,7 @@ export function getPlatformWorkflow(workflowId: PlatformWorkflowId): PlatformWor
 }
 
 export const navigationItems: NavigationItem[] = [
-  { id: "taobao", label: "淘宝 / 天猫", kind: "platform", accent: "var(--taobao)" },
   { id: "amazon", label: "Amazon", kind: "platform", accent: "var(--amazon)" },
+  { id: "taobao", label: "淘宝 / 天猫", kind: "platform", accent: "var(--taobao)" },
   { id: "settings", label: "设置", kind: "tool" },
 ];

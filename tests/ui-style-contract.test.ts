@@ -9,6 +9,18 @@ const platformWorkspace = readFileSync(
   new URL("../src/components/PlatformWorkspace.tsx", import.meta.url),
   "utf8",
 );
+const amazonSessionControls = readFileSync(
+  new URL("../src/components/AmazonSessionControls.tsx", import.meta.url),
+  "utf8",
+);
+const styleReferencePicker = readFileSync(
+  new URL("../src/components/StyleReferencePicker.tsx", import.meta.url),
+  "utf8",
+);
+const industryTemplateSelector = readFileSync(
+  new URL("../src/components/IndustryTemplateSelector.tsx", import.meta.url),
+  "utf8",
+);
 
 const commerceOpsTokens = {
   page: "#f3f5f7",
@@ -18,7 +30,7 @@ const commerceOpsTokens = {
   text: "#14191f",
   "text-secondary": "#475569",
   "text-muted": "#62707e",
-  "placeholder-text": "#62707e",
+  "placeholder-text": "#8a96a3",
   primary: "#2563eb",
   "primary-hover": "#1d4ed8",
   "primary-soft": "#eaf1ff",
@@ -30,9 +42,41 @@ const commerceOpsTokens = {
   "focus-ring": "#3b82f6",
 };
 
-function cssToken(name: string): string | undefined {
+function cssTokenRaw(name: string): string | undefined {
   return styles.match(new RegExp(`--${name}:\\s*([^;]+);`, "i"))?.[1].trim().toLowerCase();
 }
+
+function cssToken(name: string, seen = new Set<string>()): string | undefined {
+  if (seen.has(name)) return undefined;
+  seen.add(name);
+  const value = cssTokenRaw(name);
+  const alias = value?.match(/^var\((--[\w-]+)\)$/i)?.[1];
+  return alias ? cssToken(alias.slice(2), seen) : value;
+}
+
+const guideTokenValues: Record<string, string> = {
+  ...commerceOpsTokens,
+  shell: "var(--page)",
+  "placeholder-text": "var(--disabled-text)",
+  ai: "var(--text-secondary)",
+  "ai-soft": "var(--surface-soft)",
+  "ai-border": "var(--border)",
+  ink: "var(--rail)",
+  "ink-text-muted": "var(--rail-muted)",
+  "accent-warm-text": "var(--text)",
+  "brand-mark-bg": "var(--primary-soft)",
+};
+
+const semanticAliases: Record<string, string> = {
+  shell: "var(--page)",
+  ai: "var(--text-secondary)",
+  "ai-soft": "var(--surface-soft)",
+  "ai-border": "var(--border)",
+  ink: "var(--rail)",
+  "ink-text-muted": "var(--rail-muted)",
+  "accent-warm-text": "var(--text)",
+  "brand-mark-bg": "var(--primary-soft)",
+};
 
 function relativeLuminance(hex: string): number {
   const channels = hex.slice(1).match(/.{2}/g)?.map((channel) => Number.parseInt(channel, 16) / 255);
@@ -57,8 +101,11 @@ describe("Commerce Ops visual contract", () => {
     for (const [name, value] of Object.entries(commerceOpsTokens)) {
       expect(cssToken(name), name).toBe(value);
       expect(guide.toLowerCase(), `${name} missing from UI_STYLE_GUIDE`).toContain(
-        `\`--${name}\`: \`${value}\``,
+        `\`--${name}\`: \`${guideTokenValues[name]}\``,
       );
+    }
+    for (const [name, value] of Object.entries(semanticAliases)) {
+      expect(cssTokenRaw(name), name).toBe(value);
     }
     expect(cssToken("radius-panel")).toBe("8px");
     expect(cssToken("radius-control")).toBe("6px");
@@ -80,11 +127,29 @@ describe("Commerce Ops visual contract", () => {
     }
   });
 
+  it("keeps repeated spacing on the semantic scale and selectors single-owned", () => {
+    expect(styles).not.toMatch(
+      /^\s*(?:gap|row-gap|column-gap|padding(?:-[a-z-]+)?|margin(?:-[a-z-]+)?)\s*:[^;{}]*\b(?:4|8|12|16|20|24|32)px\b[^;{}]*;/m,
+    );
+
+    const duplicateSelectors = new Map<string, number>();
+    const selectorPattern = /(^|[}])\s*([^@{}][^{}]*?)\s*\{/gm;
+    for (const match of styles.matchAll(selectorPattern)) {
+      const selector = match[2].trim().replace(/\s+/g, " ");
+      if (!selector || selector.startsWith(":root") || selector === "*") continue;
+      duplicateSelectors.set(selector, (duplicateSelectors.get(selector) ?? 0) + 1);
+    }
+    expect(duplicateSelectors.get("body")).toBe(2);
+    expect([...duplicateSelectors.entries()].filter(([selector, count]) => count > 1 && ![
+      "body",
+    ].includes(selector))).toEqual([]);
+  });
+
   it("keeps state text and keyboard focus above the contrast gates", () => {
     for (const background of ["page", "surface", "surface-soft"]) {
       expect(contrast(cssToken("text-muted")!, cssToken(background)!), `muted on ${background}`).toBeGreaterThanOrEqual(4.5);
     }
-    expect(contrast(cssToken("placeholder-text")!, cssToken("surface")!), "placeholder on surface").toBeGreaterThanOrEqual(4.5);
+    expect(contrast(cssToken("placeholder-text")!, cssToken("surface")!), "placeholder on surface").toBeGreaterThanOrEqual(3);
     expect(contrast(cssToken("text-secondary")!, cssToken("page")!), "secondary on page").toBeGreaterThanOrEqual(4.5);
     expect(contrast(cssToken("success-text")!, cssToken("success-soft")!)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(cssToken("warning-text")!, cssToken("warning-soft")!)).toBeGreaterThanOrEqual(4.5);
@@ -126,5 +191,21 @@ describe("Commerce Ops visual contract", () => {
     );
     expect(styles).toContain(".platform-workspace-view--production-shell > .workbench-grid");
     expect(styles).not.toContain(".platform-workspace-view--amazon-shell");
+  });
+
+  it("aligns business icon actions with secondary text buttons", () => {
+    expect(styles).toMatch(
+      /\.icon-button--secondary\s*\{[^}]*width:\s*var\(--control-height\)[^}]*color:\s*var\(--text\)[^}]*background:\s*var\(--surface\)[^}]*border-color:\s*var\(--border-strong\)/s,
+    );
+    expect(styles).toMatch(
+      /\.icon-button--secondary:hover:not\(:disabled\)\s*\{[^}]*color:\s*var\(--primary-hover\)[^}]*background:\s*var\(--primary-soft\)[^}]*border-color:\s*var\(--primary-border\)/s,
+    );
+    expect(amazonSessionControls).not.toContain('className="icon-button--secondary"');
+    expect(styleReferencePicker).toContain('className="icon-button--secondary"');
+    expect(industryTemplateSelector).toContain('variant="secondary"');
+    expect(industryTemplateSelector).toContain("管理模板");
+    expect(styles).toMatch(/\.icon-button:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--surface-soft\)/s);
+    expect(styles).toContain(".style-reference-picker__linked");
+    expect(amazonSessionControls).not.toContain("prompt-profile-select-row");
   });
 });

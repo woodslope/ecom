@@ -124,28 +124,31 @@ export function ProductFactsForm({
           />
         </Field>
         <div className="product-facts-form__grid product-facts-form__grid--content">
-          <Field label="核心卖点" name="sellingPoints" hint="每行一条卖点">
+          <Field label="核心卖点" name="sellingPoints">
             <textarea
               name="sellingPoints"
               aria-label="核心卖点"
+              placeholder="每行一条卖点"
               value={lines(facts.sellingPoints)}
               disabled={disabled}
               onChange={(event) => onChange({ ...facts, sellingPoints: parseLines(event.target.value) })}
             />
           </Field>
-          <Field label="规格参数" name="specifications" hint="每行一条，例如：材质：记忆棉">
+          <Field label="规格参数" name="specifications">
             <textarea
               name="specifications"
               aria-label="规格参数"
+              placeholder="每行一条，例如：材质：记忆棉"
               value={specifications(facts.specifications)}
               disabled={disabled}
               onChange={(event) => onChange({ ...facts, specifications: parseSpecifications(event.target.value) })}
             />
           </Field>
-          <Field label="禁用声明" name="forbiddenClaims" hint="每行一条禁用说法">
+          <Field label="禁用声明" name="forbiddenClaims">
             <textarea
               name="forbiddenClaims"
               aria-label="禁用声明"
+              placeholder="每行一条禁用说法"
               value={lines(facts.forbiddenClaims)}
               disabled={disabled}
               onChange={(event) => onChange({ ...facts, forbiddenClaims: parseLines(event.target.value) })}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Download, ImageOff, Smartphone } from "lucide-react";
+import { Archive, Download, ImageOff } from "lucide-react";
 
 import type { SlotVersionState } from "../domain/generation/types";
 import type { PlatformPlan } from "../domain/planning/types";
@@ -7,7 +7,7 @@ import {
   createTaobaoPreviewModel,
   type TaobaoPreviewItem,
 } from "../domain/platforms/taobao-preview";
-import { Button, Dialog, IconButton, MediaSlot, StatusChip, StatusMessage } from "./ui";
+import { Button, Dialog, IconButton, MediaSlot, StatusChip } from "./ui";
 
 function extensionFor(item: TaobaoPreviewItem): string {
   if (item.version?.mimeType === "image/svg+xml") return "svg";
@@ -67,14 +67,11 @@ export function TaobaoMobilePreview({
   }, [defaultGalleryKey, open, sourceId]);
 
   const selectedGallery = model.gallery.find((item) => item.slotKey === selectedGalleryKey) ?? model.gallery[0];
-  const missingGalleryCount = model.gallery.filter((item) => item.missing).length;
-  const missingDetailCount = model.details.filter((item) => item.missing).length;
 
   return (
     <Dialog
       open={open}
       title="淘宝手机商品页预览"
-      eyebrow={source === "run" ? "历史快照" : "当前商品"}
       className="taobao-preview-dialog"
       onClose={onClose}
       footer={
@@ -94,27 +91,6 @@ export function TaobaoMobilePreview({
       }
     >
       <div className="taobao-preview-layout">
-        <aside className="taobao-preview-meta">
-          <div>
-            <Smartphone size={18} aria-hidden="true" />
-            <strong>{title}</strong>
-          </div>
-          {model.missingSlots.length > 0 ? (
-            <div className="taobao-preview-meta__readiness">
-              <StatusMessage tone="warning" className="taobao-preview-meta__summary">
-                <strong>还需完成 {model.missingSlots.length} 个槽位</strong>
-                <span>头图 {missingGalleryCount} 个 · 详情 {missingDetailCount} 个</span>
-              </StatusMessage>
-              <details className="taobao-preview-meta__details">
-                <summary>查看槽位明细</summary>
-                <span>{model.missingSlots.join("、")}</span>
-              </details>
-            </div>
-          ) : (
-            <StatusMessage tone="success">主图与详情图已完整。</StatusMessage>
-          )}
-        </aside>
-
         <div className="taobao-phone-preview" aria-label="淘宝手机商品页">
           <header className="taobao-phone-preview__bar">
             <span>商品</span>

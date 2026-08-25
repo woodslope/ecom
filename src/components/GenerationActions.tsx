@@ -13,7 +13,7 @@ import { useId } from "react";
 import { getPlatformRulePack } from "../domain/platforms/registry";
 import type { PlatformId } from "../domain/platforms/types";
 import type { RuntimeMode } from "../domain/settings";
-import { Button, IconButton, StatusChip, StatusMessage } from "./ui";
+import { Button, IconButton, StatusMessage } from "./ui";
 
 export interface GenerationTarget {
   platformId: PlatformId;
@@ -116,9 +116,9 @@ export function GenerationFailureStatus({
 export function GenerationActions({
   hasVersion,
   generating,
-  runtimeMode = "demo",
   disabled = false,
   disabledReason,
+  errorMessage,
   variant = "primary",
   onGenerate,
 }: {
@@ -127,6 +127,7 @@ export function GenerationActions({
   runtimeMode?: RuntimeMode;
   disabled?: boolean;
   disabledReason?: string;
+  errorMessage?: string;
   variant?: "primary" | "secondary";
   onGenerate: () => void;
 }) {
@@ -134,9 +135,6 @@ export function GenerationActions({
   return (
     <div className="generation-actions">
       <div className="generation-actions__primary">
-        <StatusChip tone="mode">
-          {runtimeMode === "api" ? "API 图片生成" : "本地 Demo mock"}
-        </StatusChip>
         <Button
           variant={variant}
           size="compact"
@@ -153,10 +151,9 @@ export function GenerationActions({
           )}
           {generating ? "正在生成..." : hasVersion ? "重新生成" : "生成图片"}
         </Button>
+        {errorMessage ? <span className="generation-actions__error-message" role="alert">{errorMessage}</span> : null}
       </div>
-      {disabledReason ? (
-        <StatusMessage id={disabledReasonId} className="generation-actions__hint">{disabledReason}</StatusMessage>
-      ) : null}
+      {disabledReason ? <span id={disabledReasonId} className="visually-hidden">{disabledReason}</span> : null}
     </div>
   );
 }

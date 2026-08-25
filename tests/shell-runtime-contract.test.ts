@@ -17,9 +17,8 @@ describe("workbench runtime context", () => {
       ),
     );
 
-    expect(markup).toContain("runtime-badge");
-    expect(markup).toContain("runtime-badge-button");
-    expect(markup).toContain("当前运行模式：本地演示");
+    expect(markup).not.toContain("runtime-badge");
+    expect(markup).not.toContain("本地演示");
     expect(markup).toContain("desktop-only-gate");
     expect(markup).toContain("app-desktop-content");
     expect(markup).toContain('tabindex="-1"');

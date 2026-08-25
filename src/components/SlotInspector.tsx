@@ -1,5 +1,5 @@
-import { useEffect, useId, useState, type FormEvent } from "react";
-import { ArrowRight, Bot, Columns3, Copy, Library, LoaderCircle, Save, ShieldAlert, Square, WandSparkles } from "lucide-react";
+import { useEffect, useId, useState } from "react";
+import { ArrowRight, Columns3, Copy, Save } from "lucide-react";
 
 import {
   activeSlotVersion,
@@ -8,8 +8,8 @@ import {
 import type { MaskDraft } from "../domain/generation/mask";
 import type { SlotVersion, SlotVersionState } from "../domain/generation/types";
 import type { ComplianceResult } from "../domain/compliance";
-import type { CopilotCommand } from "../domain/copilot";
-import type { PlannedSlot, PlanningSource } from "../domain/planning/types";
+import { CompliancePanel } from "./CompliancePanel";
+import type { PlannedSlot } from "../domain/planning/types";
 import {
   industryTemplateSnapshot,
   listIndustryTemplatePacks,
@@ -17,14 +17,12 @@ import {
   templateSlotGuidance,
   type IndustryTemplateSnapshot,
 } from "../domain/prompt-templates/industry-template-packs";
-import type { PlatformRulePack, PlatformWorkflowId } from "../domain/platforms/types";
+import type { PlatformRulePack } from "../domain/platforms/types";
 import type { RuntimeMode } from "../domain/settings";
 import type { WorkbenchAsset } from "../store/workbench-store";
-import { CompliancePanel } from "./CompliancePanel";
 import { GenerationActions } from "./GenerationActions";
 import { ImageTools } from "./ImageTools";
 import { MaskEditorDialog } from "./MaskEditorDialog";
-import { PromptAssetCenterDialog } from "./PromptAssetCenterDialog";
 import { VersionStrip } from "./VersionStrip";
 import { VersionCompareDialog } from "./VersionCompareDialog";
 import {
@@ -34,17 +32,14 @@ import {
   Field,
   MediaSlot,
   SegmentedControl,
-  StatusChip,
   StatusMessage,
 } from "./ui";
 
-type InspectorPane = "copy" | "versions" | "checks" | "copilot";
+type InspectorPane = "copy" | "versions";
 
 const inspectorPanes = [
   { value: "copy", label: "文案" },
   { value: "versions", label: "版本" },
-  { value: "checks", label: "检查" },
-  { value: "copilot", label: "Copilot" },
 ] as const satisfies readonly { value: InspectorPane; label: string }[];
 
 export function isSlotDraftDirty(
@@ -61,18 +56,10 @@ export function isSlotDraftDirty(
   );
 }
 
-export function copilotDraftDisabledReason(draftDirty: boolean): string | undefined {
-  return draftDirty
-    ? "当前 Prompt 或可见文案尚未保存，请先保存文案与提示词后再使用 Copilot。"
-    : undefined;
-}
-
 export function SlotInspector({
   rulePack,
   slot,
-  workflowId,
   industryTemplate,
-  planningSource,
   saving = false,
   versionState,
   assets = [],
@@ -82,18 +69,10 @@ export function SlotInspector({
   planningInputSignature,
   generationLocked = false,
   generationLockReason,
-  complianceResult,
-  copilotRunning = false,
-  copilotLocked = false,
-  copilotLockReason,
-  copilotError,
-  copilotMessage,
   onDirtyChange = () => undefined,
   onSave,
   onGenerate = () => undefined,
   onActivateVersion = () => undefined,
-  onCopilotCommand = () => undefined,
-  onCancelCopilot = () => undefined,
   imageEditingSupported = true,
   imageEditingDisabledReason,
   onDownloadVersion,
@@ -101,12 +80,12 @@ export function SlotInspector({
   onMaskEdit,
   nextSlotAction,
   generationActionVariant = "primary",
+  generationError,
+  complianceResult,
 }: {
   rulePack: PlatformRulePack;
   slot: PlannedSlot;
-  workflowId?: PlatformWorkflowId;
   industryTemplate?: IndustryTemplateSnapshot;
-  planningSource?: PlanningSource;
   saving?: boolean;
   versionState?: SlotVersionState;
   assets?: WorkbenchAsset[];
@@ -116,12 +95,6 @@ export function SlotInspector({
   planningInputSignature?: string;
   generationLocked?: boolean;
   generationLockReason?: string;
-  complianceResult?: ComplianceResult;
-  copilotRunning?: boolean;
-  copilotLocked?: boolean;
-  copilotLockReason?: string;
-  copilotError?: string | null;
-  copilotMessage?: string | null;
   onDirtyChange?: (dirty: boolean) => void;
   onSave: (
     patch: Pick<PlannedSlot, "visibleCopy" | "prompt"> &
@@ -129,8 +102,6 @@ export function SlotInspector({
   ) => Promise<boolean>;
   onGenerate?: () => void;
   onActivateVersion?: (versionId: string) => void;
-  onCopilotCommand?: (command: CopilotCommand) => void;
-  onCancelCopilot?: () => void;
   imageEditingSupported?: boolean;
   imageEditingDisabledReason?: string;
   onDownloadVersion?: (version: SlotVersion, asset: WorkbenchAsset) => void;
@@ -138,6 +109,8 @@ export function SlotInspector({
   onMaskEdit?: (versionId: string, mask: MaskDraft, prompt: string) => Promise<boolean>;
   nextSlotAction?: { label: string; onSelect: () => void };
   generationActionVariant?: "primary" | "secondary";
+  generationError?: string;
+  complianceResult?: ComplianceResult;
 }) {
   const [visibleCopy, setVisibleCopy] = useState(slot.visibleCopy);
   const [prompt, setPrompt] = useState(slot.prompt);
@@ -149,11 +122,9 @@ export function SlotInspector({
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [maskEditorSaving, setMaskEditorSaving] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
-  const [promptAssetsOpen, setPromptAssetsOpen] = useState(false);
   const [maskEditorError, setMaskEditorError] = useState<string | null>(null);
   const [industryTemplateMessage, setIndustryTemplateMessage] = useState<string | null>(null);
   const [industryTemplateConfirmOpen, setIndustryTemplateConfirmOpen] = useState(false);
-  const saveDisabledReasonId = useId();
   const nextSlotDisabledReasonId = useId();
   const [renderedDimensions, setRenderedDimensions] = useState<{
     width: number;
@@ -162,19 +133,13 @@ export function SlotInspector({
   const isMain = rulePack.platformId === "amazon" && slot.slotKey === "MAIN";
   const usesEnglishPrompt = rulePack.promptLanguage === "en";
   const promptLabel = usesEnglishPrompt ? "模型提示词（英文，可复制）" : "图片提示词";
-  const evidenceLabel = usesEnglishPrompt ? "策划依据（中文说明）" : "策划依据";
-  const negativePromptLabel = usesEnglishPrompt ? "模型负面约束（英文）" : "负面约束";
-  const busy = saving || generating || copilotRunning || saveState === "saving";
+  const busy = saving || generating || saveState === "saving";
   const submitting = busy || planNeedsRefresh;
   const hasExternalText = Boolean(slot.externalText);
   const externalText = hasExternalText
     ? { title: externalTitle, body: externalBody }
     : undefined;
   const draftDirty = isSlotDraftDirty(slot, visibleCopy, prompt, externalText);
-  const copilotDisabledReason = copilotDraftDisabledReason(draftDirty);
-  const copilotPatchDisabledReason = copilotDisabledReason ?? (hasExternalText
-    ? "当前模块使用图片外文案；请直接编辑外部标题和正文。"
-    : undefined);
   const generationDisabled =
     planNeedsRefresh ||
     draftDirty ||
@@ -184,17 +149,12 @@ export function SlotInspector({
   const generationDisabledReason = planNeedsRefresh
     ? "当前策划已过期，请先重新策划。"
     : draftDirty
-    ? "当前 Prompt 或可见文案尚未保存，请先在“文案”中保存后再生成。"
+      ? "请先保存当前修改，再生成图片。"
     : saveState === "saving" || saving
       ? "槽位草稿正在保存，请稍候。"
       : generationLocked && !generating
         ? generationLockReason
         : undefined;
-  const saveDisabledReason = submitting
-    ? "当前有保存、生成或策划刷新进行中。"
-    : prompt.trim().length === 0
-      ? "请先填写图片提示词再保存。"
-      : undefined;
   const nextSlotDisabledReason = draftDirty
     ? "请先在“文案”中保存当前修改，再切换槽位。"
     : undefined;
@@ -204,13 +164,6 @@ export function SlotInspector({
     : true;
   const activeAsset = assets.find((asset) => asset.metadata.id === activeVersion?.assetId);
   const slotRule = rulePack.slots.find((rule) => rule.key === slot.slotKey);
-  const promptAssetWorkflowId: PlatformWorkflowId = workflowId ?? (
-    rulePack.platformId === "amazon"
-      ? slotRule?.group === "a-plus"
-        ? "amazon-aplus"
-        : "amazon-listing"
-      : "taobao-product"
-  );
   const industryGuidance = templateSlotGuidance(industryTemplate, slot.slotKey);
 
   const savePromptAsIndustryTemplateVersion = () => {
@@ -286,27 +239,11 @@ export function SlotInspector({
   }, [activeVersion?.id]);
 
   useEffect(() => {
-    // Actionable findings belong to the single inspector view owner.
-    if (
-      complianceResult &&
-      complianceResult.findings.some(
-        (finding) => finding.severity === "error" || finding.severity === "warning",
-      )
-    ) {
-      setActivePane("checks");
-    }
-  }, [complianceResult, slot.slotKey]);
-
-  useEffect(() => {
-    if (copilotRunning || copilotError || copilotMessage) setActivePane("copilot");
-  }, [copilotRunning, copilotError, copilotMessage, slot.slotKey]);
-
-  useEffect(() => {
     onDirtyChange(draftDirty);
   }, [draftDirty, onDirtyChange]);
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  const saveDraft = async () => {
+    if (!draftDirty || submitting) return;
     setSaveState("saving");
     const saved = await onSave({
       visibleCopy: isMain || hasExternalText ? "" : visibleCopy,
@@ -325,17 +262,6 @@ export function SlotInspector({
     }
   };
 
-  const complianceBadge =
-    complianceResult?.findings.some((f) => f.severity === "error")
-      ? "合规有错误"
-      : complianceResult?.findings.some((f) => f.severity === "warning")
-        ? "合规有提醒"
-        : null;
-  const needsFacts = slot.evidence.some((item) => item.startsWith("待补资料"));
-  const slotComplete = Boolean(activeVersion && activeVersionIsCurrent);
-  const uploadHint = slotRule
-    ? `上传建议 ${slotRule.dimensions.width}×${slotRule.dimensions.height}px`
-    : null;
   const openMaskEditor = () => {
     setMaskEditorError(null);
     setMaskEditorOpen(true);
@@ -355,38 +281,22 @@ export function SlotInspector({
 
   return (
     <div className="slot-inspector slot-inspector--shell">
-      {/* Fixed top: identity only */}
+      {/* Fixed top: slot identity and detail-view switcher. */}
       <header className="slot-inspector__chrome-top" aria-label="槽位身份">
         <div className="slot-inspector__identity">
-          <span className="slot-inspector__eyebrow">槽位详情</span>
           <span className="slot-inspector__key">{slot.slotKey}</span>
           {slotRule ? <span className="slot-inspector__label">{slotRule.uiLabel ?? slotRule.label}</span> : null}
-          {uploadHint ? <span className="slot-inspector__meta-line">{uploadHint}</span> : null}
         </div>
-        <div className="slot-inspector__badges">
-          {slotComplete ? (
-            <StatusChip tone="success">已完成</StatusChip>
-          ) : needsFacts ? (
-            <StatusChip tone="warning">待补资料</StatusChip>
-          ) : null}
-          {complianceBadge ? <StatusChip tone="warning">{complianceBadge}</StatusChip> : null}
-          {activeVersion ? (
-            <StatusChip tone="mode">
-              {activeVersion.source === "demo" ? "Demo" : "API"}
-            </StatusChip>
-          ) : planningSource ? (
-            <StatusChip tone="mode">{planningSource === "demo" ? "Demo" : "API"}</StatusChip>
-          ) : null}
+        <div className="slot-inspector__chrome-actions">
+          <SegmentedControl
+            className="slot-inspector__views"
+            ariaLabel="槽位检查视图"
+            options={inspectorPanes}
+            value={activePane}
+            onChange={setActivePane}
+          />
         </div>
       </header>
-
-      <SegmentedControl
-        className="slot-inspector__views"
-        ariaLabel="槽位检查视图"
-        options={inspectorPanes}
-        value={activePane}
-        onChange={setActivePane}
-      />
 
       {/* Scroll middle: current result plus one active detail view. */}
       <div className="slot-inspector__scroll" role="region" aria-label="槽位内容">
@@ -442,7 +352,7 @@ export function SlotInspector({
           className="slot-inspector__form slot-inspector__pane"
           aria-label="文案与提示词"
           hidden={activePane !== "copy"}
-          onSubmit={submit}
+          onSubmit={(event) => event.preventDefault()}
         >
             {hasExternalText ? (
               <div className="slot-inspector__external-copy" aria-label="A+ 图片外文案">
@@ -510,21 +420,6 @@ export function SlotInspector({
                 />
               </Field>
             )}
-            <div className="slot-inspector__prompt-heading">
-              <div>
-                <strong>模板与复用</strong>
-                <span>按平台、工作流和槽位保存可复用模板。</span>
-              </div>
-              <Button
-                variant="quiet"
-                size="compact"
-                disabled={submitting}
-                onClick={() => setPromptAssetsOpen(true)}
-              >
-                <Library size={14} />
-                Prompt 资产
-              </Button>
-            </div>
             {industryTemplate && industryGuidance ? (
               <StatusMessage className="slot-inspector__template-source">
                 <span>
@@ -548,6 +443,7 @@ export function SlotInspector({
             {industryTemplateMessage ? (
               <StatusMessage tone="success" live="polite">{industryTemplateMessage}</StatusMessage>
             ) : null}
+            {complianceResult ? <CompliancePanel result={complianceResult} /> : null}
             <Field
               label={promptLabel}
               hint={
@@ -569,11 +465,24 @@ export function SlotInspector({
                 }}
               />
             </Field>
-            {saveState === "saved" ? (
-              <StatusMessage tone="success" live="polite">用户编辑：槽位草稿已保存。</StatusMessage>
-            ) : null}
-            {saveState === "error" ? (
-              <StatusMessage tone="danger" live="assertive">保存失败，当前输入仍保留，请检查提示后重试。</StatusMessage>
+            {rulePack.platformId === "amazon" ? (
+              <section className="slot-inspector__planning-output" aria-label="Amazon 策划输出">
+                {slot.strategy ? (
+                  <div className="slot-inspector__strategy" aria-labelledby="slot-strategy-title">
+                    <div className="slot-inspector__section-title">
+                      <strong id="slot-strategy-title">中文策划说明</strong>
+                      <span className="slot-inspector__section-hint">人工确认画面目标与合规边界</span>
+                    </div>
+                    <div className="slot-inspector__strategy-card"><p>{slot.strategy}</p></div>
+                  </div>
+                ) : null}
+                {slot.negativePrompt ? (
+                  <div className="slot-inspector__negative" aria-label="英文 Negative Prompt">
+                    <strong>模型负面约束（英文）</strong>
+                    <p>{slot.negativePrompt}</p>
+                  </div>
+                ) : null}
+              </section>
             ) : null}
         </form>
 
@@ -628,119 +537,6 @@ export function SlotInspector({
             ) : null}
         </section>
 
-        <section
-          className="slot-inspector__pane slot-inspector__checks"
-          aria-label="策划与合规检查"
-          hidden={activePane !== "checks"}
-        >
-            {slot.strategy ? (
-              <section className="slot-inspector__strategy" aria-labelledby="slot-strategy-title">
-                <div className="slot-inspector__section-title">
-                  <strong id="slot-strategy-title">AI 策略解读</strong>
-                  <span className="slot-inspector__section-hint">
-                    根据商品事实、参考图和{rulePack.label}规则生成
-                  </span>
-                </div>
-                <div className="slot-inspector__strategy-card">
-                  <p>{slot.strategy}</p>
-                </div>
-              </section>
-            ) : null}
-            <section className="slot-inspector__evidence" aria-labelledby="slot-evidence-title">
-              <div className="slot-inspector__section-title">
-                <ShieldAlert size={15} />
-                <strong id="slot-evidence-title">{evidenceLabel}</strong>
-                <span className="slot-inspector__section-hint">策划决策的关键依据</span>
-              </div>
-              <ul className="slot-inspector__evidence-list">
-                {slot.evidence.map((item, i) => (
-                  <li key={i}>{item}</li>
-                ))}
-              </ul>
-            </section>
-            {complianceResult ? <CompliancePanel result={complianceResult} /> : null}
-            {slot.negativePrompt ? (
-              <div className="slot-inspector__negative">
-                <strong>{negativePromptLabel}</strong>
-                <p>{slot.negativePrompt}</p>
-              </div>
-            ) : null}
-        </section>
-
-        <section
-          className="slot-inspector__pane slot-inspector__copilot"
-          aria-label="AI Copilot"
-          hidden={activePane !== "copilot"}
-        >
-            <p className="visually-hidden">写入动作只调整当前槽位；检查与解释只返回建议</p>
-            {copilotRunning ? (
-              <StatusMessage live="polite" className="copilot-status">
-                <span>
-                  <LoaderCircle className="spin" size={14} />
-                  Copilot 正在处理当前槽位请求
-                </span>
-                <Button variant="secondary" onClick={onCancelCopilot}>
-                  <Square size={13} />
-                  取消请求
-                </Button>
-              </StatusMessage>
-            ) : null}
-            {copilotError ? <StatusMessage tone="danger" live="assertive">{copilotError}</StatusMessage> : null}
-            {copilotMessage ? <StatusMessage live="polite">{copilotMessage}</StatusMessage> : null}
-            {!copilotRunning && copilotLockReason ? (
-              <StatusMessage tone="warning">{copilotLockReason}</StatusMessage>
-            ) : null}
-            {copilotPatchDisabledReason ? (
-              <StatusMessage tone="warning">{copilotPatchDisabledReason}</StatusMessage>
-            ) : null}
-            <div className="copilot-actions">
-              <Button
-                variant="secondary"
-                size="compact"
-                disabled={submitting || copilotLocked || Boolean(copilotPatchDisabledReason)}
-                onClick={() => onCopilotCommand("shorten-copy")}
-              >
-                <WandSparkles size={13} />
-                缩短文案
-              </Button>
-              <Button
-                variant="secondary"
-                size="compact"
-                disabled={submitting || copilotLocked || Boolean(copilotPatchDisabledReason)}
-                onClick={() => onCopilotCommand("strengthen-evidence")}
-              >
-                <WandSparkles size={13} />
-                强化证据
-              </Button>
-              <Button
-                variant="secondary"
-                size="compact"
-                disabled={submitting || copilotLocked || Boolean(copilotPatchDisabledReason)}
-                onClick={() => onCopilotCommand("adapt-platform")}
-              >
-                <WandSparkles size={13} />
-                适配平台
-              </Button>
-              <Button
-                variant="secondary"
-                size="compact"
-                disabled={submitting || copilotLocked || Boolean(copilotDisabledReason)}
-                onClick={() => onCopilotCommand("check-compliance")}
-              >
-                <ShieldAlert size={13} />
-                检查 Prompt
-              </Button>
-              <Button
-                variant="secondary"
-                size="compact"
-                disabled={submitting || copilotLocked || Boolean(copilotDisabledReason)}
-                onClick={() => onCopilotCommand("explain-next")}
-              >
-                <Bot size={13} />
-                解释下一步
-              </Button>
-            </div>
-        </section>
       </div>
 
       {/* Fixed bottom: primary actions always visible; disabled reason via GenerationActions. */}
@@ -749,24 +545,22 @@ export function SlotInspector({
         ariaLabel="槽位操作"
         secondary={
           <div className="slot-inspector__secondary-actions">
+            {saveState === "error" ? (
+              <span className="slot-inspector__save-error" role="alert">保存失败，请重试。</span>
+            ) : null}
             {activePane === "copy" ? (
               <Button
-                type="submit"
-                form="slot-inspector-form"
+                type="button"
                 variant="secondary"
                 size="compact"
-                disabled={submitting || prompt.trim().length === 0}
-                title={saveDisabledReason}
-                aria-describedby={saveDisabledReason ? saveDisabledReasonId : undefined}
+                disabled={!draftDirty || submitting}
+                loading={saveState === "saving" || saving}
+                loadingLabel="保存中…"
+                onClick={() => void saveDraft()}
               >
                 <Save size={15} />
-                {busy ? "保存中…" : hasExternalText ? "保存外部文案与提示词" : "保存文案与提示词"}
+                保存
               </Button>
-            ) : null}
-            {activePane === "copy" && saveDisabledReason ? (
-              <StatusMessage id={saveDisabledReasonId} className="slot-inspector__disabled-reason">
-                {saveDisabledReason}
-              </StatusMessage>
             ) : null}
             {nextSlotAction && activeVersion ? (
               <GenerationActions
@@ -776,6 +570,7 @@ export function SlotInspector({
                 variant="secondary"
                 disabled={generationDisabled}
                 disabledReason={generationDisabledReason}
+                errorMessage={generationError}
                 onGenerate={onGenerate}
               />
             ) : null}
@@ -808,6 +603,7 @@ export function SlotInspector({
               variant={generationActionVariant}
               disabled={generationDisabled}
               disabledReason={generationDisabledReason}
+              errorMessage={generationError}
               onGenerate={onGenerate}
             />
           )
@@ -837,26 +633,6 @@ export function SlotInspector({
           onClose={() => setCompareOpen(false)}
         />
       ) : null}
-      <PromptAssetCenterDialog
-        open={promptAssetsOpen}
-        scope={{
-          platformId: rulePack.platformId,
-          workflowId: promptAssetWorkflowId,
-          slotKey: slot.slotKey,
-        }}
-        slotLabel={slotRule?.uiLabel ?? slotRule?.label ?? slot.slotKey}
-        baselinePrompt={slot.prompt}
-        currentPrompt={prompt}
-        aiRewriteDisabledReason={
-          copilotDisabledReason ?? (copilotLocked ? copilotLockReason ?? "Copilot 当前不可用。" : undefined)
-        }
-        onApply={(nextPrompt) => {
-          setPrompt(nextPrompt);
-          setSaveState("idle");
-        }}
-        onAIRewrite={() => onCopilotCommand("rewrite-prompt")}
-        onClose={() => setPromptAssetsOpen(false)}
-      />
       <ConfirmDialog
         open={industryTemplateConfirmOpen}
         title="保存为行业模板新版本？"

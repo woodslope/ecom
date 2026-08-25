@@ -182,13 +182,13 @@ try {
     const context = await createMonitoredContext(browser, { viewport });
     const page = await context.newPage();
     await page.goto(baseUrl, { waitUntil: "networkidle" });
-    const runtimeButton = page.getByRole("button", { name: /当前运行模式：本地演示，打开设置/ });
-    assert(await runtimeButton.isVisible(), `${width}px 左栏未显示 Demo 运行模式`);
+    const settingsButton = page.getByRole("button", { name: "设置", exact: true });
+    assert(await settingsButton.isVisible(), `${width}px 左栏未显示设置入口`);
     for (const platform of ["Amazon", "淘宝 / 天猫"]) {
       await page.getByRole("button", { name: platform, exact: true }).click();
       const requirement = page.locator(".planning-input-requirement");
       assert(await requirement.isVisible(), `${width}px ${platform} 空输入要求不可见`);
-      const planningButton = page.getByRole("button", { name: "生成图片策划", exact: true });
+      const planningButton = page.getByRole("button", { name: "AI策划", exact: true });
       const describedBy = await planningButton.getAttribute("aria-describedby");
       assert(describedBy, `${width}px ${platform} 禁用策划按钮缺少 aria-describedby`);
       assert(await page.locator(`#${describedBy}`).isVisible(), `${width}px ${platform} 禁用原因不可见`);
@@ -226,7 +226,6 @@ try {
       await historyTrigger.click();
       const historyDialog = page.getByRole("dialog", { name: `${platform}历史记录`, exact: true });
       assert(await historyDialog.isVisible(), `${width}px ${platform} 历史抽屉未打开`);
-      assert(await historyDialog.getByRole("heading", { name: "生产记录", exact: true }).isVisible(), `${width}px ${platform} 历史抽屉缺少生产记录分组`);
       await assertModalIsolation(page, `${width}px ${platform} 历史抽屉`);
       await page.keyboard.press("Escape");
       assert(!(await historyDialog.isVisible()), `${width}px ${platform} Escape 未关闭历史抽屉`);
@@ -271,10 +270,10 @@ try {
     const page = await context.newPage();
     await page.goto(baseUrl, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "设置", exact: true }).click();
-    assert(await page.getByRole("dialog", { name: "连接与生成模式", exact: true }).isVisible(), "调整到门禁前设置弹窗未打开");
+    assert(await page.getByRole("dialog", { name: "运行设置", exact: true }).isVisible(), "调整到门禁前设置弹窗未打开");
     await page.setViewportSize({ width: 899, height: 800 });
     await page.getByTestId("desktop-only-gate").waitFor({ state: "visible" });
-    assert((await page.getByRole("dialog", { name: "连接与生成模式", exact: true }).count()) === 0, "进入桌面门禁后设置弹窗仍挂载");
+    assert((await page.getByRole("dialog", { name: "运行设置", exact: true }).count()) === 0, "进入桌面门禁后设置弹窗仍挂载");
     assert((await page.locator('[role="alertdialog"]:visible').count()) === 1, "进入桌面门禁后出现多个可见模态 owner");
     await context.close();
   }
@@ -477,7 +476,7 @@ try {
     const page = await context.newPage();
     await page.goto(baseUrl, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "设置", exact: true }).click();
-    const settingsDialog = page.getByRole("dialog", { name: "连接与生成模式", exact: true });
+    const settingsDialog = page.getByRole("dialog", { name: "运行设置", exact: true });
     assert(await settingsDialog.isVisible(), "设置弹窗未打开");
     await assertModalIsolation(page, "设置弹窗");
     const downloadPromise = page.waitForEvent("download");
@@ -488,13 +487,12 @@ try {
       await settingsDialog.getByText(/备份已导出：/).isVisible(),
       "按需加载后的本地备份没有显示成功反馈",
     );
-    await settingsDialog.getByRole("button", { name: "API", exact: true }).click();
     await page.screenshot({ path: resolve(evidenceDir, "governance-settings-api-dual-1280.png"), animations: "disabled" });
     await settingsDialog.getByRole("button", { name: "单连接", exact: true }).click();
     assert((await settingsDialog.getByText("图片生成服务", { exact: true }).count()) === 0, "单连接模式仍显示独立图片服务");
     await page.screenshot({ path: resolve(evidenceDir, "governance-settings-api-single-1280.png"), animations: "disabled" });
     await settingsDialog.getByRole("button", { name: "关闭弹窗", exact: true }).click();
-    const discardDialog = page.getByRole("dialog", { name: "放弃未保存设置？", exact: true });
+    const discardDialog = page.getByRole("dialog", { name: "提示", exact: true });
     assert(await discardDialog.isVisible(), "修改设置后关闭未显示放弃确认");
     await assertModalIsolation(page, "放弃设置确认弹窗");
     assert((await page.locator('[role="dialog"]:visible').count()) === 1, "确认弹窗出现时父设置弹窗仍可操作");
@@ -502,10 +500,10 @@ try {
     await page.keyboard.press("Escape");
     assert(!(await discardDialog.isVisible()), "Escape 未关闭最上层确认弹窗");
     assert(await settingsDialog.isVisible(), "关闭确认弹窗后未返回设置草稿");
-    assert(await settingsDialog.getByRole("button", { name: "API", exact: true }).getAttribute("aria-pressed") === "true", "返回设置后草稿状态丢失");
+    assert(await settingsDialog.getByRole("button", { name: "单连接", exact: true }).getAttribute("aria-pressed") === "true", "返回设置后连接模式草稿状态丢失");
     await settingsDialog.getByRole("button", { name: "取消", exact: true }).click();
-    await page.getByRole("button", { name: "放弃修改", exact: true }).click();
-    assert(!(await settingsDialog.isVisible()), "放弃修改后设置弹窗未关闭");
+    await page.getByRole("button", { name: "放弃", exact: true }).click();
+    assert(!(await settingsDialog.isVisible()), "放弃后设置弹窗未关闭");
     assert(await page.getByRole("button", { name: "设置", exact: true }).evaluate((node) => node === document.activeElement), "设置关闭后焦点未返回触发按钮");
     await context.close();
   }
@@ -547,31 +545,24 @@ try {
     await page.getByRole("button", { name: "Amazon", exact: true }).click();
     await page.getByRole("button", { name: "历史记录", exact: true }).click();
     await page.getByRole("button", { name: "关闭历史记录", exact: true }).click();
-    await page.getByText("粘贴 Amazon Listing（可选）", { exact: true }).click();
     await page.getByLabel("Amazon Listing 原文").fill("Title: Demo Travel Pillow\n- Foldable memory foam\n- Washable cover");
-    await page.getByRole("button", { name: "填入空字段", exact: true }).click();
-    await page.getByRole("button", { name: "生成图片策划", exact: true }).click();
+    await page.getByRole("button", { name: "AI策划", exact: true }).click();
     await page.getByRole("button", { name: "确认并生成策划", exact: true }).click();
     await page.getByRole("button", { name: "历史记录", exact: true }).click();
     await page.locator(".production-run-card").waitFor();
     assert((await page.locator(".production-run-card").count()) === 1, "Amazon 策划后历史未显示");
     const historyCard = page.locator(".production-run-card").first();
-    const historyToggle = historyCard.locator("button[aria-controls]");
-    const detailsId = await historyToggle.getAttribute("aria-controls");
-    assert(detailsId, "历史卡片展开按钮缺少 aria-controls");
-    const historyDetails = page.locator(`#${detailsId}`);
-    assert(await historyDetails.count() === 1, "历史卡片 aria-controls 未指向稳定详情区域");
-    assert(await historyDetails.isHidden(), "历史卡片收起时详情区域应保持 hidden");
-    await historyToggle.click();
-    assert(await historyDetails.isVisible(), "历史卡片展开后详情区域不可见");
-    await historyToggle.click();
+    const mobilePreviewButton = historyCard.getByRole("button", { name: "手机预览", exact: true });
+    assert(await mobilePreviewButton.count() === 1, "历史卡片未提供手机预览入口");
+    await mobilePreviewButton.click();
+    assert(await page.getByRole("dialog", { name: "Amazon 手机内容预览", exact: true }).isVisible(), "手机预览未打开");
+    await page.getByRole("button", { name: "关闭弹窗", exact: true }).click();
     await page.getByLabel("状态", { exact: true }).selectOption("failed");
     await page.getByText("筛选条件没有结果", { exact: true }).waitFor({ state: "visible" });
     await page.screenshot({ path: resolve(evidenceDir, "governance-history-filter-empty-1280.png"), animations: "disabled" });
     await page.getByRole("button", { name: "清除 1", exact: true }).click();
     await page.locator(".production-run-card").waitFor();
     await page.getByRole("button", { name: "关闭历史记录", exact: true }).click();
-    await page.getByText("任务设置", { exact: true }).click();
     await page.getByRole("button", { name: /批量生成/ }).click();
     await page.getByRole("button", { name: "历史记录", exact: true }).click();
     await page.locator(".platform-history-pane__active").waitFor();
@@ -599,7 +590,7 @@ try {
     await page.getByLabel("商品名称", { exact: true }).fill("手动填写的保温杯");
     await page.getByLabel("商品描述", { exact: true }).fill("316L 不锈钢内胆，容量 500ml，杯盖可拆洗。");
     await page.getByLabel("核心卖点", { exact: true }).fill("便携防漏\n杯盖可拆洗");
-    await page.getByRole("button", { name: "生成图片策划", exact: true }).click();
+    await page.getByRole("button", { name: "AI策划", exact: true }).click();
     await page.getByRole("button", { name: "确认并生成策划", exact: true }).click();
     await page.locator(".slot-card").first().waitFor({ state: "visible" });
     assert((await page.locator(".slot-card").count()) === 7, "Amazon 结构化资料未生成 7 个 Listing 槽位");
@@ -630,42 +621,15 @@ try {
       assert(compact && !compact.overflow, `${size.width}px Amazon 生产区出现横向溢出`);
     }
 
-    await page.getByText("任务设置", { exact: true }).click();
-    await page.getByRole("button", { name: "编辑任务输入", exact: true }).click();
-    const sourceFileInputs = await page.locator(".workbench-source-column input.visually-hidden-input").evaluateAll((nodes) =>
-      nodes.map((node) => ({ tabIndex: node.tabIndex, ariaHidden: node.getAttribute("aria-hidden") })),
-    );
-    assert(
-      sourceFileInputs.length > 0 && sourceFileInputs.every((item) => item.tabIndex === -1 && item.ariaHidden === "true"),
-      "资料库程序触发文件输入仍可聚焦或未从辅助技术树隐藏",
-    );
-    const compactSource = await page.evaluate(() => {
-      const source = document.querySelector(".workbench-source-column:not([hidden])");
-      const slots = document.querySelector(".workbench-panel--slots");
-      if (!(source instanceof HTMLElement) || !(slots instanceof HTMLElement)) return null;
-      const sourceRect = source.getBoundingClientRect();
-      const slotsRect = slots.getBoundingClientRect();
-      return {
-        sourceWidth: sourceRect.width,
-        sourceRight: sourceRect.right,
-        overlaysSlots: sourceRect.left < slotsRect.right && sourceRect.right > slotsRect.left,
-        sourcePosition: getComputedStyle(source).position,
-        sourceZIndex: Number.parseInt(getComputedStyle(source).zIndex, 10),
-        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      };
-    });
-    assert(compactSource && compactSource.sourceWidth <= 360, `900px 任务输入浮层过宽：${compactSource?.sourceWidth}`);
-    assert(compactSource && compactSource.sourceRight <= 900, "900px 任务输入浮层超出视口");
-    assert(
-      compactSource && compactSource.overlaysSlots && compactSource.sourcePosition === "absolute" && compactSource.sourceZIndex >= 20,
-      `900px 任务输入未以浮层覆盖生产区：${JSON.stringify(compactSource)}`,
-    );
-    assert(compactSource && !compactSource.overflow, "900px 展开任务输入后出现横向溢出");
-    await page.screenshot({ path: resolve(evidenceDir, "governance-amazon-source-overlay-900.png"), animations: "disabled" });
-    await page.getByRole("button", { name: "收起任务输入", exact: true }).click();
+    const productionTools = page.locator(".production-task-tools");
+    assert(await productionTools.getByRole("button", { name: "重新策划", exact: true }).isVisible(), "Amazon 制作页缺少重新策划按钮");
+    assert(await productionTools.getByRole("button", { name: "手机预览", exact: true }).isVisible(), "Amazon 制作页缺少手机预览按钮");
+    assert(await productionTools.getByRole("button", { name: /批量生成/ }).isVisible(), "Amazon 制作页缺少批量生成按钮");
+    assert((await page.getByText("任务设置", { exact: true }).count()) === 0, "Amazon 制作页仍显示任务设置");
+    assert((await page.locator(".amazon-session-controls").count()) === 0, "Amazon 制作页仍显示任务参数控件");
 
     await page.getByRole("button", { name: "设置", exact: true }).click();
-    const settingsDialog = page.getByRole("dialog", { name: "连接与生成模式", exact: true });
+    const settingsDialog = page.getByRole("dialog", { name: "运行设置", exact: true });
     assert(await settingsDialog.isVisible(), "900×650 设置弹窗未打开");
     const settingsGeometry = await settingsDialog.evaluate((node) => {
       const body = node.querySelector(".dialog__body");
@@ -688,16 +652,16 @@ try {
     await page.getByLabel("商品名称", { exact: true }).fill("云感旅行颈枕");
     await page.getByLabel("商品描述", { exact: true }).fill("慢回弹记忆棉，支持折叠收纳，外套可拆洗。");
     await page.getByLabel("核心卖点", { exact: true }).fill("慢回弹支撑\n折叠收纳\n外套可拆洗");
-    await page.getByRole("button", { name: "生成图片策划", exact: true }).click();
+    await page.getByRole("button", { name: "AI策划", exact: true }).click();
     await page.locator(".slot-card").first().waitFor({ state: "visible" });
     assert((await page.locator(".slot-card").count()) === 12, "淘宝策划未生成固定 5+7 槽位");
-    await page.getByText("任务设置", { exact: true }).click();
     await page.getByRole("button", { name: "手机预览", exact: true }).click();
     const taobaoPreview = page.getByRole("dialog", { name: "淘宝手机商品页预览", exact: true });
     await taobaoPreview.waitFor({ state: "visible" });
     assert((await taobaoPreview.locator(".taobao-phone-preview__thumbs > button").count()) === 5, "淘宝手机预览主图数量不正确");
     assert((await taobaoPreview.locator('[data-slot-key^="TB-DETAIL"]').count()) === 7, "淘宝手机预览详情图数量不正确");
-    assert((await taobaoPreview.innerText()).includes("还需完成 12 个槽位"), "淘宝空结果预览缺失提示不正确");
+    assert((await taobaoPreview.innerText()).includes("0/12 已生成"), "淘宝空结果预览生成状态不正确");
+    assert((await taobaoPreview.locator(".taobao-preview-meta").count()) === 0, "淘宝手机预览仍显示冗余槽位摘要");
     await page.screenshot({ path: resolve(evidenceDir, "governance-taobao-planned-preview-1280.png"), animations: "disabled" });
     await context.close();
   }

@@ -33,6 +33,14 @@ function tokenValue(block, name) {
   return block.match(new RegExp(`--${name}:\\s*([^;]+);`, "i"))?.[1].trim().toLowerCase();
 }
 
+function resolvedTokenValue(block, name, seen = new Set()) {
+  if (seen.has(name)) return undefined;
+  seen.add(name);
+  const value = tokenValue(block, name);
+  const alias = value?.match(/^var\((--[\w-]+)\)$/i)?.[1];
+  return alias ? resolvedTokenValue(block, alias.slice(2), seen) : value;
+}
+
 function relativeLuminance(hex) {
   if (!/^#[0-9a-f]{6}$/i.test(hex)) return null;
   const channels = hex.slice(1).match(/.{2}/g).map((channel) => Number.parseInt(channel, 16) / 255);
@@ -136,8 +144,8 @@ function walkTsx(dir, out = []) {
     ["focus-ring", "rail", 3, "focus ring on rail"],
     ["focus-ring", "ink-soft", 3, "focus ring on dark hover surface"],
   ]) {
-    const foregroundValue = tokenValue(tokenBlock, foreground);
-    const backgroundValue = tokenValue(tokenBlock, background);
+    const foregroundValue = resolvedTokenValue(tokenBlock, foreground);
+    const backgroundValue = resolvedTokenValue(tokenBlock, background);
     const ratio = foregroundValue && backgroundValue
       ? contrastRatio(foregroundValue, backgroundValue)
       : null;
@@ -162,6 +170,17 @@ function walkTsx(dir, out = []) {
   if (directLineHeights.length > 0) {
     fail(`business CSS contains hard-coded line-height declarations (${directLineHeights.join(", ")}). Use a line-height token.`);
   }
+
+  const rawScaleSpacing = [
+    ...governedCss.matchAll(
+      /^\s*(?:gap|row-gap|column-gap|padding(?:-[a-z-]+)?|margin(?:-[a-z-]+)?)\s*:\s*[^;{}]*\b(?:4|8|12|16|20|24|32)px\b[^;{}]*;/gm,
+    ),
+  ].map((match) => match[0].trim());
+  if (rawScaleSpacing.length > 0) {
+    fail(
+      `business CSS contains raw spacing-scale literals (${rawScaleSpacing.join(", ")}). Use --space-1 through --space-7; retain only documented non-scale geometry values.`,
+    );
+  }
   const directRadii = (governedCss.match(/border-radius:\s*[^;]+;/g) ?? [])
     .filter((declaration) => !declaration.includes("var(--"))
     .filter((declaration) => !/border-radius:\s*(?:0|50%|999px|inherit|0\s+2px\s+2px\s+0)\s*;/.test(declaration));
@@ -180,6 +199,24 @@ function walkTsx(dir, out = []) {
     const references = [...governedCss.matchAll(new RegExp("var\\(" + token + "(?:[,)]|\\s)", "g"))];
     if (references.length === 0) {
       fail(`declared typography token ${token} has no CSS consumer; remove it or add a documented consumer.`);
+    }
+  }
+
+  const duplicateSelectors = new Map();
+  const selectorPattern = /(^|[}])\s*([^@{}][^{}]*?)\s*\{/gm;
+  for (const match of governedCss.matchAll(selectorPattern)) {
+    const selector = match[2].trim().replace(/\s+/g, " ");
+    if (!selector || selector.startsWith(":root") || selector === "*") continue;
+    duplicateSelectors.set(selector, (duplicateSelectors.get(selector) ?? 0) + 1);
+  }
+  const intentionalDuplicateSelectors = new Set([
+    "body",
+  ]);
+  for (const [selector, count] of duplicateSelectors) {
+    if (count > 1 && !intentionalDuplicateSelectors.has(selector)) {
+      fail(
+        `styles.css repeats selector "${selector}" ${count} times in the same stylesheet. Merge the owner or add a documented contextual exception.`,
+      );
     }
   }
 
@@ -249,6 +286,10 @@ function walkTsx(dir, out = []) {
   }
 
   const guide = read(guidePath).toLowerCase();
+  const guideTokenValues = {
+    shell: "var(--page)",
+    "placeholder-text": "var(--text-muted)",
+  };
   for (const [name, value] of Object.entries({
     page: "#f3f5f7",
     shell: "#f3f5f7",
@@ -268,7 +309,12 @@ function walkTsx(dir, out = []) {
     "placeholder-text": "#62707e",
     "focus-ring": "#3b82f6",
   })) {
-    if (!guide.includes(`\`--${name}\`: \`${value}\``)) {
+    const resolved = resolvedTokenValue(tokenBlock, name);
+    if (resolved !== value) {
+      fail(`styles.css token --${name} must resolve to ${value} (received ${resolved ?? "missing"}).`);
+    }
+    const guideValue = guideTokenValues[name] ?? value;
+    if (!guide.includes(`\`--${name}\`: \`${guideValue}\``)) {
       fail(`UI_STYLE_GUIDE.md token --${name} must match styles.css (${value}).`);
     }
   }
@@ -277,7 +323,9 @@ function walkTsx(dir, out = []) {
 // --- 2. Business views must not assemble button class strings ---
 {
   const files = [...walkTsx(componentsDir), appTsx].filter((p) => !p.endsWith(`${join("components", "ui.tsx")}`));
-  const banned = /className=\{?[`'"][^`'"]*\bbutton--(?:primary|secondary|quiet|danger|normal|compact)\b/;
+  // Keep IconButton variants (for example icon-button--secondary) on the
+  // shared icon control while still rejecting assembled Button class names.
+  const banned = /className=\{?[`'"][^`'"]*(?<!icon-)\bbutton--(?:primary|secondary|quiet|danger|normal|compact)\b/;
   const bannedRaw = /["'`]button button--/;
   for (const file of files) {
     const text = read(file);
@@ -365,7 +413,7 @@ function walkTsx(dir, out = []) {
     ["GenerationActions.tsx", ["aria-describedby={disabledReason ? disabledReasonId : undefined}", "generation-actions__hint"]],
     ["PromptAssetCenterDialog.tsx", ["aria-describedby={aiRewriteDisabledReason ? aiRewriteReasonId : undefined}", "prompt-asset-center__disabled-reason"]],
     ["TaobaoIntake.tsx", ["aria-describedby={reanalyzeDisabledReason ? reanalyzeReasonId : undefined}", "taobao-analysis-summary__reanalyze-reason"]],
-    ["SlotInspector.tsx", ["aria-describedby={saveDisabledReason ? saveDisabledReasonId : undefined}", "slot-inspector__disabled-reason"]],
+    ["SlotInspector.tsx", ["aria-describedby={nextSlotDisabledReason ? nextSlotDisabledReasonId : undefined}", "slot-inspector__disabled-reason"]],
   ]) {
     const source = semanticSources.get(name);
     if (needles.some((needle) => !source.includes(needle))) {
@@ -504,8 +552,6 @@ function walkTsx(dir, out = []) {
     "<SegmentedControl",
     'ariaLabel="槽位检查视图"',
     'hidden={activePane !== "versions"}',
-    'hidden={activePane !== "checks"}',
-    'hidden={activePane !== "copilot"}',
     "disabled={submitting || draftDirty}",
   ]) {
     if (!inspector.includes(needle)) {
@@ -520,7 +566,7 @@ function walkTsx(dir, out = []) {
   }
 
   if (!css.includes(".slot-inspector__views.segmented-control")) {
-    fail("styles.css must own the four-view SlotInspector switcher geometry.");
+    fail("styles.css must own the SlotInspector switcher geometry.");
   }
 }
 
@@ -528,8 +574,6 @@ function walkTsx(dir, out = []) {
 {
   const controls = read(join(componentsDir, "AmazonSessionControls.tsx"));
   const intake = read(join(componentsDir, "AmazonIntake.tsx"));
-  const stylePicker = read(join(componentsDir, "StyleReferencePicker.tsx"));
-  const styleEditor = read(join(componentsDir, "StyleReferenceEditorDialog.tsx"));
 
   for (const needle of [
     'className="aplus-module-summary"',
@@ -545,21 +589,8 @@ function walkTsx(dir, out = []) {
     fail("AmazonSessionControls.tsx must not switch A+ module ownership to a plan-only inline variant.");
   }
 
-  for (const needle of ["basePresetId", "onBasePresetChange", 'aria-label="视觉参考"']) {
-    if (!stylePicker.includes(needle)) {
-      fail(`StyleReferencePicker.tsx missing style ownership hook ${JSON.stringify(needle)}.`);
-    }
-  }
-  if (!intake.includes('setSelectedStyleReferenceId(`preset:${next.stylePresetId}`)')) {
-    fail("AmazonIntake.tsx must keep built-in style-board selection synchronized with the base preset.");
-  }
-  for (const legacyCopy of ["隐藏风格参考图", "编辑为我的风格", "编辑我的风格"]) {
-    if (stylePicker.includes(legacyCopy) || styleEditor.includes(legacyCopy)) {
-      fail(`Amazon style configuration still contains ambiguous legacy copy ${JSON.stringify(legacyCopy)}.`);
-    }
-  }
-  if (!styleEditor.includes("保存到当前商品")) {
-    fail("StyleReferenceEditorDialog.tsx must name the persistence scope in its save action.");
+  if (intake.includes("StyleReferencePicker") || intake.includes("selectedStyleReferenceId")) {
+    fail("AmazonIntake.tsx must keep the main preparation flow free of the retired style-reference inputs.");
   }
 }
 
@@ -574,13 +605,8 @@ function walkTsx(dir, out = []) {
   const platformTypes = read(join(root, "src/domain/platforms/types.ts"));
   const index = read(indexPath);
 
-  for (const needle of ["runtimeMode", "runtime-badge", 'onChange("settings")']) {
-    if (!rail.includes(needle)) {
-      fail(`PlatformRail.tsx missing always-visible runtime ownership hook ${JSON.stringify(needle)}.`);
-    }
-  }
-  if (!shell.includes("runtimeMode={runtimeSettings.mode}")) {
-    fail("AppShell.tsx must pass the active runtime mode to PlatformRail.");
+  if (!rail.includes("settingsItem") || !rail.includes("renderItem(settingsItem)")) {
+    fail("PlatformRail.tsx must keep the settings destination in the rail footer.");
   }
   if (workspace.includes("workflowAction")) {
     fail("PlatformWorkspace.tsx must not duplicate generation/export as a top-chrome workflowAction.");

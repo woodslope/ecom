@@ -66,12 +66,11 @@ describe("Taobao intake", () => {
       onAnalyze: async () => undefined,
     }));
 
-    expect(markup).toContain("粘贴淘宝商品资料（可选）");
+    expect(markup).toContain('aria-label="淘宝商品资料"');
     expect(markup).not.toContain("选择已有商品");
     expect(markup).not.toContain("手动填写");
-    expect(markup).toContain('aria-label="淘宝 / 天猫当前任务"');
-    expect(markup).toContain("当前任务");
-    expect(markup).toContain("未命名任务");
+    expect(markup).not.toContain('aria-label="淘宝 / 天猫当前任务"');
+    expect(markup).not.toContain("未命名任务");
     expect(markup).not.toContain(">新任务</button>");
     expect(markup).toContain('aria-describedby="taobao-planning-requirement"');
     expect(markup).toContain('id="taobao-planning-requirement"');
@@ -107,23 +106,22 @@ describe("Taobao intake", () => {
     expect(markup).toContain("淘宝商品资料");
     expect(markup).toContain('aria-label="淘宝分析图片"');
     expect(markup).toContain("正面图.png");
-    expect(markup).toContain("生成图片策划");
+    expect(markup).toContain("AI策划");
     expect(markup).toContain("任务设置");
     expect(markup).not.toContain("策划参数");
-    expect(markup).toContain("最多 16 张，合计不超过 8 MiB");
-    expect(markup).toContain("生成方案");
+    expect(markup).toContain("最多 16 张，8 MiB 内");
+    expect(markup).not.toContain("生成方案");
     expect(markup).toContain("行业模板");
     expect(markup).not.toContain("淘宝方案");
     expect(markup).toContain('class="platform-workflow-shell"');
     expect(markup).toContain('class="workbench-chrome__progress-row"');
     expect(markup).not.toContain("workbench-chrome__progress-row--compact");
-    expect(markup).toContain("策划检查");
-    expect(markup).toContain("交付检查");
+    expect(markup).toContain("生成交付");
     expect(markup).not.toContain("不会自动修改资料库");
     expect(markup).not.toContain("选择已有商品");
     expect(markup).not.toContain("手动填写");
     expect(markup).not.toContain("Amazon Listing");
-    expect(markup.indexOf("生成图片策划")).toBeLessThan(
+    expect(markup.indexOf("AI策划")).toBeLessThan(
       markup.indexOf('aria-label="淘宝商品资料"'),
     );
   });
@@ -159,7 +157,7 @@ describe("Taobao intake", () => {
       onAnalyze: async () => undefined,
     }));
 
-    expect(markup).toContain("策划草稿");
+    expect(markup).toContain("AI策划");
     expect(markup).not.toContain("planning-input-quality");
     expect(markup).not.toMatch(/planning-primary-action[^>]*disabled/);
   });
@@ -214,11 +212,11 @@ describe("Taobao intake", () => {
       },
     ));
 
-    expect(markup).toContain("生成图片策划");
+    expect(markup).toContain("AI策划");
     expect(markup).toContain("商品名：云感旅行颈枕");
     expect(markup).toContain("策划模型暂不可用");
     expect(markup).not.toContain("production-workspace-marker");
-    expect(markup.match(/<section class="product-context-bar/g)).toHaveLength(1);
+    expect(markup.match(/<section class="product-context-bar/g) ?? []).toHaveLength(0);
   });
 
   it("shows explainable analysis fields, missing facts, and forbidden-claim warnings", () => {
@@ -303,7 +301,7 @@ describe("Taobao intake", () => {
 
     expect(markup).toContain("将按固定的 5 张主图和 7 张详情图");
     expect(markup).toContain("生成平台策划");
-    expect(markup).not.toContain("生成图片策划");
+    expect(markup).not.toContain("AI策划");
     expect(markup).toContain("淘宝 / 天猫");
     expect(markup).not.toContain("Listing / A+");
   });

@@ -4,7 +4,7 @@ import type { PlatformSession } from "./project-workspace";
 export type AmazonStage = "prepare" | "review" | "produce" | "deliver";
 
 export type AmazonPrimaryAction =
-  | { kind: "plan"; label: "生成图片策划" }
+  | { kind: "plan"; label: "AI策划" }
   | { kind: "generate"; label: "生成当前图片"; slotKey: string }
   | { kind: "select"; label: "继续下一槽位"; slotKey: string }
   | { kind: "export"; label: "导出完整交付包" };
@@ -32,7 +32,7 @@ export function getAmazonStage(session: PlatformSession): AmazonStage {
 export function getAmazonPrimaryAction(session: PlatformSession): AmazonPrimaryAction {
   const stage = getAmazonStage(session);
   if (stage === "prepare" || !session.plan) {
-    return { kind: "plan", label: "生成图片策划" };
+    return { kind: "plan", label: "AI策划" };
   }
   if (stage === "deliver") {
     return { kind: "export", label: "导出完整交付包" };
@@ -49,7 +49,7 @@ export function getAmazonPrimaryAction(session: PlatformSession): AmazonPrimaryA
     return { kind: "select", label: "继续下一槽位", slotKey: nextSlot.slotKey };
   }
   const slotKey = nextSlot?.slotKey ?? session.selectedSlotKey ?? session.plan.slots[0]?.slotKey;
-  if (!slotKey) return { kind: "plan", label: "生成图片策划" };
+  if (!slotKey) return { kind: "plan", label: "AI策划" };
   return {
     kind: "generate",
     label: "生成当前图片",

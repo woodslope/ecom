@@ -21,7 +21,7 @@ import {
   createLocalStorageWorkspaceRepository,
   type ProjectWorkspaceRepository,
 } from "../domain/workspace/project-workspace";
-import { Button, EmptyState, StatusChip } from "./ui";
+import { Button, ConfirmDialog, EmptyState, StatusChip } from "./ui";
 import { ProductionHistoryFilters } from "./ProductionHistoryFilters";
 import { ProductionRunCard } from "./ProductionRunCard";
 
@@ -89,8 +89,8 @@ export function TaskHistoryArchive({
   onOpenProject,
   onResumeRun,
   onForkRun,
-  onReuseImage,
   onExportRun,
+  onDeleteRun,
   historyQueryService,
   platformId,
   compact = false,
@@ -105,8 +105,8 @@ export function TaskHistoryArchive({
   onOpenProject?: (projectId: string) => void;
   onResumeRun?: (record: ProductionRunRecord) => void;
   onForkRun?: (record: ProductionRunRecord) => void;
-  onReuseImage?: (record: ProductionRunRecord, eventId: string) => void;
   onExportRun?: (record: ProductionRunRecord) => void;
+  onDeleteRun?: (record: ProductionRunRecord) => Promise<boolean> | void;
   historyQueryService?: HistoryQueryService | null;
   platformId?: PlatformId;
   compact?: boolean;
@@ -118,12 +118,13 @@ export function TaskHistoryArchive({
   const [filters, setFilters] = useState<ProductionRunFilters>(() =>
     platformId ? { platformId } : {},
   );
-  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyErrorSource, setHistoryErrorSource] = useState<"query" | "load-more" | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<ProductionRunRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const assetUrlsRef = useRef<Record<string, string>>({});
   const pendingAssetIdsRef = useRef(new Set<string>());
   const mountedRef = useRef(true);
@@ -198,7 +199,6 @@ export function TaskHistoryArchive({
         if (cancelled || queryVersionRef.current !== queryVersion) return;
         setRecords(page.items);
         setNextCursor(page.nextCursor);
-        setExpandedRunId((current) => current && page.items.some(({ run }) => run.id === current) ? current : null);
       } catch (caught) {
         if (cancelled || queryVersionRef.current !== queryVersion) return;
         setHistoryError(caught instanceof Error ? caught.message : "读取任务历史失败，请重试。");
@@ -250,11 +250,19 @@ export function TaskHistoryArchive({
     [historyQueryService, records, filters],
   );
 
-  useEffect(() => {
-    const expandedRecord = filtered.find(({ run }) => run.id === expandedRunId);
-    const detailIds = expandedRecord?.run.events.flatMap((event) => event.assetId ? [event.assetId] : []) ?? [];
-    requestAssetUrls(detailIds);
-  }, [expandedRunId, filtered, requestAssetUrls]);
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget || !onDeleteRun) return;
+    setDeleting(true);
+    try {
+      const deleted = await onDeleteRun(deleteTarget);
+      if (deleted) {
+        setRecords((current) => current.filter(({ run }) => run.id !== deleteTarget.run.id));
+        setDeleteTarget(null);
+      }
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleteTarget, onDeleteRun]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -268,12 +276,6 @@ export function TaskHistoryArchive({
   const hasActiveFilters = Object.entries(filters).some(
     ([key, value]) => key !== "platformId" && Boolean(value),
   );
-  useEffect(() => {
-    if (expandedRunId && !filtered.some(({ run }) => run.id === expandedRunId)) {
-      setExpandedRunId(null);
-    }
-  }, [expandedRunId, filtered]);
-
   if (loading && records.length === 0) {
     return <EmptyState variant="loading" eyebrow="正在同步" icon={<Archive size={24} />} title="正在读取任务历史" description="按商品汇总本地记录。" />;
   }
@@ -327,7 +329,7 @@ export function TaskHistoryArchive({
         </div>
       ) : null}
       {filtered.length === 0 ? <EmptyState variant="result" eyebrow="没有匹配记录" icon={<Archive size={24} />} title="筛选条件没有结果" description="调整搜索或状态，也可清除筛选查看全部记录。" action={<Button onClick={() => setFilters(platformId ? { platformId } : {})}>清除筛选</Button>} /> : <div className="production-history__list">
-        {filtered.map((record) => <ProductionRunCard key={record.run.id} record={record} compact={compact} expanded={expandedRunId === record.run.id} current={activeProjectId === record.project.id && activeRunIds.includes(record.run.id)} assetUrls={assetUrls} onRequestPreviewAssets={requestAssetUrls} onToggle={() => setExpandedRunId((current) => current === record.run.id ? null : record.run.id)} onResume={() => onResumeRun?.(record)} onFork={() => onForkRun?.(record)} onReuse={(eventId) => onReuseImage?.(record, eventId)} onExport={onExportRun ? () => onExportRun(record) : undefined} />)}
+        {filtered.map((record) => <ProductionRunCard key={record.run.id} record={record} compact={compact} current={activeProjectId === record.project.id && activeRunIds.includes(record.run.id)} assetUrls={assetUrls} onRequestPreviewAssets={requestAssetUrls} onResume={() => onResumeRun?.(record)} onFork={() => onForkRun?.(record)} onExport={onExportRun ? () => onExportRun(record) : undefined} onDelete={onDeleteRun ? () => setDeleteTarget(record) : undefined} />)}
       </div>}
       {nextCursor ? (
         <div className="production-history__load-more">
@@ -336,6 +338,14 @@ export function TaskHistoryArchive({
           </Button>
         </div>
       ) : null}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="删除生产记录？"
+        description={`将删除“${deleteTarget?.project.name ?? "当前任务"}”的这条历史生产记录，已生成的图片不会被删除。`}
+        confirmLabel="删除记录"
+        onCancel={() => deleting ? undefined : setDeleteTarget(null)}
+        onConfirm={() => void confirmDelete()}
+      />
     </div>
   );
 }

@@ -117,7 +117,12 @@ describe("production history query", () => {
     expect(store.getState().runs.find((item) => item.id === firstRun.id)?.events).toContainEqual(
       expect.objectContaining({ slotKey, assetId: generatedEvent.assetId, versionId: generatedEvent.versionId }),
     );
-    expect(await store.getState().resumeRun(firstRun.id)).toBe(false);
+    expect(await store.getState().resumeRun(firstRun.id)).toBe(true);
+    expect(store.getState().runs).toHaveLength(2);
+    expect(store.getState().sessions.find((session) => session.workflowId === "taobao-product")).toMatchObject({
+      activeRunId: firstRun.id,
+      plan: firstRun.planSnapshot,
+    });
     const fork = await store.getState().forkRun(firstRun.id);
     expect(fork).toMatchObject({ workflowId: "taobao-product", slotVersions: {} });
     expect(store.getState().runs.at(-1)).toMatchObject({ sessionId: fork?.id, status: "planned" });

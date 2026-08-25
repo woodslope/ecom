@@ -129,6 +129,13 @@ function planningSystemPrompt(
           "Do not put Chinese planning explanations or labels such as 事实依据 inside prompt or negativePrompt.",
         ].join("\n")
       : "Language contract: prompt and negativePrompt should use the platform source language; strategy and evidence remain readable planning notes in that source language.";
+  const amazonListingRule = rulePack.platformId === "amazon"
+    ? [
+        "Amazon Listing source rule: when project.listingText is present, treat the original pasted Listing as the primary source for title, bullets, product facts, and buyer benefits; parsed project fields are supporting structure only.",
+        "For every Amazon slot, strategy must be a detailed Simplified Chinese planning card explaining the visual objective, composition, product evidence, on-image copy approach, and compliance boundaries. This is the human-readable Chinese plan, not the image-model prompt.",
+        "For every Amazon slot, prompt is the complete professional US English image-generation prompt. negativePrompt is a separate concise US English exclusion list for the image model.",
+      ].join("\n")
+    : "";
 
   return [
     "Return JSON only, without commentary or Markdown.",
@@ -145,6 +152,7 @@ function planningSystemPrompt(
     "evidence must be a non-empty string array; all other slot fields must be strings.",
     platformCopyRule,
     promptLanguageRule,
+    amazonListingRule,
     "Evidence policy: distinguish three categories explicitly: user-supplied facts, information directly visible in a selected product image, and missing facts.",
     "User-supplied facts may be used as factual copy and evidence. Image-visible information may describe only directly observable appearance, color, shape, count, layout, and visible construction.",
     "Never infer hidden dimensions, material composition, performance, efficacy, certification, warranty, compatibility, package contents, or safety claims from an image.",
@@ -153,6 +161,9 @@ function planningSystemPrompt(
     ...(industryTemplate
       ? [
           `Industry template: ${industryTemplate.name} v${industryTemplate.version}.`,
+          industryTemplate.brief.stylePreference
+            ? `Template style preference: ${industryTemplate.brief.stylePreference}.`
+            : "",
           "Treat the industry template as reusable slot direction, not as product evidence.",
           "Current product facts, reference-image evidence, marketplace rules, and slot compliance always override template guidance.",
           "Do not copy concrete product facts from template guidance unless the same fact is present in the current project evidence.",
@@ -185,6 +196,12 @@ async function planningUserContent(
   );
   const text = JSON.stringify({
     project,
+    ...(rulePack.platformId === "amazon" && project.listingText?.trim()
+      ? {
+          originalListingText: project.listingText,
+          originalListingTextRule: "Use this pasted Listing as the primary source; do not discard title or bullet wording when planning slots.",
+        }
+      : {}),
     rulePack,
     ...(inputAssessment ? { inputAssessment } : {}),
     ...(industryTemplate

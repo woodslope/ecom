@@ -73,7 +73,7 @@ describe("workbench runtime settings", () => {
     });
   });
 
-  it("restores the active project when settings storage fails and falls back to demo", async () => {
+  it("restores the active project when settings storage fails and keeps API mode", async () => {
     const projectRepository = createMemoryProjectRepository({ createId: () => "project_01" });
     await projectRepository.create({ name: "可恢复项目", facts: productFacts });
     const store = createWorkbenchStore({
@@ -96,7 +96,7 @@ describe("workbench runtime settings", () => {
     await store.getState().initialize();
 
     expect(store.getState().activeProject?.name).toBe("可恢复项目");
-    expect(store.getState().runtimeSettings.mode).toBe("demo");
+    expect(store.getState().runtimeSettings.mode).toBe("api");
     expect(store.getState().settingsError).toContain("设置存储损坏");
     expect(store.getState().error).toBeNull();
   });
@@ -168,7 +168,7 @@ describe("workbench runtime settings", () => {
     });
 
     expect(saved).toBe(false);
-    expect(store.getState().runtimeSettings.mode).toBe("demo");
+    expect(store.getState().runtimeSettings.mode).toBe("api");
     expect(store.getState().settingsError).toContain("生成");
 
     store.getState().cancelGeneration();

@@ -624,6 +624,9 @@ export class DemoPlanner implements PlannerEngine {
           ...(externalText ? { externalText } : {}),
           strategy: [
             profileStrategyPrefix + strategyFor(effectivePack, rule),
+            industryTemplate?.brief.stylePreference
+              ? `模板风格：${industryTemplate.brief.stylePreference}`
+              : "",
             industryTemplate && industrySlot
               ? `行业模板：${industryTemplate.name} v${industryTemplate.version}。${industrySlot.guidance}`
               : "",

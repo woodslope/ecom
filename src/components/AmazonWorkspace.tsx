@@ -5,13 +5,11 @@ import { planningInputQualityLabel } from "../domain/planning/input-assessment";
 import type { ProductFacts, ProductProject } from "../domain/projects/types";
 import { getAPlusContentTypeLabel } from "../domain/platforms/amazon-catalog";
 import { getAmazonMarketplaceLabel } from "../domain/platforms/amazon-marketplaces";
-import { PROMPT_PROFILES } from "../domain/prompt-profiles/prompt-profiles";
 import type {
   AmazonWorkspaceMode,
   PlatformSession,
 } from "../domain/workspace/project-workspace";
 import type { StartAmazonSessionInput, WorkbenchAsset } from "../store/workbench-store";
-import type { StyleReferenceDraft } from "../domain/assets/style-reference";
 import { AmazonIntake } from "./AmazonIntake";
 import { ProductContextBar } from "./ProductContextBar";
 import { LocalizedFactsReview } from "./LocalizedFactsReview";
@@ -46,10 +44,6 @@ export function AmazonSessionSummary({
   const selectedNames = session.selectedReferenceAssetIds.map(
     (id) => assets.find((asset) => asset.metadata.id === id)?.metadata.name ?? `素材 ${id}`,
   );
-  const styleLabel =
-    PROMPT_PROFILES.find((p) => p.id === options.stylePresetId)?.label ??
-    options.stylePresetId ??
-    "默认风格";
   const planningInput = session.planningInput;
 
   return (
@@ -83,7 +77,6 @@ export function AmazonSessionSummary({
             <div><dt>模式</dt><dd>{sessionModeLabel(session)}</dd></div>
             <div><dt>站点</dt><dd>{getAmazonMarketplaceLabel(options.marketplaceId)}</dd></div>
             <div><dt>尺寸</dt><dd>{options.sizeTier}</dd></div>
-            <div><dt>风格</dt><dd>{styleLabel}</dd></div>
             <div>
               <dt>行业模板</dt>
               <dd>{session.industryTemplate ? `${session.industryTemplate.name} v${session.industryTemplate.version}` : "旧任务未选择"}</dd>
@@ -121,8 +114,6 @@ export function AmazonWorkspace({
   onStartNewTask,
   onConfirmLocalizedFacts = async () => undefined,
   onWorkspaceDirtyChange,
-  onCreateStyleReference = async () => null,
-  onRemoveAsset = async () => undefined,
   historyAction,
   children,
 }: {
@@ -137,8 +128,6 @@ export function AmazonWorkspace({
   onStartNewTask?: () => void;
   onConfirmLocalizedFacts?: (sessionId: string, facts: ProductFacts) => Promise<void> | void;
   onWorkspaceDirtyChange?: (reason: string | null) => void;
-  onCreateStyleReference?: (presetId: string, draft: Partial<StyleReferenceDraft>) => Promise<WorkbenchAsset | null>;
-  onRemoveAsset?: (id: string) => Promise<void>;
   historyAction?: ReactNode;
   children: ReactNode | ((contextBar: ReactNode) => ReactNode);
 }) {
@@ -215,8 +204,6 @@ export function AmazonWorkspace({
           onStartNewTask={onStartNewTask}
           historyAction={historyAction}
           onDirtyChange={onWorkspaceDirtyChange}
-          onCreateStyleReference={onCreateStyleReference}
-          onRemoveAsset={onRemoveAsset}
         />
       )}
       {session?.plan ? (

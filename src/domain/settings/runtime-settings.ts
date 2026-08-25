@@ -4,7 +4,7 @@ import { detectProviderCapabilities } from "./provider-capabilities";
 export const RUNTIME_SETTINGS_STORAGE_KEY = "ecom-workbench.runtime-settings.v1";
 
 export const defaultRuntimeSettings: RuntimeSettings = {
-  mode: "demo",
+  mode: "api",
   connectionMode: "dual",
   apiKey: "",
   planningEndpoint: "https://api.openai.com/v1/chat/completions",
@@ -53,7 +53,9 @@ export function normalizeRuntimeSettings(value: Partial<RuntimeSettings>): Runti
     true,
   );
   const normalized: RuntimeSettings = {
-    mode: value.mode === "api" ? "api" : "demo",
+    // Runtime mode is intentionally API-only. Keep accepting the legacy field
+    // so older stored payloads can be normalized without a migration step.
+    mode: "api",
     connectionMode: value.connectionMode === "single" ? "single" : "dual",
     apiKey: resolvedTextApiKey,
     planningEndpoint,
@@ -97,11 +99,16 @@ export function runtimeImageGenerationMode(settings: RuntimeSettings): ImageGene
 }
 
 export function runtimeSupportsImageEditing(settings: RuntimeSettings): boolean {
-  return settings.mode === "demo" || detectProviderCapabilities(runtimeImageBaseUrl(settings)).imageEditing;
+  return detectProviderCapabilities(runtimeImageBaseUrl(settings)).imageEditing;
 }
 
 export function validateRuntimeSettings(settings: RuntimeSettings): string | null {
-  if (settings.mode === "demo") return null;
+  const unconfigured =
+    !runtimeTextApiKey(settings) &&
+    !runtimeImageApiKey(settings) &&
+    !settings.planningModel &&
+    !settings.imageModel;
+  if (unconfigured) return null;
   if (!runtimeTextApiKey(settings)) return "请填写文本策划 API Key。";
   if (!runtimeImageApiKey(settings)) return "请填写图片生成 API Key。";
   if (!settings.planningModel) return "请填写文本策划模型。";
@@ -163,7 +170,7 @@ export function createLocalStorageSettingsRepository(
       if (!raw) return { ...defaultRuntimeSettings };
       try {
         const settings = normalizeRuntimeSettings(JSON.parse(raw) as Partial<RuntimeSettings>);
-        return validateRuntimeSettings(settings) ? { ...settings, mode: "demo" } : settings;
+        return settings;
       } catch {
         return { ...defaultRuntimeSettings };
       }

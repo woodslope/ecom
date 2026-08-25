@@ -537,6 +537,7 @@ export function ConfirmDialog({
   open,
   title,
   description,
+  eyebrow = "请确认操作",
   confirmLabel = "确认",
   cancelLabel = "取消",
   onConfirm,
@@ -545,6 +546,7 @@ export function ConfirmDialog({
   open: boolean;
   title: string;
   description: ReactNode;
+  eyebrow?: string;
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
@@ -556,7 +558,7 @@ export function ConfirmDialog({
     <Dialog
       open={open}
       title={title}
-      eyebrow="请确认操作"
+      eyebrow={eyebrow}
       onClose={onCancel}
       footer={
         <>
@@ -573,6 +575,8 @@ export function ConfirmDialog({
 export function Panel({
   title,
   description,
+  descriptionId,
+  descriptionClassName = "",
   action,
   className = "",
   hideHeader = false,
@@ -580,6 +584,8 @@ export function Panel({
 }: {
   title: string;
   description?: string;
+  descriptionId?: string;
+  descriptionClassName?: string;
   action?: ReactNode;
   className?: string;
   /** When true, omit the standard header band (e.g. inspector owns its own chrome). */
@@ -595,7 +601,7 @@ export function Panel({
         <header className="panel__header">
           <div className="panel__heading">
             <h2>{title}</h2>
-            {description ? <p>{description}</p> : null}
+            {description ? <p id={descriptionId} className={descriptionClassName}>{description}</p> : null}
           </div>
           {action ? <div className="panel__action">{action}</div> : null}
         </header>

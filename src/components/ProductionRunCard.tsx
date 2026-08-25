@@ -1,61 +1,50 @@
 import { useEffect, useRef, useState } from "react";
-import { ArchiveRestore, ChevronDown, CopyPlus, Download, ImageOff, RotateCcw, Smartphone } from "lucide-react";
+import { ArchiveRestore, CopyPlus, Download, ImageOff, Smartphone, Trash2 } from "lucide-react";
 
 import { selectRunOutputPreviews } from "../domain/history/run-output-preview";
 import type { ProductionRunRecord } from "../domain/tasks";
 import type { ProductionEvent } from "../domain/workspace/project-workspace";
 import { AmazonMobilePreview } from "./AmazonMobilePreview";
-import { ImageTools } from "./ImageTools";
 import { TaobaoMobilePreview } from "./TaobaoMobilePreview";
 import { Button, StatusChip } from "./ui";
 
 const workflowLabels = { "amazon-listing": "Amazon Listing", "amazon-aplus": "Amazon A+", "taobao-product": "淘宝商品生产包", "taobao-detail": "淘宝商品生产包" } as const;
 const statusLabels = { planned: "已策划", producing: "生产中", ready: "已完整", partial: "部分交付", failed: "失败", canceled: "已取消" } as const;
-const eventLabels = { plan: "完成策划", generate: "生成图片", regenerate: "重新生成", edit: "局部编辑", export: "导出交付" } as const;
 const RUN_GALLERY_LIMIT = 6;
 
 function outputEvent(event: ProductionEvent): boolean {
   return Boolean(event.assetId && event.slotKey && event.status === "success");
 }
 
-function downloadOutput(url: string, fileName: string): void {
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-}
-
-export function ProductionRunCard({ record, expanded, current, assetUrls, busy, compact = false, onRequestPreviewAssets, onToggle, onResume, onFork, onReuse, onExport, onDeposit }: {
+export function ProductionRunCard({ record, current, assetUrls, busy, compact = false, onRequestPreviewAssets, onResume, onFork, onExport, onDeposit, onDelete }: {
   record: ProductionRunRecord;
-  expanded: boolean;
   current: boolean;
   assetUrls: Record<string, string>;
   busy?: boolean;
   compact?: boolean;
   onRequestPreviewAssets?: (assetIds: readonly string[]) => void;
-  onToggle: () => void;
   onResume: () => void;
   onFork: () => void;
-  onReuse: (eventId: string) => void;
   onExport?: () => void;
   onDeposit?: () => void;
+  onDelete?: () => void;
 }) {
   const { project, run } = record;
   const cardRef = useRef<HTMLElement>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  useEffect(() => {
-    if (!expanded) setPreviewOpen(false);
-  }, [expanded]);
   const outputEvents = run.events.filter(outputEvent);
   const previewOutputs = selectRunOutputPreviews(run);
-  const visiblePreviews = previewOutputs.slice(0, RUN_GALLERY_LIMIT);
-  const visiblePreviewAssetIds = visiblePreviews.map((event) => event.assetId);
+  const previewBySlot = new Map(previewOutputs.map((event) => [event.slotKey, event]));
+  const visibleSlots = run.planSnapshot.slots.slice(0, RUN_GALLERY_LIMIT);
+  const visiblePreviewAssetIds = visibleSlots.flatMap((slot) => {
+    const assetId = previewBySlot.get(slot.slotKey)?.assetId;
+    return assetId ? [assetId] : [];
+  });
   const visiblePreviewAssetKey = visiblePreviewAssetIds.join("|");
-  const hiddenPreviewCount = Math.max(0, previewOutputs.length - visiblePreviews.length);
-  const detailsId = `production-run-details-${run.id}`;
-  const lastEvent = run.events.at(-1);
+  const hiddenPreviewCount = Math.max(0, run.planSnapshot.slots.length - visibleSlots.length);
+  const generatedSlotKeys = new Set(previewOutputs.map((event) => event.slotKey));
+  const imagesComplete = run.planSnapshot.slots.length > 0 &&
+    run.planSnapshot.slots.every((slot) => generatedSlotKeys.has(slot.slotKey));
   const canPreview = Boolean(
     run.planningInputSignatureSnapshot &&
       run.slotVersionsSnapshot &&
@@ -88,31 +77,34 @@ export function ProductionRunCard({ record, expanded, current, assetUrls, busy, 
           <time dateTime={run.updatedAt}>{new Date(run.updatedAt).toLocaleString("zh-CN")}</time>
           <em>{workflowLabels[run.workflowId]}</em>
           <StatusChip tone={run.status === "ready" ? "success" : run.status === "failed" ? "warning" : "info"}>{statusLabels[run.status]}</StatusChip>
-          <span>最后阶段：{lastEvent ? eventLabels[lastEvent.kind] : "无事件"}</span>
-          <StatusChip tone="neutral">{previewOutputs.length} 张</StatusChip>
-          <StatusChip tone="neutral">{run.events.length} 个阶段</StatusChip>
-          {!compact ? <StatusChip tone="neutral">{run.source === "api" ? "API" : "Demo"}</StatusChip> : null}
+          {!compact ? <StatusChip tone="neutral">API</StatusChip> : null}
           {current ? <StatusChip tone="success">当前任务</StatusChip> : null}
         </div>
       </header>
 
       <div className="production-run-card__results">
-        {visiblePreviews.length > 0 ? (
+        {visibleSlots.length > 0 ? (
           <div className="production-run-card__gallery" role="list" aria-label={`${project.name} 生成结果`}>
-            {visiblePreviews.map((event) => (
-              <figure className="production-run-card__thumbnail" role="listitem" key={event.id}>
-                <span className="production-run-card__thumbnail-media">
-                  {assetUrls[event.assetId] ? (
-                    <img src={assetUrls[event.assetId]} alt={`${event.slotKey} 历史生成结果`} loading="lazy" />
-                  ) : (
-                    <span className="production-run-card__thumbnail-placeholder" aria-label={`${event.slotKey} 图片正在载入`}>
-                      <ImageOff size={18} />
-                    </span>
-                  )}
-                </span>
-                <figcaption>{event.slotKey}</figcaption>
-              </figure>
-            ))}
+            {visibleSlots.map((slot) => {
+              const event = previewBySlot.get(slot.slotKey);
+              const imageUrl = event ? assetUrls[event.assetId] : undefined;
+              return (
+                <figure className="production-run-card__thumbnail" role="listitem" key={slot.slotKey}>
+                  <span className="production-run-card__thumbnail-media">
+                    {imageUrl ? (
+                      <img src={imageUrl} alt={`${slot.slotKey} 历史生成结果`} loading="lazy" />
+                    ) : (
+                      <span
+                        className="production-run-card__thumbnail-placeholder"
+                        aria-label={event ? `${slot.slotKey} 图片正在载入` : `${slot.slotKey} 尚未生成`}
+                      >
+                        <ImageOff size={18} />
+                      </span>
+                    )}
+                  </span>
+                </figure>
+              );
+            })}
             {hiddenPreviewCount > 0 ? (
               <div className="production-run-card__thumbnail production-run-card__thumbnail--more" role="listitem" aria-label={`还有 ${hiddenPreviewCount} 张结果`}>
                 <span className="production-run-card__thumbnail-media">
@@ -130,20 +122,13 @@ export function ProductionRunCard({ record, expanded, current, assetUrls, busy, 
         )}
 
         <div className="production-run-card__actions">
-          {current ? <Button size="compact" disabled={busy} onClick={onResume}><RotateCcw size={14} />继续任务</Button> : <Button variant="secondary" size="compact" disabled={busy} onClick={onFork}><CopyPlus size={14} />基于记录新建</Button>}
-          {!compact && manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存商品</Button> : null}
-          {!compact && canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}
-          {!compact && onExport && outputEvents.length > 0 ? <Button variant="secondary" size="compact" disabled={busy} onClick={onExport}><Download size={14} />重新导出</Button> : null}
-          <Button
-            variant="quiet"
-            size="compact"
-            aria-expanded={expanded}
-            aria-controls={detailsId}
-            onClick={onToggle}
-          >
-            {expanded ? "收起阶段" : "回看阶段"}
-            <ChevronDown size={15} className={expanded ? "production-run-card__chevron--open" : ""} aria-hidden="true" />
+          <Button variant="secondary" size="compact" disabled={busy} onClick={onResume}>
+            <CopyPlus size={14} />{imagesComplete ? "载入任务" : "继续任务"}
           </Button>
+          {!compact && manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存商品</Button> : null}
+          {canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}
+          {!current && onDelete ? <Button variant="danger" size="compact" disabled={busy} onClick={onDelete}><Trash2 size={14} />删除任务</Button> : null}
+          {!compact && onExport && outputEvents.length > 0 ? <Button variant="secondary" size="compact" disabled={busy} onClick={onExport}><Download size={14} />重新导出</Button> : null}
         </div>
 
         <div className="production-run-card__facts">
@@ -155,43 +140,6 @@ export function ProductionRunCard({ record, expanded, current, assetUrls, busy, 
         </div>
       </div>
 
-      <div id={detailsId} className="production-run-card__details" hidden={!expanded}>
-        {expanded ? (
-          <>
-            <div className="production-run-card__details-heading">
-              <strong>生成阶段</strong>
-              <code>{run.id}</code>
-            </div>
-            {compact ? (
-              <div className="production-run-card__details-actions">
-                {manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存商品</Button> : null}
-                {canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}
-                {onExport && outputEvents.length > 0 ? <Button variant="secondary" size="compact" disabled={busy} onClick={onExport}><Download size={14} />重新导出</Button> : null}
-              </div>
-            ) : null}
-            <ol className="production-run-events" aria-label="生成阶段列表">
-              {[...run.events].reverse().map((event) => <li key={event.id} className={`production-run-event production-run-event--${event.status}`} aria-label={`阶段：${eventLabels[event.kind]}${event.slotKey ? ` · ${event.slotKey}` : ""}`}>
-                {event.assetId && assetUrls[event.assetId] ? <img src={assetUrls[event.assetId]} alt={`${event.slotKey ?? "历史"} 输出缩略图`} /> : <span className="production-run-event__marker" />}
-                <span><strong>{eventLabels[event.kind]}{event.slotKey ? ` · ${event.slotKey}` : ""}</strong><time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString("zh-CN")}</time>{event.artifactFileName ? <code>{event.artifactFileName}</code> : null}</span>
-                {outputEvent(event) && assetUrls[event.assetId!] ? (
-                  <ImageTools
-                    fileName={`${run.platformId}-${event.slotKey}-${event.versionId ?? "output"}.png`}
-                    editingSupported={false}
-                    editingDisabledReason="历史快照不可直接改写；请先继续任务或基于记录新建。"
-                    busy={busy}
-                    onDownload={() => downloadOutput(
-                      assetUrls[event.assetId!]!,
-                      `${run.platformId}-${event.slotKey}-${event.versionId ?? "output"}.png`,
-                    )}
-                    onUseAsReference={() => onReuse(event.id)}
-                    onEdit={() => undefined}
-                  />
-                ) : null}
-              </li>)}
-            </ol>
-          </>
-        ) : null}
-      </div>
       {run.platformId === "taobao" && run.planningInputSignatureSnapshot && run.slotVersionsSnapshot ? (
         <TaobaoMobilePreview
           open={previewOpen}

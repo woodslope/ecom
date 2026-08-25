@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Plus, RotateCcw, Trash2 } from "lucide-react";
 
 import {
   A_PLUS_CONTENT_TYPES,
@@ -26,17 +26,8 @@ import {
   type AmazonMarketplaceId,
 } from "../domain/platforms/amazon-marketplaces";
 import type { AmazonPlanningRequestOptions, PlatformPlan } from "../domain/planning/types";
-import {
-  PROMPT_PROFILES,
-  DEFAULT_PROMPT_PROFILE_ID,
-  allProfiles,
-  type PromptProfile,
-} from "../domain/prompt-profiles/prompt-profiles";
-import {
-  PromptProfileDialog,
-  usePromptProfilePicker,
-} from "./PromptProfileDialog";
 import { Button, Dialog, Field, IconButton, Select, SegmentedControl } from "./ui";
+import { DEFAULT_PROMPT_PROFILE_ID } from "../domain/prompt-profiles/prompt-profiles";
 
 export interface AmazonSessionControlsState {
   marketplaceId: AmazonMarketplaceId;
@@ -46,6 +37,7 @@ export interface AmazonSessionControlsState {
   /** Custom A+ rows; null means “use type defaults”. */
   aPlusModuleSpecs: readonly AmazonAPlusModuleSpec[] | null;
   sizeTier: SizeTier;
+  /** Internal fixed default; visual strategy is now owned by industry templates. */
   stylePresetId: string;
 }
 
@@ -92,7 +84,7 @@ export function controlsFromPlan(plan?: PlatformPlan | null): AmazonSessionContr
       aPlusType: DEFAULT_A_PLUS_CONTENT_TYPE,
       aPlusModuleSpecs: null,
       sizeTier: session?.sizeTier ?? "2K",
-      stylePresetId: session?.stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID,
+      stylePresetId: DEFAULT_PROMPT_PROFILE_ID,
     };
   }
   const aPlusType = session.aPlusType ?? DEFAULT_A_PLUS_CONTENT_TYPE;
@@ -111,7 +103,7 @@ export function controlsFromPlan(plan?: PlatformPlan | null): AmazonSessionContr
     aPlusType,
     aPlusModuleSpecs: useCustom ? cloneSpecs(normalizeAPlusModuleSpecs(aPlusType, custom)) : null,
     sizeTier: session.sizeTier ?? "2K",
-    stylePresetId: session.stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID,
+    stylePresetId: DEFAULT_PROMPT_PROFILE_ID,
   };
 }
 
@@ -122,11 +114,10 @@ export function expectedSlotCount(state: AmazonSessionControlsState): number {
 
 export function amazonControlsSummary(value: AmazonSessionControlsState): string {
   const market = AMAZON_MARKETPLACES.find((item) => item.id === value.marketplaceId);
-  const profile = allProfiles().find((item) => item.id === value.stylePresetId);
   const output = value.plannerMode === "listing"
     ? `${value.listingImageCount} 张`
     : `${getAPlusContentTypeLabel(value.aPlusType)} · ${expectedSlotCount(value)} 个模块`;
-  return `${market?.label ?? value.marketplaceId} · ${output} · ${value.sizeTier} · ${profile?.label ?? "干净零售"}`;
+  return `${market?.label ?? value.marketplaceId} · ${output} · ${value.sizeTier}`;
 }
 
 export function amazonControlsMatchPlan(
@@ -137,9 +128,6 @@ export function amazonControlsMatchPlan(
   if (!session || session.plannerMode === "legacy-combined") return false;
   if (state.plannerMode !== session.plannerMode) return false;
   if (state.marketplaceId !== session.marketplaceId || state.sizeTier !== (session.sizeTier ?? "2K")) {
-    return false;
-  }
-  if (state.stylePresetId !== (session.stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID)) {
     return false;
   }
   if (state.plannerMode === "listing") {
@@ -217,9 +205,6 @@ function APlusModuleArrange({
           </li>
         ))}
       </ol>
-      <p className="aplus-module-arrange__hint">
-        策划结果按当前清单校验。改数量或顺序后请重新策划；可选 Logo/对比模块不在此默认列表中。
-      </p>
     </div>
   );
 }
@@ -228,7 +213,6 @@ export function AmazonSessionControls({
   value,
   disabled = false,
   hasPlan = false,
-  additionalSettings,
   industrySettings,
   planAction,
   onChange,
@@ -236,8 +220,6 @@ export function AmazonSessionControls({
   value: AmazonSessionControlsState;
   disabled?: boolean;
   hasPlan?: boolean;
-  /** Advanced settings that belong to this same planning decision domain. */
-  additionalSettings?: ReactNode;
   /** Industry guidance rendered as a full-width strategy row. */
   industrySettings?: ReactNode;
   /** Primary plan/replan action displayed beside the current mode summary. */
@@ -259,12 +241,7 @@ export function AmazonSessionControls({
     setModuleDraft(null);
   }, [hasPlan, value.aPlusType, value.plannerMode]);
 
-  const slotCount = expectedSlotCount(value);
   const aPlusSpecs = effectiveAPlusModuleSpecs(value);
-  const aPlusUsesDefault = areAPlusModuleSpecsEquivalent(
-    aPlusSpecs,
-    getAPlusModuleSpecs(value.aPlusType),
-  );
   const openModuleDialog = () => {
     setModuleDraft(cloneSpecs(aPlusSpecs));
     setModuleDialogOpen(true);
@@ -284,18 +261,6 @@ export function AmazonSessionControls({
     onChange({ ...value, aPlusModuleSpecs: nextSpecs });
     closeModuleDialog();
   };
-  const modeDescription =
-    value.plannerMode === "listing"
-      ? `Listing ${formatAmazonListingSlotRange(value.listingImageCount)}（${slotCount} 张）`
-      : `${getAPlusContentTypeLabel(value.aPlusType)} · ${slotCount} 个模块`;
-  const marketShort =
-    AMAZON_MARKETPLACES.find((item) => item.id === value.marketplaceId)?.shortLabel ?? "US";
-  const profilePicker = usePromptProfilePicker();
-  const availableProfiles =
-    profilePicker.profiles.length > 0 ? profilePicker.profiles : [...PROMPT_PROFILES];
-  const selectedProfile = availableProfiles.find((p) => p.id === value.stylePresetId);
-  const styleShort = selectedProfile?.style.shortLabel ?? "零售";
-
   return (
     <>
     <section
@@ -314,10 +279,17 @@ export function AmazonSessionControls({
           ]}
           onChange={(plannerMode) => onChange({ ...value, plannerMode })}
         />
-        <p className="amazon-session-controls__chip-summary">
-          {modeDescription} · {marketShort} · {value.sizeTier} · {styleShort}
-        </p>
         <div className="amazon-session-controls__bar-actions">
+          {value.plannerMode === "aplus" ? (
+            <Button
+              variant="secondary"
+              size="compact"
+              disabled={disabled}
+              onClick={openModuleDialog}
+            >
+              A+模板编排
+            </Button>
+          ) : null}
           {planAction ? (
             <Button
               variant={planAction.variant ?? "primary"}
@@ -430,85 +402,13 @@ export function AmazonSessionControls({
           </div>
           </section>
 
-          <section className="planning-settings-group planning-settings-group--profile">
-            <div className="planning-settings-group__heading">
-              <strong>生成策略</strong>
-              <span>选择策划风格，并按需补充视觉参考和行业方向。</span>
-            </div>
-            <Field
-              label="生成方案"
-              hint="干净零售适合大多数品类，营销转化强调卖点说服力。"
-              name="stylePresetId"
-              className="amazon-session-controls__field"
-            >
-              <div className="prompt-profile-select-row">
-                <Select
-                  aria-label="生成方案"
-                  value={value.stylePresetId}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    onChange({
-                      ...value,
-                      stylePresetId: event.target.value,
-                    })
-                  }
-                >
-                  {availableProfiles.map((p) => (
-                    <option key={p.id} value={p.id} title={p.description}>
-                      {p.label}
-                      {p.source === "custom" ? "（自定义）" : p.id === DEFAULT_PROMPT_PROFILE_ID ? "（默认）" : ""}
-                    </option>
-                  ))}
-                </Select>
-                <div className="prompt-profile-select-row__actions">
-                  <IconButton
-                    disabled={disabled}
-                    label="新建生成方案"
-                    onClick={profilePicker.openNew}
-                  >
-                    <Plus size={14} />
-                  </IconButton>
-                  {selectedProfile?.source === "custom" ? (
-                    <IconButton
-                      disabled={disabled}
-                      label="编辑此方案"
-                      onClick={() => profilePicker.openEdit(selectedProfile)}
-                    >
-                      <Pencil size={14} />
-                    </IconButton>
-                  ) : null}
-                </div>
-              </div>
-            </Field>
-          </section>
-
-          {additionalSettings ? <div className="amazon-session-controls__additional">{additionalSettings}</div> : null}
           {industrySettings ? <div className="amazon-session-controls__industry">{industrySettings}</div> : null}
 
           {value.plannerMode === "aplus" ? (
             <>
-              <div className="aplus-module-summary" aria-label="A+ 模块编排摘要">
-                <div>
-                  <strong>A+ 模块编排</strong>
-                  <span>
-                    {aPlusSpecs.length} 个模块 · {aPlusUsesDefault ? "默认清单" : "自定义清单"}
-                    {hasPlan ? " · 应用修改后需重新策划" : " · 策划时按此顺序生成槽位"}
-                  </span>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  disabled={disabled}
-                  onClick={openModuleDialog}
-                >
-                  <Pencil size={14} />
-                  编排模块
-                </Button>
-              </div>
               <Dialog
                 open={moduleDialogOpen}
                 title="编排 A+ 模块"
-                eyebrow={`${getAPlusContentTypeLabel(value.aPlusType)} · ${aPlusSpecs.length} 个模块`}
                 className="aplus-module-dialog"
                 onClose={closeModuleDialog}
                 footer={
@@ -519,7 +419,7 @@ export function AmazonSessionControls({
                     <Button onClick={applyModuleDraft}>应用编排</Button>
                   </>
                 }
-              >
+                >
                 <APlusModuleArrange
                   aPlusType={value.aPlusType}
                   specs={moduleDraft ?? aPlusSpecs}
@@ -534,21 +434,12 @@ export function AmazonSessionControls({
                     )
                   }
                 />
-                <p className="aplus-module-dialog__scope">
-                  弹窗内调整是临时草稿；点击“应用编排”后才会更新当前任务参数。
-                </p>
               </Dialog>
             </>
           ) : null}
 
         </div>
     </section>
-      <PromptProfileDialog
-        open={profilePicker.dialogOpen}
-        editProfile={profilePicker.editingProfile}
-        onClose={profilePicker.closeDialog}
-        onSaved={profilePicker.handleSaved}
-      />
     </>
   );
 }
@@ -569,13 +460,12 @@ export function useAmazonSessionControls(
       plan?.amazonSession?.listingImageCount,
       plan?.amazonSession?.aPlusType,
       plan?.amazonSession?.sizeTier,
-      plan?.amazonSession?.stylePresetId,
       // eslint-disable-next-line react-hooks/exhaustive-deps -- serialize custom modules
       JSON.stringify(plan?.amazonSession?.aPlusModuleSpecs?.map((s) => s.slot) ?? null),
     ],
   );
   const [value, setValue] = useState(seed);
-  const seedKey = `${seed.plannerMode}:${seed.marketplaceId}:${seed.listingImageCount}:${seed.aPlusType}:${seed.sizeTier}:${seed.stylePresetId}:${seed.aPlusModuleSpecs?.map((s) => s.slot).join(",") ?? "default"}`;
+  const seedKey = `${seed.plannerMode}:${seed.marketplaceId}:${seed.listingImageCount}:${seed.aPlusType}:${seed.sizeTier}:${seed.aPlusModuleSpecs?.map((s) => s.slot).join(",") ?? "default"}`;
   useEffect(() => {
     setValue(seed);
   }, [seedKey]);

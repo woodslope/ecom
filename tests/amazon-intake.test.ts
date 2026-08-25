@@ -406,7 +406,7 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).toContain("A+ 图");
     expect(directMarkup).toContain('aria-label="Amazon Listing 原文"');
     expect(directMarkup).toContain('type="file"');
-    expect(directMarkup).toContain("生成图片策划");
+    expect(directMarkup).toContain("AI策划");
     expect(directMarkup).toContain("图片策划");
     expect(directMarkup).toContain('title="请填写商品资料或添加至少一张商品图。"');
     expect(directMarkup).toContain('aria-describedby="amazon-planning-requirement"');
@@ -415,22 +415,22 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).toContain('class="platform-workflow-shell"');
     expect(directMarkup).toContain('class="workbench-chrome__progress-row"');
     expect(directMarkup).not.toContain("workbench-chrome__progress-row--compact");
-    expect(directMarkup).toContain("策划检查");
-    expect(directMarkup).toContain("交付检查");
+    expect(directMarkup).toContain("生成交付");
     expect(directMarkup).toContain('class="task-advanced-settings"');
     expect(directMarkup).toContain("任务设置");
     expect(directMarkup).not.toContain("策划参数");
-    expect(directMarkup).toContain("style-reference-picker--embedded");
+    expect(directMarkup).not.toContain("style-reference-picker--embedded");
+    expect(directMarkup).not.toContain("视觉参考");
+    expect(directMarkup).not.toContain("生成方案");
     expect(directMarkup).not.toContain("选择已有商品");
     expect(directMarkup).not.toContain("手动填写");
-    expect(directMarkup).toContain('aria-label="Amazon当前任务"');
-    expect(directMarkup).toContain("当前任务");
-    expect(directMarkup).toContain("未命名任务");
+    expect(directMarkup).not.toContain('aria-label="Amazon当前任务"');
+    expect(directMarkup).not.toContain("未命名任务");
     expect(directMarkup).not.toContain(">新任务</button>");
     expect(directMarkup).not.toContain("planning-input-quality");
     expect(directMarkup).not.toContain("任务输入来源");
     expect(directMarkup).not.toContain("intake-source-bar");
-    expect(directMarkup.indexOf("生成图片策划")).toBeLessThan(
+    expect(directMarkup.indexOf("AI策划")).toBeLessThan(
       directMarkup.indexOf('aria-label="Amazon 策划模式"'),
     );
     expect(directMarkup).not.toContain('class="amazon-session-controls__plan"');
@@ -438,7 +438,7 @@ describe("Amazon direct intake", () => {
     expect(directMarkup).not.toContain("打开资料库");
     expect(existingMarkup).not.toContain("同步商品资料");
     expect(existingMarkup).toContain("Session-only Travel Pillow");
-    expect(existingMarkup.match(/<section class="product-context-bar/g)).toHaveLength(1);
+    expect(existingMarkup.match(/<section class="product-context-bar/g) ?? []).toHaveLength(0);
   });
 
   it("waits for an explicit library choice instead of preloading the active project", () => {
@@ -463,7 +463,7 @@ describe("Amazon direct intake", () => {
     expect(markup).not.toContain("Title: 共享商品名称");
     expect(markup).not.toContain("选择已有商品");
     expect(markup).not.toContain("手动填写");
-    expect(markup).toContain("当前任务");
+    expect(markup).not.toContain("当前任务");
     expect(markup).toContain("共享商品名称");
   });
 

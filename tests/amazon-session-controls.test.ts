@@ -83,9 +83,8 @@ describe("AmazonSessionControls", () => {
     expect(markup).toContain("目标站点");
     expect(markup).toContain("Listing 张数");
     expect(markup).toContain("生成尺寸档");
-    expect(markup).toContain("生成方案");
+    expect(markup).not.toContain("生成方案");
     expect(markup).not.toContain("提示词方案");
-    expect(markup).toContain("MAIN + PT01-PT06");
     expect(markup).not.toContain("调整参数");
     expect(markup).not.toContain("收起参数");
   });
@@ -145,10 +144,12 @@ describe("AmazonSessionControls", () => {
         onChange: () => undefined,
       }),
     );
-    expect(markup).toContain("A+ 模块编排");
-    expect(markup).toContain("默认清单");
-    expect(markup).toContain("编排模块");
+    expect(markup).toContain("A+模板编排");
+    expect(markup).not.toContain("A+ 模块编排摘要");
+    expect(markup).not.toContain("编排模块");
     expect(markup).not.toContain("删除第 1 个模块");
+    expect(markup).not.toContain("策划结果按当前清单校验");
+    expect(markup).not.toContain("弹窗内调整是临时草稿");
     expect(effectiveAPlusModuleSpecs({
       aPlusType: "standard-large",
       aPlusModuleSpecs: null,

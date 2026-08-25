@@ -110,7 +110,6 @@ export function AppShell({
         <PlatformRail
           activeItem={activeItem}
           onChange={changeDestination}
-          runtimeMode={runtimeSettings.mode}
         />
         <div className="app-surface">
           <main className="workspace" data-testid="workspace">

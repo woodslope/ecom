@@ -13,6 +13,8 @@ export type PlanningSource = "demo" | "api";
 
 export interface PlanningProjectFacts {
   productName: string;
+  /** Original Amazon Listing text; retained as planner source material instead of only parsed facts. */
+  listingText?: string;
   category?: string;
   brand?: string;
   model?: string;

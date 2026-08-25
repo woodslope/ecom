@@ -1,7 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  ChevronDown,
-  FileText,
   LoaderCircle,
   PackageOpen,
   RotateCcw,
@@ -11,9 +9,8 @@ import {
   X,
 } from "lucide-react";
 
-import { runCompliance } from "../domain/compliance";
-import type { CopilotCommand } from "../domain/copilot";
 import type { ExecutionJob } from "../domain/jobs/types";
+import { runCompliance } from "../domain/compliance";
 import { currentSlotVersion } from "../domain/generation/current-version";
 import { getPlanningInputFreshness } from "../domain/planning/input-signature";
 import type { PlatformPlan, PlannedSlot } from "../domain/planning/types";
@@ -37,21 +34,20 @@ import {
 } from "../domain/workspace/platform-stage";
 import type { WorkbenchAsset } from "../store/workbench-store";
 import {
-  AmazonSessionControls,
   amazonOptionsFromControls,
   amazonControlsMatchPlan,
-  expectedSlotCount,
   useAmazonSessionControls,
 } from "./AmazonSessionControls";
+import { AmazonIntake } from "./AmazonIntake";
 import { AmazonMobilePreview } from "./AmazonMobilePreview";
-import { ExportPanel } from "./ExportPanel";
 import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
-import { ProductSourcePanel } from "./ProductSourcePanel";
+import type { WorkflowStage } from "./WorkflowStepper";
 import { SlotBoard } from "./SlotBoard";
 import { SlotInspector } from "./SlotInspector";
 import { TaobaoMobilePreview } from "./TaobaoMobilePreview";
+import { TaobaoIntake } from "./TaobaoIntake";
 import type { GenerationTarget } from "./GenerationActions";
-import { Button, EmptyState, IconButton, Panel, StatusChip, StatusMessage } from "./ui";
+import { Button, ConfirmDialog, EmptyState, IconButton, Panel, StatusChip, StatusMessage } from "./ui";
 
 export function workspaceDraftReason(sourceDirty: boolean, slotDirty: boolean): string | null {
   if (sourceDirty) return "商品资料有未保存修改，请先保存资料。";
@@ -68,7 +64,7 @@ export function PlatformWorkspace({
   platform,
   activeProject,
   assets,
-  runtimeMode = "demo",
+  runtimeMode = "api",
   amazonPlannerMode = "listing",
   loading,
   plan,
@@ -82,17 +78,10 @@ export function PlatformWorkspace({
   generatingSlot = null,
   generationRecoveryRequired = false,
   generationErrorTarget = null,
+  generationError = null,
   copilotTarget = null,
-  copilotFeedbackTarget = null,
-  copilotError = null,
-  copilotMessage = null,
   exporting = false,
-  exportError = null,
-  onSave,
-  onUpload,
-  onRemove,
   onPlan,
-  onAmazonPlannerModeChange = async () => true,
   onCancelPlanning,
   onClearPlanningError,
   onStartNewTask,
@@ -106,14 +95,10 @@ export function PlatformWorkspace({
   onUseAsReference,
   onMaskEdit,
   onExport = () => undefined,
-  onClearExportError = () => undefined,
-  onCopilotCommand = () => undefined,
-  onCancelCopilot = () => undefined,
   onWorkspaceDirtyChange = () => undefined,
   onStartBatch,
   historyAction,
   batchJob,
-  contextBar,
 }: {
   platform: PlatformId;
   activeProject: ProductProject | null;
@@ -132,15 +117,14 @@ export function PlatformWorkspace({
   generatingSlot?: GenerationTarget | null;
   generationRecoveryRequired?: boolean;
   generationErrorTarget?: GenerationTarget | null;
+  generationError?: string | null;
   copilotTarget?: GenerationTarget | null;
-  copilotFeedbackTarget?: GenerationTarget | null;
-  copilotError?: string | null;
-  copilotMessage?: string | null;
   exporting?: boolean;
   exportError?: string | null;
-  onSave: (input: UpdateProductProjectInput) => Promise<boolean>;
-  onUpload: (files: File[]) => Promise<void>;
-  onRemove: (id: string) => Promise<void>;
+  /** Compatibility callbacks retained for existing consumers; production task input is read-only here. */
+  onSave?: (input: UpdateProductProjectInput) => Promise<boolean>;
+  onUpload?: (files: File[]) => Promise<void>;
+  onRemove?: (id: string) => Promise<void>;
   onPlan: (amazonOptions?: import("../domain/planning/types").AmazonPlanningRequestOptions) => Promise<unknown> | void;
   onAmazonPlannerModeChange?: (mode: "listing" | "aplus") => Promise<boolean>;
   onCancelPlanning: () => void;
@@ -167,49 +151,19 @@ export function PlatformWorkspace({
   ) => Promise<boolean>;
   onExport?: () => void;
   onClearExportError?: () => void;
-  onCopilotCommand?: (slotKey: string, command: CopilotCommand) => void;
-  onCancelCopilot?: () => void;
   onWorkspaceDirtyChange?: (reason: string | null) => void;
   onStartBatch?: () => void;
   historyAction?: ReactNode;
   batchJob?: ExecutionJob;
-  contextBar?: ReactNode;
 }) {
   const rulePack = resolveRulePackForPlan(platform, plan);
   const isAmazon = platform === "amazon";
-  const [amazonSession, setAmazonSession] = useAmazonSessionControls(
+  const [amazonSession] = useAmazonSessionControls(
     isAmazon ? plan : null,
     isAmazon ? amazonPlannerMode : undefined,
   );
-  const [amazonModeSwitchWarning, setAmazonModeSwitchWarning] = useState<string | null>(null);
-  const changeAmazonSession = async (next: typeof amazonSession) => {
-    if (next.plannerMode !== amazonSession.plannerMode) {
-      const switched = await onAmazonPlannerModeChange(next.plannerMode);
-      if (!switched) {
-        const reason =
-          planningPlatformId
-            ? `${getPlatformRulePack(planningPlatformId).label} 正在策划，请完成或取消后再切换 Listing / A+。`
-            : generatingSlot
-              ? "当前有图片生成任务，请完成后再切换 Listing / A+。"
-              : copilotTarget
-                ? "Copilot 请求处理中，请完成后再切换 Listing / A+。"
-                : exporting
-                  ? "交付包导出中，请完成后再切换 Listing / A+。"
-                  : generationRecoveryRequired
-                    ? "图片版本待恢复，请先重试恢复后再切换 Listing / A+。"
-                    : "Listing / A+ 模式切换未完成，请稍后重试。";
-        setAmazonModeSwitchWarning(reason);
-        return;
-      }
-      setAmazonModeSwitchWarning(null);
-      return;
-    }
-    setAmazonSession(next);
-  };
   const runAmazonPlan = () =>
     void onPlan(isAmazon ? amazonOptionsFromControls(amazonSession) : undefined);
-  const plannedSlotCount = isAmazon ? expectedSlotCount(amazonSession) : rulePack.slots.length;
-
   const referenceAssets = assets.filter((asset) => asset.metadata.kind === "reference");
   const canPlan = Boolean(activeProject && (isAmazon || referenceAssets.length > 0));
   const planningLocked = Boolean(planningPlatformId);
@@ -277,10 +231,6 @@ export function PlatformWorkspace({
       : undefined;
   const selectedSlot = plan?.slots.find((slot) => slot.slotKey === selectedSlotKey);
   const selectedRule = rulePack.slots.find((slot) => slot.key === selectedSlot?.slotKey);
-  const complianceResult =
-    effectiveProject && selectedSlot
-      ? runCompliance(effectiveProject, rulePack, selectedSlot)
-      : undefined;
   const completedSlots = liveProductionSession
     ? getAmazonCompletedSlotKeys(liveProductionSession).length
     : rulePack.slots.filter((rule) => {
@@ -299,43 +249,14 @@ export function PlatformWorkspace({
       generatingSlot?.platformId === platform &&
       generatingSlot.slotKey === selectedSlot.slotKey,
   );
-  const selectedSlotCopilotRunning = Boolean(
-    selectedSlot &&
-      copilotTarget?.platformId === platform &&
-      copilotTarget.slotKey === selectedSlot.slotKey,
-  );
-  const selectedSlotHasCopilotFeedback = Boolean(
-    selectedSlot &&
-      copilotFeedbackTarget?.platformId === platform &&
-      copilotFeedbackTarget.slotKey === selectedSlot.slotKey,
-  );
-  const copilotLockReason = loading
-    ? "工作台正在加载或保存项目与素材，请完成后再使用 Copilot。"
-    : planRefreshReason
-      ? "当前策划已过期，重新策划后可使用 Copilot。"
-    : generationRecoveryRequired
-      ? "上次图片生成状态需要恢复，请先点击“重试恢复”再使用 Copilot。"
-      : planningPlatformId
-        ? `${getPlatformRulePack(planningPlatformId).label} 正在生成平台策划，请先等待或取消。`
-        : generatingSlot
-          ? `${getPlatformRulePack(generatingSlot.platformId).label} · ${generatingSlot.slotKey} 正在生成，请先等待或取消。`
-          : copilotTarget && !selectedSlotCopilotRunning
-            ? `${getPlatformRulePack(copilotTarget.platformId).label} · ${copilotTarget.slotKey} Copilot 请求处理中，请先等待或取消。`
-            : undefined;
-  const copilotLocked = Boolean(copilotLockReason);
-  const sourceLockReason = generationRecoveryRequired
-    ? "图片版本与素材正在等待恢复，请完成恢复后再修改商品资料。"
-    : planningPlatformId
-      ? `${getPlatformRulePack(planningPlatformId).label} 正在生成平台策划，请先等待或取消。`
-      : generatingSlot
-        ? `${getPlatformRulePack(generatingSlot.platformId).label} · ${generatingSlot.slotKey} 正在生成，请先等待或取消。`
-        : copilotTarget
-          ? `${getPlatformRulePack(copilotTarget.platformId).label} · ${copilotTarget.slotKey} 正在处理 Copilot 请求，请先等待或取消。`
-          : exporting
-            ? "当前交付包正在导出，请完成后再修改商品资料。"
-            : activeProject?.scope === "task-draft" && productionSession?.localizedFactsDraft
-              ? "当前任务的中文事实快照只读，请在“任务输入”中编辑站点语言草稿。"
-              : undefined;
+  const selectedSlotGenerationError = selectedSlot && generationErrorTarget &&
+    generationErrorTarget.platformId === platform &&
+    generationErrorTarget.slotKey === selectedSlot.slotKey
+    ? generationError ?? undefined
+    : undefined;
+  const selectedSlotCompliance = selectedSlot && effectiveProject
+    ? runCompliance(effectiveProject, rulePack, selectedSlot)
+    : undefined;
   const generationLocked = Boolean(
     loading ||
       generationRecoveryRequired ||
@@ -351,50 +272,19 @@ export function PlatformWorkspace({
       : copilotTarget
         ? `${getPlatformRulePack(copilotTarget.platformId).label} · ${copilotTarget.slotKey} Copilot 请求处理中，请先等待或取消。`
       : undefined;
-  const hasPlan = Boolean(plan);
-  const [sourceDirty, setSourceDirty] = useState(false);
   const [slotDirty, setSlotDirty] = useState(false);
   const [amazonPreviewOpen, setAmazonPreviewOpen] = useState(false);
   const [taobaoPreviewOpen, setTaobaoPreviewOpen] = useState(false);
-  const [slotSwitchWarning, setSlotSwitchWarning] = useState<string | null>(null);
-  // Shell v1: after a plan exists, keep the middle+right stage primary.
-  const [sourceCollapsed, setSourceCollapsed] = useState(() =>
-    shouldDefaultCollapseSource(
-      typeof window === "undefined" ? 1100 : window.innerWidth,
-      hasPlan,
-    ),
-  );
-  const draftReason = workspaceDraftReason(sourceDirty, slotDirty);
+  const [replanConfirmOpen, setReplanConfirmOpen] = useState(false);
+  const draftReason = workspaceDraftReason(false, slotDirty);
 
   useEffect(() => {
-    setSourceCollapsed(
-      shouldDefaultCollapseSource(
-        typeof window === "undefined" ? 1100 : window.innerWidth,
-        hasPlan,
-      ),
-    );
-  }, [activeProject?.id, hasPlan, platform]);
-  useEffect(() => {
-    setSourceDirty(false);
     setSlotDirty(false);
   }, [activeProject?.id]);
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-    const media = window.matchMedia("(max-width: 1099px)");
-    const sync = () => {
-      setSourceCollapsed(shouldDefaultCollapseSource(window.innerWidth, hasPlan));
-    };
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  }, [hasPlan, platform, activeProject?.id]);
   useEffect(() => {
     onWorkspaceDirtyChange(draftReason);
     return () => onWorkspaceDirtyChange(null);
   }, [draftReason, onWorkspaceDirtyChange]);
-  useEffect(() => {
-    if (!slotDirty) setSlotSwitchWarning(null);
-  }, [slotDirty]);
   const planDisabledReason = draftReason ?? (!activeProject
     ? "请先填写商品资料"
     : loading
@@ -421,11 +311,9 @@ export function PlatformWorkspace({
   );
   const planDescriptionId = planningLocked
     ? "planning-task-status"
-    : draftReason
-      ? "workspace-draft-status"
-      : planNeedsRefresh
+    : planNeedsRefresh
         ? "plan-freshness-status"
-        : planActionDisabled && planDisabledReason
+        : !draftReason && planActionDisabled && planDisabledReason
           ? "plan-disabled-status"
           : undefined;
   const pendingSlotCount = plan
@@ -450,6 +338,35 @@ export function PlatformWorkspace({
       batchJob?.status === "paused",
   );
   const displayedStage = planNeedsRefresh ? "review" : platformStage;
+  const [selectedWorkflowStage, setSelectedWorkflowStage] = useState<WorkflowStage>(displayedStage);
+  const workflowContentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    setSelectedWorkflowStage(displayedStage);
+  }, [displayedStage, platform, productionSession?.id]);
+  const selectableStages: WorkflowStage[] = plan
+    ? [...(productionSession ? ["prepare" as const] : []), "review", "produce", ...(completedSlots > 0 ? ["deliver" as const] : [])]
+    : ["prepare"];
+  const preparationAssets = productionSession
+    ? referenceAssets.filter((asset) => productionSession.selectedReferenceAssetIds.includes(asset.metadata.id))
+    : referenceAssets;
+  const selectWorkflowStage = (nextStage: WorkflowStage) => {
+    setSelectedWorkflowStage(nextStage);
+    if (nextStage === "prepare") return;
+    window.requestAnimationFrame(() => {
+      const selector: Record<Exclude<WorkflowStage, "prepare">, string> = {
+        review: ".workbench-panel--slots",
+        produce: ".workbench-panel--inspector",
+        deliver: ".workbench-panel--slots",
+      };
+      workflowContentRef.current
+        ?.querySelector<HTMLElement>(selector[nextStage])
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  };
+  const confirmReplan = () => {
+    setReplanConfirmOpen(false);
+    runAmazonPlan();
+  };
   const inspectorPrimaryAction = isAmazon ? amazonPrimaryAction : platformPrimaryAction;
   const shellActions = (
     <>
@@ -464,23 +381,43 @@ export function PlatformWorkspace({
     <PlatformWorkflowShell
       platform={platform}
       title={isAmazon ? "Amazon" : "淘宝 / 天猫"}
-      stage={displayedStage}
+      stage={selectedWorkflowStage}
       completedSlots={completedSlots}
       totalSlots={plan?.slots.length ?? 0}
-      contextBar={contextBar}
       historyAction={historyAction}
       actions={shellActions}
+      selectableStages={selectableStages}
+      onStageSelect={selectWorkflowStage}
     >
-      <div className="platform-workspace-view platform-workspace-view--production-shell">
-      {amazonModeSwitchWarning ? (
-        <StatusMessage tone="warning" live="polite" className="amazon-mode-switch-warning">
-          <span>{amazonModeSwitchWarning}</span>
-          <IconButton label="关闭模式切换提示" onClick={() => setAmazonModeSwitchWarning(null)}>
-            <X size={15} />
-          </IconButton>
-        </StatusMessage>
-      ) : null}
-
+      <div ref={workflowContentRef} className="platform-workspace-view platform-workspace-view--production-shell">
+      {selectedWorkflowStage === "prepare" && plan && productionSession ? (
+        isAmazon ? (
+          <AmazonIntake
+            activeProject={effectiveProject}
+            assets={preparationAssets}
+            session={productionSession}
+            plannerMode={amazonPlannerMode}
+            loading={false}
+            planning={false}
+            error={null}
+            embedded
+            readOnly
+            onSubmit={async () => null}
+          />
+        ) : (
+          <TaobaoIntake
+            activeProject={effectiveProject}
+            assets={preparationAssets}
+            session={productionSession}
+            loading={false}
+            error={null}
+            embedded
+            readOnly
+            onAnalyze={async () => undefined}
+          />
+        )
+      ) : (
+        <>
       {planningPlatformId ? (
         <StatusMessage
           live="polite"
@@ -501,29 +438,19 @@ export function PlatformWorkspace({
         </StatusMessage>
       ) : null}
 
-      {draftReason ? (
-        <StatusMessage id="workspace-draft-status" tone="warning" live="polite">
-          {draftReason}
-        </StatusMessage>
-      ) : null}
-
-      {slotSwitchWarning ? (
-        <StatusMessage tone="warning" live="polite">{slotSwitchWarning}</StatusMessage>
-      ) : null}
-
       {planRefreshReason ? (
         <StatusMessage id="plan-freshness-status" tone="warning" live="polite">
           {planRefreshReason}
         </StatusMessage>
       ) : null}
 
-      {planDescriptionId === "plan-disabled-status" ? (
+      {planDescriptionId === "plan-disabled-status" && !generatingSlot && !draftReason ? (
         <StatusMessage id="plan-disabled-status" tone="warning">
           {planDisabledReason}
         </StatusMessage>
       ) : null}
 
-      {planningError ? (
+      {planningError && !slotDirty ? (
         <StatusMessage tone="danger" live="assertive" className="workbench-error planning-error">
           <span>{planningError}</span>
           <span className="status-message__actions">
@@ -548,74 +475,36 @@ export function PlatformWorkspace({
       ) : null}
 
       {plan ? (
-        <details className="task-advanced-settings task-advanced-settings--production">
-          <summary><span>任务设置</span><small>高级参数、批量生成与预览</small><ChevronDown size={15} /></summary>
-          <div className="task-advanced-settings__body">
-            {isAmazon ? (
-              <AmazonSessionControls
-                value={amazonSession}
-                disabled={planning || loading}
-                hasPlan
-                onChange={(next) => void changeAmazonSession(next)}
-                planAction={{
-                  label: planning ? "策划中…" : "重新策划",
-                  disabled: planActionDisabled,
-                  title: planDisabledReason,
-                  describedBy: planDescriptionId,
-                  busy: planning,
-                  variant: "secondary",
-                  onClick: runAmazonPlan,
-                }}
-              />
-            ) : null}
-            <div className="task-secondary-actions">
-              {!isAmazon ? (
-                <Button
-                  variant="secondary"
-                  size="compact"
-                  disabled={planActionDisabled}
-                  title={planDisabledReason}
-                  aria-describedby={planDescriptionId}
-                  onClick={runAmazonPlan}
-                >
-                  <RotateCcw size={14} />重新策划
-                </Button>
-              ) : null}
-              <Button variant="secondary" size="compact" onClick={() => isAmazon ? setAmazonPreviewOpen(true) : setTaobaoPreviewOpen(true)}>
-                <Smartphone size={15} />手机预览
-              </Button>
-              <Button variant="secondary" size="compact" disabled={batchActionDisabled} onClick={onStartBatch}>
-                <Sparkles size={15} />批量生成（{pendingSlotCount}）
-              </Button>
-              <Button variant="secondary" size="compact" aria-expanded={!sourceCollapsed} aria-controls="workbench-source-column" onClick={() => setSourceCollapsed((value) => !value)}>
-                <FileText size={15} />{sourceCollapsed ? "编辑任务输入" : "收起任务输入"}
-              </Button>
-            </div>
+        <div className="production-task-tools">
+          <div className="task-secondary-actions">
+            <Button
+              variant="secondary"
+              size="compact"
+              disabled={planActionDisabled}
+              loading={planning}
+              loadingLabel="策划中..."
+              title={planDisabledReason}
+              aria-describedby={planDescriptionId}
+              onClick={() => setReplanConfirmOpen(true)}
+            >
+              <RotateCcw size={14} />重新策划
+            </Button>
+            <Button variant="secondary" size="compact" onClick={() => isAmazon ? setAmazonPreviewOpen(true) : setTaobaoPreviewOpen(true)}>
+              <Smartphone size={15} />手机预览
+            </Button>
+            <Button variant="secondary" size="compact" disabled={batchActionDisabled} onClick={onStartBatch}>
+              <Sparkles size={15} />批量生成（{pendingSlotCount}）
+            </Button>
           </div>
-        </details>
+        </div>
       ) : null}
 
       <div
-        className={`workbench-grid${sourceCollapsed ? " workbench-grid--source-collapsed" : ""}${isAmazon && !plan ? " workbench-grid--guided" : ""}${isAmazon ? " workbench-grid--shell" : ""}`}
+        className={`workbench-grid workbench-grid--source-collapsed${isAmazon ? " workbench-grid--shell" : ""}`}
       >
-        <div id="workbench-source-column" className="workbench-source-column" hidden={sourceCollapsed}>
-        {activeProject ? (
-          <ProductSourcePanel
-                showListingPaste={isAmazon}
-            project={activeProject}
-            assets={referenceAssets}
-            loading={loading}
-            disabledReason={sourceLockReason}
-            onDirtyChange={setSourceDirty}
-            onSave={onSave}
-            onUpload={onUpload}
-            onRemove={onRemove}
-          />
-        ) : null}
-        </div>
-
         <Panel
           title="平台交付槽位"
+          action={plan ? <span className="slot-board__progress">{completedSlots}/{plan.slots.length}</span> : undefined}
           className="workbench-panel workbench-panel--slots"
         >
           {plan ? (
@@ -628,11 +517,7 @@ export function PlatformWorkspace({
               planningInputSignature={currentPlanInputSignature}
               disabled={planning || loading}
               onSelect={(slotKey) => {
-                if (slotDirty) {
-                  setSlotSwitchWarning("当前槽位有未保存修改，请先保存文案与提示词，再切换槽位。");
-                  return;
-                }
-                setSlotSwitchWarning(null);
+                if (slotDirty) return;
                 onSelectSlot(slotKey);
               }}
             />
@@ -685,9 +570,7 @@ export function PlatformWorkspace({
             <SlotInspector
               rulePack={rulePack}
               slot={selectedSlot}
-              workflowId={productionSession?.workflowId}
               industryTemplate={productionSession?.industryTemplate}
-              planningSource={plan?.source}
               saving={planning || loading}
               versionState={slotVersionStates?.[selectedSlot.slotKey]}
               assets={assets}
@@ -697,12 +580,8 @@ export function PlatformWorkspace({
               planningInputSignature={currentPlanInputSignature}
               generationLocked={generationLocked}
               generationLockReason={generationLockReason}
-              complianceResult={complianceResult}
-              copilotRunning={selectedSlotCopilotRunning}
-              copilotLocked={copilotLocked}
-              copilotLockReason={copilotLockReason}
-              copilotError={selectedSlotHasCopilotFeedback ? copilotError : null}
-              copilotMessage={selectedSlotHasCopilotFeedback ? copilotMessage : null}
+              generationError={selectedSlotGenerationError}
+              complianceResult={selectedSlotCompliance}
               onDirtyChange={setSlotDirty}
               onSave={(patch) => onUpdateSlot(selectedSlot.slotKey, patch)}
               onGenerate={() => onGenerateSlot(selectedSlot.slotKey)}
@@ -725,8 +604,6 @@ export function PlatformWorkspace({
                       )
                   : undefined
               }
-              onCopilotCommand={(command) => onCopilotCommand(selectedSlot.slotKey, command)}
-              onCancelCopilot={onCancelCopilot}
               nextSlotAction={
                 inspectorPrimaryAction?.kind === "select"
                   ? {
@@ -760,40 +637,8 @@ export function PlatformWorkspace({
         )}
       </div>
 
-      {/* UI_STYLE_GUIDE: delivery strip hidden until first usable output; single-line unless error. */}
-      {(completedSlots > 0 || Boolean(exportError)) ? (
-        <ExportPanel
-          platformLabel={rulePack.label}
-          completedSlots={completedSlots}
-          totalSlots={plan?.slots.length ?? 0}
-          exporting={exporting}
-          error={exportError}
-          disabled={Boolean(
-            loading ||
-              planning ||
-              generatingSlot ||
-              copilotTarget ||
-              generationRecoveryRequired ||
-              planNeedsRefresh,
-          )}
-          disabledReason={
-            loading
-              ? "工作台正在加载或保存项目与素材。"
-              : generationRecoveryRequired
-                ? "请先恢复图片版本与素材。"
-                : planning || generatingSlot || copilotTarget
-                  ? "请等待当前策划、图片生成或 Copilot 任务完成。"
-                  : planRefreshReason
-                    ? planRefreshReason
-                    : !plan
-                      ? "请先完成平台策划。"
-                      : undefined
-          }
-          onExport={onExport}
-          onClearError={onClearExportError}
-          compact
-        />
-      ) : null}
+        </>
+      )}
       {!isAmazon && plan && productionSession ? (
         <TaobaoMobilePreview
           open={taobaoPreviewOpen}
@@ -824,6 +669,14 @@ export function PlatformWorkspace({
           onClose={() => setAmazonPreviewOpen(false)}
         />
       ) : null}
+      <ConfirmDialog
+        open={replanConfirmOpen}
+        title="重新策划当前任务？"
+        description="重新策划将创建一条新记录，并替换当前槽位策划和提示词。已有图片不会删除，可在历史记录中重新载入。"
+        confirmLabel="确认重新策划"
+        onConfirm={confirmReplan}
+        onCancel={() => setReplanConfirmOpen(false)}
+      />
     </div>
     </PlatformWorkflowShell>
   );

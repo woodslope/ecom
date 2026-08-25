@@ -21,7 +21,6 @@ export function TaobaoWorkspace({
   onReanalyze,
   reanalyzeDisabled = false,
   reanalyzeDisabledReason,
-  stylePresetId,
   historyAction,
   children,
 }: {
@@ -38,8 +37,6 @@ export function TaobaoWorkspace({
   onReanalyze?: () => void;
   reanalyzeDisabled?: boolean;
   reanalyzeDisabledReason?: string;
-  /** Prompt profile id for Taobao planning. */
-  stylePresetId?: string | null;
   historyAction?: ReactNode;
   children: ReactNode | ((contextBar: ReactNode) => ReactNode);
 }) {
@@ -95,14 +92,8 @@ export function TaobaoWorkspace({
               ? () => setAnalysisOpen(true)
               : undefined
           }
-          stylePresetId={stylePresetId}
         />
       )}
-      {reanalyzeDisabledReason ? (
-        <p className="taobao-intake__reanalyze-status">
-          {reanalyzeDisabledReason}
-        </p>
-      ) : null}
       {analysis ? (
         <TaobaoAnalysisSummary
           open={analysisOpen}

@@ -1,22 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { ChevronDown, FileText, ImagePlus, Sparkles, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
+import { ChevronDown, ImagePlus, Sparkles } from "lucide-react";
 
 import {
   assessPlanningInput,
   createEmptyProductFacts,
-  planningInputQualityLabel,
   planningInputQualityMessage,
   resolveAmazonPlanningFacts,
 } from "../domain/planning/input-assessment";
 import type { ProductFacts, ProductProject } from "../domain/projects/types";
-import { parseAmazonListingText, listingParseToFactsPatch } from "../domain/planning/listing-parse";
 import type { ProductIntakeSourceMode } from "../domain/projects/product-source-text";
 import type {
   AmazonWorkspaceMode,
   PlatformSession,
 } from "../domain/workspace/project-workspace";
 import type { StartAmazonSessionInput, WorkbenchAsset } from "../store/workbench-store";
-import type { StyleReferenceDraft } from "../domain/assets/style-reference";
 import { resolvePlanningRulePack } from "../domain/planning/resolve-planning-pack";
 import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
 import {
@@ -26,10 +23,8 @@ import {
   controlsFromPlan,
   type AmazonSessionControlsState,
 } from "./AmazonSessionControls";
-import { ProductContextBar } from "./ProductContextBar";
 import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
 import { Button, Field, Panel, StatusMessage } from "./ui";
-import { StyleReferencePicker } from "./StyleReferencePicker";
 import { IndustryTemplateSelector } from "./IndustryTemplateSelector";
 import { ProductFactsForm } from "./ProductFactsForm";
 
@@ -72,9 +67,9 @@ export function AmazonIntake({
   onSubmit,
   onStartNewTask,
   onDirtyChange,
-  onCreateStyleReference = async () => null,
-  onRemoveAsset = async () => undefined,
   historyAction,
+  embedded = false,
+  readOnly = false,
 }: {
   activeProject: ProductProject | null;
   assets: WorkbenchAsset[];
@@ -86,9 +81,9 @@ export function AmazonIntake({
   onSubmit: (input: StartAmazonSessionInput) => Promise<PlatformSession | null>;
   onStartNewTask?: () => void;
   onDirtyChange?: (reason: string | null) => void;
-  onCreateStyleReference?: (presetId: string, draft: Partial<StyleReferenceDraft>) => Promise<WorkbenchAsset | null>;
-  onRemoveAsset?: (id: string) => Promise<void>;
   historyAction?: ReactNode;
+  embedded?: boolean;
+  readOnly?: boolean;
 }) {
   const [controls, setControls] = useState(() => controlsFromSession(session, plannerMode));
   const referenceAssets = assets.filter((asset) => asset.metadata.kind === "reference");
@@ -108,12 +103,18 @@ export function AmazonIntake({
     ),
   );
   const [files, setFiles] = useState<File[]>([]);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const pendingFilePreviews = useMemo(
+    () => files.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [files],
+  );
+
+  useEffect(() => () => {
+    pendingFilePreviews.forEach(({ url }) => URL.revokeObjectURL(url));
+  }, [pendingFilePreviews]);
   const [selectedReferenceAssetIds, setSelectedReferenceAssetIds] = useState<string[]>(
     session?.selectedReferenceAssetIds ??
       [],
-  );
-  const [selectedStyleReferenceId, setSelectedStyleReferenceId] = useState<string | null>(
-    session?.selectedStyleReferenceId ?? `preset:${controlsFromSession(session, plannerMode).stylePresetId}`,
   );
   const [industryTemplate, setIndustryTemplate] = useState<IndustryTemplateSnapshot | undefined>(
     session?.industryTemplate,
@@ -121,7 +122,7 @@ export function AmazonIntake({
   const [dirty, setDirty] = useState(false);
   const submittingDraft = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const disabled = loading || planning;
+  const disabled = readOnly || loading || planning;
 
   useEffect(() => {
     if (submittingDraft.current) return;
@@ -143,10 +144,6 @@ export function AmazonIntake({
       session?.selectedReferenceAssetIds ??
         [],
     );
-    setSelectedStyleReferenceId(
-      session?.selectedStyleReferenceId ??
-        `preset:${controlsFromSession(session, plannerMode).stylePresetId}`,
-    );
     setIndustryTemplate(session?.industryTemplate);
     setFiles([]);
     setDirty(false);
@@ -159,7 +156,6 @@ export function AmazonIntake({
     session?.planningInput?.sourceMode,
     session?.sourceInput.listingText,
     session?.selectedReferenceAssetIds,
-    session?.selectedStyleReferenceId,
     session?.industryTemplate,
   ]);
 
@@ -184,37 +180,38 @@ export function AmazonIntake({
     }),
     [facts, files.length, selectedReferenceAssetIds.length],
   );
-  const assessmentLabel = planningInputQualityLabel(assessment.quality);
   const assessmentMessage = planningInputQualityMessage(assessment);
 
-  const changeFiles = (event: ChangeEvent<HTMLInputElement>) => {
-    const next = Array.from(event.target.files ?? []);
-    event.target.value = "";
-    if (next.length > 0) {
-      setFiles((current) => [...current, ...next]);
+  const addFiles = (next: File[]) => {
+    const images = next.filter((file) => file.type.startsWith("image/"));
+    if (images.length > 0) {
+      setFiles((current) => [...current, ...images]);
       setDirty(true);
     }
   };
 
-  const applyListingPaste = (overwriteEmptyOnly: boolean) => {
-    const parsed = parseAmazonListingText(listingText);
-    const patch = listingParseToFactsPatch(parsed, {
-      overwriteEmptyOnly,
-      current: {
-        productName: facts.productName,
-        sellingPoints: facts.sellingPoints,
-        description: facts.description,
-      },
-    });
-    if (patch.productName === undefined && patch.sellingPoints === undefined && patch.description === undefined) return;
-    setFacts((current) => ({
-      ...current,
-      ...(patch.productName === undefined ? {} : { productName: patch.productName }),
-      ...(patch.sellingPoints === undefined ? {} : { sellingPoints: patch.sellingPoints }),
-      ...(patch.description === undefined ? {} : { description: patch.description }),
-    }));
-    setDirty(true);
+  const changeFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    addFiles(Array.from(event.target.files ?? []));
+    event.target.value = "";
   };
+
+  const dropFiles = (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setIsDraggingFiles(false);
+    if (disabled) return;
+    addFiles(Array.from(event.dataTransfer.files));
+  };
+
+  const dragOverFiles = (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (!disabled) setIsDraggingFiles(true);
+  };
+
+  const dragLeaveFiles = (event: DragEvent<HTMLButtonElement>) => {
+    if (event.currentTarget === event.target) setIsDraggingFiles(false);
+  };
+
+  const clearDragState = () => setIsDraggingFiles(false);
 
   const submit = async () => {
     submittingDraft.current = true;
@@ -229,7 +226,6 @@ export function AmazonIntake({
         facts,
         files,
         selectedReferenceAssetIds,
-        selectedStyleReferenceId,
         ...(industryTemplate ? { industryTemplate } : {}),
         options: amazonOptionsFromControls(controls),
       });
@@ -242,89 +238,18 @@ export function AmazonIntake({
     }
   };
 
-  return (
-    <PlatformWorkflowShell
-      platform="amazon"
-      title="Amazon"
-      stage="prepare"
-      completedSlots={0}
-      totalSlots={0}
-      contextBar={
-        <ProductContextBar
-          platformLabel="Amazon"
-          project={activeProject}
-          statusLabel={session?.planningInput ? assessmentLabel : "准备"}
-          statusTone="neutral"
-          disabled={disabled}
-        />
-      }
-      historyAction={historyAction}
-      actions={
-        <>
-          {onStartNewTask && (activeProject || session) ? (
-            <Button variant="secondary" size="normal" onClick={onStartNewTask}>
-              <Sparkles size={15} />新任务
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            className="planning-primary-action"
-            disabled={disabled || assessment.quality === "empty"}
-            loading={planning}
-            loadingLabel="生成图片策划中..."
-            title={assessment.quality === "empty" ? assessmentMessage : undefined}
-            aria-describedby={assessment.quality === "empty" ? "amazon-planning-requirement" : undefined}
-            onClick={() => void submit()}
-          >
-            <Sparkles size={16} />
-            生成图片策划
-          </Button>
-        </>
-      }
-    >
-      <div className="amazon-intake">
-      {assessment.quality === "empty" ? (
-        <StatusMessage id="amazon-planning-requirement" className="planning-input-requirement">
-          {assessmentMessage}
-        </StatusMessage>
-      ) : null}
+  const content = (
+    <div className={`amazon-intake${readOnly ? " amazon-intake--readonly" : ""}`}>
       <details className="task-advanced-settings">
-        <summary><span>任务设置</span><small>{amazonControlsSummary(controls)}</small><ChevronDown size={15} /></summary>
+        <summary><span>任务设置</span><small>{amazonControlsSummary(controls)} · {industryTemplate?.name ?? "通用模板"}</small><ChevronDown size={15} /></summary>
         <div className="task-advanced-settings__body">
           <AmazonSessionControls
             value={controls}
             disabled={disabled}
             onChange={(next) => {
-              if (
-                next.stylePresetId !== controls.stylePresetId &&
-                selectedStyleReferenceId?.startsWith("preset:")
-              ) {
-                setSelectedStyleReferenceId(`preset:${next.stylePresetId}`);
-              }
               setControls(next);
               setDirty(true);
             }}
-            additionalSettings={
-              <StyleReferencePicker
-                assets={assets}
-                value={selectedStyleReferenceId}
-                basePresetId={controls.stylePresetId}
-                disabled={disabled}
-                canCreate={Boolean(activeProject)}
-                notice={session?.styleReferenceNotice}
-                embedded
-                onChange={(value) => {
-                  setSelectedStyleReferenceId(value);
-                  setDirty(true);
-                }}
-                onBasePresetChange={(stylePresetId) => {
-                  setControls((current) => ({ ...current, stylePresetId }));
-                  setDirty(true);
-                }}
-                onCreate={onCreateStyleReference}
-                onRemove={onRemoveAsset}
-              />
-            }
             industrySettings={
               <IndustryTemplateSelector
                 scope={templateScope}
@@ -344,11 +269,15 @@ export function AmazonIntake({
       </details>
 
       <div className="amazon-intake__grid">
-        <Panel title="Listing 原文" className="amazon-intake__listing">
-          <ProductFactsForm facts={facts} disabled={disabled} onChange={(next) => { setFacts(next); setDirty(true); }} />
-          <details className="planning-source-paste">
-            <summary>粘贴 Amazon Listing（可选）</summary>
-            <Field label="Listing 原文" hint="本地解析后可填入上方结构化字段，不会自动覆盖已填写内容。">
+        <Panel
+          title="Listing 资料"
+          description={assessment.quality === "empty" ? assessmentMessage : undefined}
+          descriptionId={assessment.quality === "empty" ? "amazon-planning-requirement" : undefined}
+          descriptionClassName={assessment.quality === "empty" ? "planning-input-requirement" : undefined}
+          className="amazon-intake__listing"
+        >
+          <div className="planning-source-paste" aria-label="粘贴 Amazon Listing 文本">
+            <Field label="Listing 原文">
               <textarea
                 name="listingText"
                 aria-label="Amazon Listing 原文"
@@ -359,48 +288,46 @@ export function AmazonIntake({
                 onChange={(event) => { setListingText(event.target.value); setDirty(true); }}
               />
             </Field>
-            <div className="planning-source-paste__actions">
-              <Button type="button" variant="secondary" size="compact" disabled={disabled || !listingText.trim()} onClick={() => applyListingPaste(true)}>填入空字段</Button>
-              <Button type="button" variant="secondary" size="compact" disabled={disabled || !listingText.trim()} onClick={() => applyListingPaste(false)}>覆盖填入</Button>
-            </div>
-          </details>
+          </div>
+          <ProductFactsForm facts={facts} disabled={disabled} onChange={(next) => { setFacts(next); setDirty(true); }} />
         </Panel>
 
-        <Panel title="参考图" className="amazon-intake__references">
-          <div className="amazon-intake__upload">
+        <Panel title="商品图" className="amazon-intake__references">
+          <button
+            type="button"
+            className={`reference-upload${isDraggingFiles ? " reference-upload--dragging" : ""}`}
+            disabled={disabled}
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={dragOverFiles}
+            onDragLeave={dragLeaveFiles}
+            onDrop={dropFiles}
+            onBlur={clearDragState}
+          >
             <ImagePlus size={22} aria-hidden="true" />
             <span>
-              <strong>添加本次任务参考图</strong>
-              <small>最多 16 张，提交前检查 8 MiB 总预算</small>
+              <strong>添加本次任务商品图</strong>
+              <small>最多 16 张，8 MiB 内</small>
             </span>
-            <Button
-              variant="secondary"
-              size="compact"
-              disabled={disabled}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload size={14} />选择图片
-            </Button>
-            <input
-              ref={fileInputRef}
-              className="visually-hidden-input"
-              type="file"
-              name="referenceFiles"
-              accept="image/*"
-              multiple
-              disabled={disabled}
-              tabIndex={-1}
-              aria-hidden="true"
-              onChange={changeFiles}
-            />
-          </div>
+          </button>
+          <input
+            ref={fileInputRef}
+            className="visually-hidden-input"
+            type="file"
+            name="referenceFiles"
+            accept="image/*"
+            multiple
+            disabled={disabled}
+            tabIndex={-1}
+            aria-hidden="true"
+            onChange={changeFiles}
+          />
 
           {referenceAssets.length > 0 ? (
-            <div className="amazon-intake__asset-options">
+            <div className="reference-asset-grid" role="group" aria-label="选择商品图">
               {referenceAssets.map((asset) => {
                 const selected = selectedReferenceAssetIds.includes(asset.metadata.id);
                 return (
-                  <label key={asset.metadata.id} className="amazon-intake__asset-option">
+                  <label key={asset.metadata.id} className="reference-asset-card">
                     <input
                       type="checkbox"
                       name="selectedReferenceAssetIds"
@@ -423,11 +350,11 @@ export function AmazonIntake({
             </div>
           ) : null}
 
-          {files.length > 0 ? (
-            <ul className="amazon-intake__pending-files">
-              {files.map((file, index) => (
-                <li key={`${file.name}-${index}`}>
-                  <FileText size={14} aria-hidden="true" />
+          {pendingFilePreviews.length > 0 ? (
+            <div className="reference-asset-grid" role="group" aria-label="待提交商品图">
+              {pendingFilePreviews.map(({ file, url }, index) => (
+                <div key={`${file.name}-${index}`} className="reference-asset-card reference-asset-card--pending">
+                  <img src={url} alt={file.name} />
                   <span>{file.name}</span>
                   <Button
                     variant="quiet"
@@ -440,23 +367,52 @@ export function AmazonIntake({
                       setDirty(true);
                     }}
                   >
-                    移除
+                    ×
                   </Button>
-                </li>
+                </div>
               ))}
-            </ul>
-          ) : (
-            <p className="amazon-intake__empty-reference">
-              {sourceMode === "library"
-                ? "已保存任务资料中的参考图已列出，可勾选本次要用的图，也可继续上传。"
-                : "可先填写商品资料，再补参考图。"}
-            </p>
-          )}
+            </div>
+          ) : null}
         </Panel>
       </div>
 
       {error ? <StatusMessage tone="danger" live="assertive">{error}</StatusMessage> : null}
-      </div>
+    </div>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <PlatformWorkflowShell
+      platform="amazon"
+      title="Amazon"
+      stage="prepare"
+      completedSlots={0}
+      totalSlots={0}
+      historyAction={historyAction}
+      actions={
+        <>
+          {onStartNewTask && (activeProject || session) ? (
+            <Button variant="secondary" size="normal" onClick={onStartNewTask}>
+              <Sparkles size={15} />新任务
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            disabled={disabled || assessment.quality === "empty"}
+            loading={planning}
+            loadingLabel="AI策划中..."
+            title={assessment.quality === "empty" ? assessmentMessage : undefined}
+            aria-describedby={assessment.quality === "empty" ? "amazon-planning-requirement" : undefined}
+            onClick={() => void submit()}
+          >
+            <Sparkles size={16} />
+            AI策划
+          </Button>
+        </>
+      }
+    >
+      {content}
     </PlatformWorkflowShell>
   );
 }

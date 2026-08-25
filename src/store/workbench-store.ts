@@ -403,6 +403,7 @@ export interface WorkbenchState {
   refreshExecutionJobs(): Promise<void>;
   resumeRun(runId: string): Promise<boolean>;
   forkRun(runId: string): Promise<PlatformSession | null>;
+  removeRun(runId: string): Promise<boolean>;
   depositRunToLibrary(input: DepositRunInput): Promise<ProductProject | null>;
   prepareRunDepositFacts(runId: string): Promise<ProductFacts | null>;
   reuseRunImageAsReference(runId: string, eventId: string): Promise<WorkbenchAsset | null>;
@@ -1007,7 +1008,7 @@ export function createWorkbenchStore(
         try {
           runtimeSettings = await settingsRepository.load();
         } catch (settingsError) {
-          settingsRestoreError = `运行设置恢复失败：${errorMessage(settingsError)}。已切换到本地演示引擎。`;
+          settingsRestoreError = `运行设置恢复失败：${errorMessage(settingsError)}。请检查 API 连接设置后重试。`;
         }
         try {
           jobs = await restoreExecutionJobs();
@@ -2928,7 +2929,7 @@ export function createWorkbenchStore(
           let localizedFacts = cloneProductFacts(sourcePlanningFacts);
           let status: PlatformFactsDraft["status"] = targetLocale === "zh-CN"
             ? "confirmed"
-            : get().runtimeSettings.mode === "demo" && !dependencies.productLocalizer
+            : !dependencies.createProductLocalizer && !dependencies.productLocalizer
               ? "pending"
               : "generated";
           let localizationFailure: unknown = null;
@@ -3000,7 +3001,7 @@ export function createWorkbenchStore(
               planningPlatformId: null,
               planningError: localizationFailure
                 ? `站点语言草稿生成失败：${errorMessage(localizationFailure)}。可检查并手动补充后确认。`
-                : "站点语言草稿已生成，请检查并确认后再生成图片策划。",
+                : "站点语言草稿已生成，请检查并确认后再进行 AI 策划。",
             });
             return null;
           }
@@ -3008,7 +3009,7 @@ export function createWorkbenchStore(
         if (localizedFactsDraft && localizedFactsDraft.status !== "confirmed") {
           set({
             planningPlatformId: null,
-            planningError: "请先检查并确认站点语言草稿，再生成图片策划。",
+            planningError: "请先检查并确认站点语言草稿，再进行 AI 策划。",
           });
           return null;
         }
@@ -3022,8 +3023,14 @@ export function createWorkbenchStore(
           get().runtimeSettings.mode === "api" && dependencies.createPlannerEngine
             ? dependencies.createPlannerEngine(get().runtimeSettings)
             : plannerEngine;
+        const plannerFacts = platformId === "amazon"
+          ? {
+              ...planningFacts,
+              listingText: planningSession?.sourceInput.listingText ?? "",
+            }
+          : planningFacts;
         const rawPlan = await activePlannerEngine.plan(
-          planningFacts,
+          plannerFacts,
           baseRulePack,
           controller.signal,
           referenceImages,
@@ -4444,55 +4451,144 @@ export function createWorkbenchStore(
         set({ error: "要恢复的生产记录不存在。" });
         return false;
       }
-      const session = [...located.workspace.sessions]
-        .filter((candidate) => candidate.workflowId === located.run.workflowId)
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-      if (!session?.plan || session.activeRunId !== runId) {
-        set({ error: "该记录已被后续策划替代，请使用“基于记录新建”继续。" });
-        return false;
-      }
       if (get().activeProject?.id !== located.project.id) {
         await get().selectProject(located.project.id);
       }
-      const workspace = await workspaceRepository.load(located.project.id);
-      const currentSession = [...workspace.sessions]
-        .filter((candidate) => candidate.workflowId === located.run.workflowId)
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-      if (!currentSession?.plan || currentSession.activeRunId !== runId) {
-        set({ error: "该记录已不是当前任务，请使用“基于记录新建”继续。" });
+      const restored = await enqueueWorkspaceMutation(async () => {
+        const workspace = await workspaceRepository.load(located.project.id);
+        const run = workspace.runs.find((candidate) => candidate.id === runId);
+        if (!run) return null;
+        const currentSession = workspace.sessions.find(
+          (candidate) => candidate.id === run.sessionId && candidate.workflowId === run.workflowId,
+        );
+        const plan = normalizePlatformPlan(
+          structuredClone(run.planSnapshot),
+          resolveRulePackForPlan(run.platformId, run.planSnapshot),
+        );
+        const selectedSlotKey = currentSession?.selectedSlotKey &&
+          plan.slots.some((slot) => slot.slotKey === currentSession.selectedSlotKey)
+          ? currentSession.selectedSlotKey
+          : plan.slots[0]?.slotKey;
+        const timestamp = now();
+        const restoredSession = startSession({
+          id: run.sessionId,
+          projectId: run.projectId,
+          platformId: run.platformId,
+          workflowId: run.workflowId,
+          sourceInput: structuredClone(run.contextSnapshot.sourceInput),
+          options: structuredClone(run.contextSnapshot.options),
+          selectedReferenceAssetIds: [...run.contextSnapshot.selectedReferenceAssetIds],
+          ...(run.contextSnapshot.planningInput
+            ? { planningInput: structuredClone(run.contextSnapshot.planningInput) }
+            : {}),
+          ...(run.contextSnapshot.selectedStyleReferenceId
+            ? { selectedStyleReferenceId: run.contextSnapshot.selectedStyleReferenceId }
+            : {}),
+          ...(run.contextSnapshot.taobaoAnalysis
+            ? { taobaoAnalysis: structuredClone(run.contextSnapshot.taobaoAnalysis) }
+            : {}),
+          ...(run.contextSnapshot.localizedFactsDraft
+            ? { localizedFactsDraft: structuredClone(run.contextSnapshot.localizedFactsDraft) }
+            : {}),
+          ...(run.contextSnapshot.industryTemplate
+            ? { industryTemplate: structuredClone(run.contextSnapshot.industryTemplate) }
+            : {}),
+          plan,
+          ...(run.planningInputSignatureSnapshot
+            ? { planInputSignature: run.planningInputSignatureSnapshot }
+            : {}),
+          ...(selectedSlotKey ? { selectedSlotKey } : {}),
+          slotVersions: structuredClone(run.slotVersionsSnapshot ?? {}),
+          activeRunId: run.id,
+          createdAt: currentSession?.createdAt ?? run.createdAt,
+          now: timestamp,
+        });
+        let nextWorkspace: ProjectWorkspaceDocument = {
+          ...workspace,
+          sessions: [
+            ...workspace.sessions.filter((session) => session.workflowId !== run.workflowId),
+            restoredSession,
+          ],
+          plans: { ...workspace.plans, [run.platformId]: plan },
+          planInputSignatures: {
+            ...workspace.planInputSignatures,
+            ...(run.planningInputSignatureSnapshot
+              ? { [run.platformId]: run.planningInputSignatureSnapshot }
+              : {}),
+          },
+          selectedSlotKeys: {
+            ...workspace.selectedSlotKeys,
+            ...(selectedSlotKey ? { [run.platformId]: selectedSlotKey } : {}),
+          },
+          slotVersions: {
+            ...workspace.slotVersions,
+            [run.platformId]: structuredClone(run.slotVersionsSnapshot ?? {}),
+          },
+          updatedAt: timestamp,
+        };
+        if (run.platformId === "amazon") {
+          nextWorkspace = withAmazonSnapshot(
+            nextWorkspace,
+            plan,
+            run.planningInputSignatureSnapshot,
+            selectedSlotKey,
+          );
+        }
+        await workspaceRepository.save(nextWorkspace);
+        return { nextWorkspace, plan, selectedSlotKey, restoredSession };
+      });
+      if (!restored) {
+        set({ error: "要恢复的生产记录不存在。" });
         return false;
       }
-      const plan = currentSession.plan;
-      const selectedSlotKey = currentSession.selectedSlotKey ?? plan.slots[0]?.slotKey;
       set((state) => ({
-        sessions: workspace.sessions,
-        runs: workspace.runs,
-        plans: { ...state.plans, [located.run.platformId]: plan },
-        planInputSignatures: {
-          ...state.planInputSignatures,
-          ...(currentSession.planInputSignature
-            ? { [located.run.platformId]: currentSession.planInputSignature }
-            : {}),
-        },
-        selectedSlotKeys: { ...state.selectedSlotKeys, [located.run.platformId]: selectedSlotKey },
-        slotVersions: {
-          ...state.slotVersions,
-          [located.run.platformId]: currentSession.slotVersions,
-        },
+        sessions: restored.nextWorkspace.sessions,
+        runs: restored.nextWorkspace.runs,
+        plans: restored.nextWorkspace.plans,
+        planInputSignatures: restored.nextWorkspace.planInputSignatures,
+        selectedSlotKeys: selectedKeysFor(restored.nextWorkspace),
+        slotVersions: restored.nextWorkspace.slotVersions,
         ...(located.run.platformId === "amazon"
           ? {
-              amazonPlannerMode: currentSession.workflowId === "amazon-aplus" ? "aplus" : "listing",
-              amazonWorkspaces: amazonWorkspacesWithSnapshot(
-                state.amazonWorkspaces,
-                plan,
-                currentSession.planInputSignature,
-                selectedSlotKey,
-              ),
+              amazonPlannerMode: restored.restoredSession.workflowId === "amazon-aplus" ? "aplus" : "listing",
+              amazonWorkspaces: restored.nextWorkspace.amazonWorkspaces ?? state.amazonWorkspaces,
             }
           : {}),
         error: null,
       }));
       return true;
+    },
+
+    async removeRun(runId) {
+      const located = await locateRun(runId, get);
+      if (!located) {
+        set({ error: "要删除的生产记录不存在。" });
+        return false;
+      }
+      if (located.workspace.sessions.some((session) => session.activeRunId === runId)) {
+        set({ error: "当前任务正在使用这条记录，无法删除。" });
+        return false;
+      }
+      try {
+        const timestamp = now();
+        const nextRuns = await enqueueWorkspaceMutation(async () => {
+          const workspace = await workspaceRepository.load(located.project.id);
+          if (workspace.sessions.some((session) => session.activeRunId === runId)) {
+            throw new Error("当前任务正在使用这条记录，无法删除。");
+          }
+          const runs = workspace.runs.filter((run) => run.id !== runId);
+          await workspaceRepository.save({ ...workspace, runs, updatedAt: timestamp });
+          return runs;
+        });
+        set((state) => ({
+          ...(state.activeProject?.id === located.project.id ? { runs: nextRuns } : {}),
+          error: null,
+        }));
+        return true;
+      } catch (error) {
+        set({ error: errorMessage(error) });
+        return false;
+      }
     },
 
     async forkRun(runId) {

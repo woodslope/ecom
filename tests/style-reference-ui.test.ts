@@ -32,6 +32,25 @@ const customStyle: WorkbenchAsset = {
 };
 
 describe("style reference UI ownership", () => {
+  it("does not duplicate the base style select for an internal reference", () => {
+    const markup = renderToStaticMarkup(
+      createElement(StyleReferencePicker, {
+        assets: [],
+        value: "preset:clean-retail",
+        basePresetId: "clean-retail",
+        canCreate: true,
+        onChange: () => undefined,
+        onBasePresetChange: () => undefined,
+        onCreate: async () => null,
+        onRemove: async () => undefined,
+      }),
+    );
+
+    expect(markup).toContain("跟随生成方案");
+    expect(markup).toContain("仅文本风格");
+    expect(markup).not.toContain('aria-label="视觉参考"');
+  });
+
   it("separates the base text style from the optional style-board attachment", () => {
     const markup = renderToStaticMarkup(
       createElement(StyleReferencePicker, {
@@ -52,6 +71,26 @@ describe("style reference UI ownership", () => {
     expect(markup).toContain("当前商品的自定义视觉参考");
     expect(markup).toContain("删除当前自定义视觉参考");
     expect(markup).not.toContain("编辑为我的风格");
+  });
+
+  it("keeps existing custom references selectable without restoring built-in duplicates", () => {
+    const markup = renderToStaticMarkup(
+      createElement(StyleReferencePicker, {
+        assets: [customStyle],
+        value: "preset:clean-retail",
+        basePresetId: "clean-retail",
+        canCreate: true,
+        onChange: () => undefined,
+        onBasePresetChange: () => undefined,
+        onCreate: async () => null,
+        onRemove: async () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('aria-label="视觉参考"');
+    expect(markup).toContain("跟随生成方案（干净零售）");
+    expect(markup).toContain("静谧棚拍");
+    expect(markup).not.toContain('<optgroup label="内置风格">');
   });
 
   it("names the editor save scope and exposes labeled controls", () => {

@@ -64,7 +64,8 @@ describe("platform workspace contract", () => {
     expect(appSource).toContain('closeLabel="关闭历史记录"');
     expect(appSource).toContain('aria-label="进行中任务"');
     expect(appSource).toContain('aria-label="生产记录"');
-    expect(appSource).toContain(">生产记录</h3>");
+    expect(appSource).not.toContain(">生产记录</h3>");
+    expect(appSource).not.toContain('eyebrow={`${getPlatformRulePack(platform).label}工作流`}');
   });
 
   it("uses the same task-settings label before and after planning", () => {
@@ -78,9 +79,8 @@ describe("platform workspace contract", () => {
     expect(workspaceDraftReason(false, true)).toBe(
       "当前槽位有未保存修改，请先保存文案与提示词。",
     );
-    expect(platformWorkspaceSource).toContain(
-      "当前槽位有未保存修改，请先保存文案与提示词，再切换槽位。",
-    );
+    expect(platformWorkspaceSource).toContain("if (slotDirty) return;");
+    expect(platformWorkspaceSource).not.toContain("再切换槽位。");
   });
 
   it("keeps the production canvas primary by collapsing source after planning", () => {
@@ -91,11 +91,23 @@ describe("platform workspace contract", () => {
     expect(shouldDefaultCollapseSource(1099, false)).toBe(false);
   });
 
-  it("keeps replanning secondary inside task settings for both platforms", () => {
-    expect(platformWorkspaceSource).toContain('!isAmazon ? (');
+  it("shows production task actions directly without a task-settings disclosure", () => {
+    expect(platformWorkspaceSource).toContain('className="production-task-tools"');
     expect(platformWorkspaceSource).toContain('<RotateCcw size={14} />重新策划');
+    expect(platformWorkspaceSource).toContain('<Smartphone size={15} />手机预览');
+    expect(platformWorkspaceSource).toContain('<Sparkles size={15} />批量生成（{pendingSlotCount}）');
+    expect(platformWorkspaceSource).not.toContain('task-advanced-settings--production');
+    expect(platformWorkspaceSource).not.toContain('<summary><span>任务设置</span>');
+    expect(platformWorkspaceSource).not.toContain('<AmazonSessionControls');
     expect(platformWorkspaceSource).toContain('title="平台交付槽位"');
     expect(platformWorkspaceSource).not.toContain('action={<StatusChip tone={plan ? "success" : "neutral"}>{plan?.slots.length ?? 0} 个槽位</StatusChip>}');
+  });
+
+  it("confirms before replacing an existing plan", () => {
+    expect(platformWorkspaceSource).toContain('onClick={() => setReplanConfirmOpen(true)}');
+    expect(platformWorkspaceSource).toContain('title="重新策划当前任务？"');
+    expect(platformWorkspaceSource).toContain("重新策划将创建一条新记录，并替换当前槽位策划和提示词。已有图片不会删除，可在历史记录中重新载入。");
+    expect(platformWorkspaceSource).toContain('confirmLabel="确认重新策划"');
   });
 
   it("keeps the selected Amazon mode visible when that mode has no saved plan yet", () => {
@@ -191,13 +203,14 @@ describe("platform workspace contract", () => {
     );
 
     expect(markup).toContain("重新策划");
-    expect(markup).toContain("15 个槽位");
-    expect(markup).toContain("Demo");
+    expect(markup).toContain("0/15");
+    expect(markup).not.toContain("Demo");
     expect(markup).toContain('role="group"');
-    expect(markup).toContain("当前资料");
+    expect(markup).not.toContain("当前资料");
+    expect(markup).not.toContain("收起任务输入");
     expect(markup).toContain("交付槽位");
     expect(markup).toContain("槽位检查器");
-    expect(markup).toContain("保存文案与提示词");
+    expect(markup).toContain("生成图片");
     expect(markup).not.toContain("移动端工作区视图");
   });
 
@@ -256,9 +269,13 @@ describe("platform workspace contract", () => {
       }),
     );
 
-    expect(markup).toContain('aria-label="当前步骤 2 / 4，展开完整流程"');
-    expect(markup).toContain('class="workbench-chrome__progress-menu"');
-    expect(markup).toContain("策划检查");
+    expect(markup).toContain('class="workbench-chrome__workflow"');
+    expect(markup).not.toContain('class="workbench-chrome__progress-menu"');
+    expect(markup).not.toContain('class="workbench-chrome__slot-progress"');
+    expect(markup).toContain("生成交付");
+    expect(markup).toContain('aria-label="前往准备资料"');
+    expect(markup).toContain('aria-label="前往生成交付"');
+    expect(markup).not.toContain('class="workbench-chrome__context"');
     expect(buttonAttributes(markup, "生成图片")).toContain("button--primary");
     expect(buttonAttributes(markup, "重新策划")).toContain("button--secondary");
     expect(markup).not.toContain("继续下一槽位");
@@ -315,7 +332,7 @@ describe("platform workspace contract", () => {
       "商品资料或参考素材已更新，当前策划仍基于旧输入。请重新策划后再编辑槽位、生成或导出。",
     );
     expect(markup).toContain("重新策划");
-    for (const label of ["保存文案与提示词", "生成图片"]) {
+    for (const label of ["生成图片"]) {
       expect(buttonAttributes(markup, label)).toContain('disabled=""');
     }
     // Delivery strip is hidden until first usable generated output (UI_STYLE_GUIDE).
@@ -350,8 +367,7 @@ describe("platform workspace contract", () => {
     expect(markup).not.toContain("取消生成");
     expect(markup).toContain("Amazon · PT01 正在生成");
     expect(markup).toContain("请先等待或取消");
-    const copilotMarkup = markup.slice(markup.indexOf('aria-label="AI Copilot"'));
-    expect((copilotMarkup.match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(5);
+    expect(markup).not.toContain('aria-label="AI Copilot"');
   });
 
   it("keeps generation disabled until an inconsistent workspace is restored", async () => {
@@ -437,7 +453,7 @@ describe("platform workspace contract", () => {
     expect(markup).not.toContain("生成图片策划");
   });
 
-  it("keeps planning, generation, Copilot, and export controls locked while loading", async () => {
+  it("keeps planning, generation, and export controls locked while loading", async () => {
     const plan = await demoPlanner.plan(project.facts, amazonRulePack, new AbortController().signal);
     const markup = renderToStaticMarkup(
       createElement(PlatformWorkspace, {
@@ -461,8 +477,7 @@ describe("platform workspace contract", () => {
     );
 
     expect(markup).toContain("工作台正在加载或保存项目与素材");
-    const copilotMarkup = markup.slice(markup.indexOf('aria-label="AI Copilot"'));
-    expect((copilotMarkup.match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(5);
+    expect(markup).not.toContain('aria-label="AI Copilot"');
   });
 
   it("does not count a generated image from an older slot draft as completed", async () => {
@@ -617,12 +632,12 @@ describe("platform workspace contract", () => {
       }),
     );
 
-    expect(markup).toContain('aria-label="当前步骤 3 / 4，展开完整流程"');
-    expect(markup).toContain('class="workbench-chrome__progress-menu"');
-    expect(markup).toContain("逐图生产");
+    expect(markup).toContain('class="workbench-chrome__workflow"');
+    expect(markup).not.toContain('class="workbench-chrome__progress-menu"');
+    expect(markup).toContain("生成交付");
     expect(buttonAttributes(markup, "继续下一槽位")).toContain("button--primary");
     expect(buttonAttributes(markup, "重新生成")).toContain("button--secondary");
-    expect(buttonAttributes(markup, "导出当前结果")).toContain("button--secondary");
+    expect(markup).not.toContain("导出当前结果");
     expect(buttonAttributes(markup, "重新策划")).toContain("button--secondary");
   });
 });

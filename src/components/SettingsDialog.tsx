@@ -7,7 +7,7 @@ import {
   type ConnectionTestResult,
   type RuntimeSettings,
 } from "../domain/settings";
-import { Button, ConfirmDialog, Dialog, Field, IconButton, SegmentedControl, StatusMessage } from "./ui";
+import { Button, ConfirmDialog, Dialog, Field, IconButton, SegmentedControl, Select, StatusMessage } from "./ui";
 
 export function connectionFeedbackMessage({
   draftChanged,
@@ -137,7 +137,7 @@ export function SettingsDialog({
 
   useEffect(() => {
     if (!open) return;
-    setDraft(settings);
+    setDraft({ ...settings, mode: "api" });
     setDraftChanged(false);
     setSaveMessage(null);
     setTextResult(null);
@@ -173,7 +173,7 @@ export function SettingsDialog({
     event.preventDefault();
     setSaving(true);
     setSaveMessage(null);
-    const saved = await onSave(draft);
+    const saved = await onSave({ ...draft, mode: "api" });
     setSaving(false);
     if (saved) {
       setDraftChanged(false);
@@ -287,8 +287,7 @@ export function SettingsDialog({
     <>
       <Dialog
       open={open && !discardConfirmOpen && backupConfirmFile === null}
-      title="连接与生成模式"
-      eyebrow="运行设置"
+      title="运行设置"
       className="settings-dialog"
       onClose={closeDialog}
       footer={
@@ -303,35 +302,12 @@ export function SettingsDialog({
       }
     >
       <form id="runtime-settings-form" className="settings-form" onSubmit={submit}>
-        <Field label="运行模式" hint="演示模式不会将商品资料发送到外部服务；API 模式使用下面两组服务配置。">
-          <SegmentedControl
-            ariaLabel="运行模式"
-            value={draft.mode}
-            disabled={controlsDisabled}
-            options={[
-              { value: "demo", label: "本地演示" },
-              { value: "api", label: "API" },
-            ]}
-            onChange={(mode) => update("mode", mode)}
-          />
-        </Field>
-
-        {draft.mode === "demo" ? (
-          <StatusMessage tone="warning">
-            当前使用本地演示引擎。它可以走通策划、版本和导出流程，但不会调用真实模型。
-          </StatusMessage>
-        ) : (
-          <>
-            <StatusMessage tone="warning">
-              API Key 会作为未加密的浏览器本地数据保存，并发送到你填写的文本与图片服务地址。请勿在共享设备使用；移除密钥时先清空此字段（或对应服务字段），再切换为演示模式并保存。清除整个网站数据会同时删除本地项目与素材。
-            </StatusMessage>
-
             <Field
               label="连接模式"
-              hint="双配置分别连接策划与生图；单连接复用同一根地址和密钥。"
               error={fieldError("connectionMode")}
             >
               <SegmentedControl
+                className="settings-connection-tabs"
                 ariaLabel="连接模式"
                 value={effectiveConnectionMode}
                 disabled={controlsDisabled}
@@ -438,28 +414,15 @@ export function SettingsDialog({
                 label="生成方式"
                 hint="当前工作台使用同步生成。异步生成尚未实现，入口已禁用。"
               >
-                <div className="settings-mode-switch" role="group" aria-label="图片生成方式">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="compact"
-                    disabled={controlsDisabled}
-                    aria-pressed
-                    onClick={() => update("imageGenerationMode", "sync")}
-                  >
-                    同步生成
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="compact"
-                    disabled
-                    aria-pressed={false}
-                    title="异步生成尚未实现"
-                  >
-                    异步生成（预留）
-                  </Button>
-                </div>
+                <Select
+                  aria-label="图片生成方式"
+                  value={draft.imageGenerationMode ?? "sync"}
+                  disabled={controlsDisabled}
+                  onChange={(event) => update("imageGenerationMode", event.target.value as RuntimeSettings["imageGenerationMode"])}
+                >
+                  <option value="sync">同步生成</option>
+                  <option value="async" disabled>异步生成（预留）</option>
+                </Select>
               </Field>
               <StatusMessage>
                 局部重绘（mask-edit）能力取决于当前图片服务商：OpenAI 兼容端点通常支持；OpenRouter / DeepSeek 等可能仅支持文生图。可在槽位检查器查看是否可用。
@@ -476,8 +439,7 @@ export function SettingsDialog({
                 {imageMessage ? <StatusMessage tone={imageTone} live={imageTone === "danger" ? "assertive" : "polite"}>{imageMessage}</StatusMessage> : null}
               </div>
             </section> : null}
-          </>
-        )}
+
 
         <section className="settings-service-group" aria-labelledby="privacy-info-title">
           <div className="settings-service-group__heading">
@@ -549,9 +511,10 @@ export function SettingsDialog({
       </Dialog>
       <ConfirmDialog
         open={discardConfirmOpen}
-        title="放弃未保存设置？"
+        title="提示"
+        eyebrow=""
         description="当前设置只保存在本次弹窗草稿中，关闭后将丢失这些修改。"
-        confirmLabel="放弃修改"
+        confirmLabel="放弃"
         onConfirm={discardChangesAndClose}
         onCancel={() => setDiscardConfirmOpen(false)}
       />
