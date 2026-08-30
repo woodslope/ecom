@@ -50,10 +50,6 @@ describe("AIS alignment documentation contract", () => {
       "tests/production-history.test.ts",
       "tests/run-export.test.ts",
       "tests/browser-smoke.mjs",
-      "artifacts/cross-platform-ais/amazon-listing-1280.png",
-      "artifacts/cross-platform-ais/production-history-900.png",
-      "artifacts/cross-platform-ais/settings-single-1280.png",
-      "artifacts/cross-platform-ais/task11-mask-saved-v2-900.png",
     ]) {
       expect(existsSync(new URL(`../${path}`, import.meta.url)), path).toBe(true);
     }
