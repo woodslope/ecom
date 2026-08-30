@@ -16,6 +16,7 @@ pnpm dev
 ## 验证与构建
 
 ```bash
+pnpm check:repo
 pnpm check:ui
 pnpm typecheck
 pnpm test
@@ -53,6 +54,6 @@ AI 链路分为三层：`src/domain/prompting/` 维护业务规则、输出协�
 
 设置保存为 `ecom-workbench.runtime-settings.api.v1`，用 `text` 和 `image` 两个命名服务分别配置根地址、Key、模型和协议。旧 v1/v2 开发设置不会读取或迁移。本地业务备份会排除运行设置和 API Key。ProductionRun 仅记录 API 生产尝试，并保存 Prompt 版本、模板/Profile 摘要及 Provider/模型/协议摘要。
 
-产品流程只有一条 API 生产路径：结构化任务设置统一进入 `taskSettings`，Prompt 只通过 `src/domain/prompting/builders.ts` 生成。历史区的“流程示例”是只读演示种子，不是 `ProductionRun`，回填也不会自动调用 API。
+产品流程只有一条 API 生产路径：结构化任务设置统一进入 `taskSettings`，Prompt 只通过 `src/domain/prompting/builders.ts` 生成。历史区展示独立的 `ProductionRun` 生产记录，支持恢复、复制、复用和历史重导出。
 
 更多架构和验收信息见 [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)、[PRODUCT_SPEC.md](PRODUCT_SPEC.md) 和 [核心功能对齐验收记录](docs/acceptance/2026-07-21-core-alignment.md)。

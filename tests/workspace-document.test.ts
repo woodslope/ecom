@@ -60,7 +60,6 @@ describe("project workspace document repository", () => {
       planInputSignatures: { amazon: "amazon-input-v1" },
       selectedSlotKeys: { amazon: "PT01" },
       slotVersions: {},
-      taskHistory: [],
       updatedAt: "2026-07-17T08:00:00.000Z",
     };
 
@@ -126,7 +125,6 @@ describe("project workspace document repository", () => {
           },
         },
         slotVersions: {},
-        taskHistory: [],
         updatedAt: "2026-07-20T01:00:00.000Z",
       }),
     });
@@ -159,7 +157,6 @@ describe("project workspace document repository", () => {
         planInputSignatures: { amazon: "listing-input" },
         selectedSlotKeys: { amazon: "PT02" },
         slotVersions: {},
-        taskHistory: [],
         updatedAt: "2026-07-20T01:00:00.000Z",
       }),
     });
@@ -228,7 +225,6 @@ describe("project workspace document repository", () => {
         plans: { amazon: listing },
         selectedSlotKeys: { amazon: "MAIN" },
         slotVersions: {},
-        taskHistory: [],
         updatedAt: timestamp,
       }),
     });
@@ -240,5 +236,6 @@ describe("project workspace document repository", () => {
     expect(restored.sessions[0]?.planningInput).toBeUndefined();
     expect(restored.runs).toHaveLength(1);
     expect(restored.runs[0]?.contextSnapshot.planningInput).toBeUndefined();
+    expect(restored).not.toHaveProperty("taskHistory");
   });
 });

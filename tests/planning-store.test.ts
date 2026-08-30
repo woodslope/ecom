@@ -450,7 +450,6 @@ describe("workbench planning state", () => {
 
     const persisted = await baseWorkspaceRepository.load("project_01");
     expect(persisted.plans.amazon).toEqual(previousPlan);
-    expect(persisted.taskHistory).toEqual([]);
     expect(persisted.runs).toHaveLength(1);
     expect(persisted.runs[0]?.events).toEqual([
       expect.objectContaining({ kind: "plan", status: "success" }),
@@ -510,7 +509,6 @@ describe("workbench planning state", () => {
 
     const persisted = await baseWorkspaceRepository.load("project_01");
     expect(persisted.plans.amazon).toBeUndefined();
-    expect(persisted.taskHistory).toEqual([]);
     expect(persisted.runs).toEqual([]);
     expect(store.getState().planningError).toContain("超时");
   });
@@ -632,7 +630,6 @@ describe("workbench planning state", () => {
     expect(lockMessage).toContain("Amazon");
     expect(store.getState().plans.amazon).toEqual(amazonPlan);
     expect(store.getState().plans.taobao).toBeUndefined();
-    expect(store.getState().taskHistory).toEqual([]);
     expect(store.getState().runs[0]?.events).toEqual([
       expect.objectContaining({ kind: "plan", status: "success" }),
     ]);
@@ -688,7 +685,6 @@ describe("workbench planning state", () => {
     expect(retried).toBeNull();
     expect(store.getState().plans.amazon).toEqual(first);
     expect(store.getState().planningError).toContain("模型服务暂时不可用");
-    expect(store.getState().taskHistory).toEqual([]);
     expect(store.getState().runs).toHaveLength(1);
     expect(store.getState().runs[0]?.events).toEqual([
       expect.objectContaining({ kind: "plan", status: "success" }),

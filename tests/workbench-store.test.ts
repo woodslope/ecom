@@ -149,10 +149,6 @@ describe("workbench store", () => {
       metadata: { name: "reference.png", kind: "reference", role: "reference" },
     });
     const workspace = await dependencies.workspaceRepository.load(second.id);
-    await dependencies.workspaceRepository.save({ ...workspace, taskHistory: [{
-      id: "task_01", batchId: "batch_01", kind: "plan", platformId: "amazon", status: "success",
-      startedAt: workspace.updatedAt, completedAt: workspace.updatedAt, summary: "test",
-    }] });
     const firstJob = createExecutionJob({
       id: "job_first_project",
       kind: "batch-generate",
@@ -188,7 +184,7 @@ describe("workbench store", () => {
     expect(store.getState().activeProject?.id).toBe(first.id);
     expect(store.getState().projects.map((project) => project.id)).toEqual([first.id]);
     expect(await dependencies.assetRepository.list(second.id)).toEqual([]);
-    expect((await dependencies.workspaceRepository.load(second.id)).taskHistory).toEqual([]);
+    expect((await dependencies.workspaceRepository.load(second.id)).runs).toEqual([]);
     expect((await dependencies.executionJobRepository.list({ projectId: second.id })).items).toEqual([]);
     expect((await dependencies.executionJobRepository.list({ projectId: first.id })).items).toEqual([
       expect.objectContaining({ id: firstJob.id }),

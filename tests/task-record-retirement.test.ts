@@ -37,7 +37,6 @@ describe("TaskRecord retirement", () => {
     await store.getState().planPlatform("amazon", { plannerMode: "listing" });
 
     const persisted = await workspaceRepository.load("project_01");
-    expect(persisted.taskHistory).toEqual([]);
     expect(persisted.runs).toHaveLength(1);
     expect(persisted.runs[0]?.events).toEqual([
       expect.objectContaining({ kind: "plan", status: "success" }),

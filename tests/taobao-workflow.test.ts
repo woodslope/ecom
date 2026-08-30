@@ -391,6 +391,5 @@ describe("Taobao product workflow", () => {
       "taobao/11-TB-DETAIL-06.svg",
       "taobao/12-TB-DETAIL-07.svg",
     ]);
-    expect(store.getState().taskHistory).toEqual([]);
   });
 });

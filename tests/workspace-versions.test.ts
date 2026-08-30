@@ -54,7 +54,6 @@ describe("workspace slot versions", () => {
       planInputSignatures: {},
       selectedSlotKeys: {},
       slotVersions: { amazon: { PT01: versionState } },
-      taskHistory: [],
       updatedAt: "2026-07-17T09:00:00.000Z",
     };
 

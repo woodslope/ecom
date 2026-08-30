@@ -169,7 +169,6 @@ import {
 import type { AiRuntimeFactory } from "../services/ai/runtime-factory";
 import { createAiRuntimeFactory } from "../services/ai/runtime-factory";
 import { DEFAULT_PLANNER_REQUEST_TIMEOUT_MS } from "../services/openai-planner";
-import type { TaskRecord } from "../domain/tasks";
 import { PROMPT_BUNDLE_VERSION, PROMPT_CONTRACT_VERSION } from "../domain/prompting";
 import { createPlannerTaskSettings } from "../domain/prompting/planner-settings";
 import {
@@ -269,7 +268,6 @@ export interface WorkbenchStoreDependencies {
   testImageConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   generationTimeoutMs?: number;
   createVersionId?: () => string;
-  createTaskId?: () => string;
   now?: () => string;
   compressImageFile: (file: File) => Promise<File>;
   createObjectURL: (blob: Blob) => string;
@@ -295,7 +293,6 @@ export interface WorkbenchState {
   amazonPlannerMode: AmazonWorkspaceMode;
   amazonWorkspaces: Partial<Record<AmazonWorkspaceMode, AmazonModeWorkspaceSnapshot>>;
   slotVersions: Partial<Record<PlatformId, Record<string, SlotVersionState>>>;
-  taskHistory: TaskRecord[];
   historyQueryService: HistoryQueryService | null;
   planningPlatformId: PlatformId | null;
   planningError: string | null;
@@ -988,7 +985,6 @@ export function createWorkbenchStore(
     amazonPlannerMode: "listing",
     amazonWorkspaces: {},
     slotVersions: {},
-    taskHistory: [],
     historyQueryService,
     planningPlatformId: null,
     planningError: null,
@@ -1082,7 +1078,6 @@ export function createWorkbenchStore(
             previousProjectId === activeProject?.id ? get().amazonWorkspaces : {},
           slotVersions:
             previousProjectId === activeProject?.id ? get().slotVersions : {},
-          taskHistory: previousProjectId === activeProject?.id ? get().taskHistory : [],
           planningPlatformId: null,
           planningError: null,
           generatingSlot: null,
@@ -1137,7 +1132,6 @@ export function createWorkbenchStore(
                 amazonPlannerMode: workspace.amazonPlannerMode ?? "listing",
                 amazonWorkspaces: workspace.amazonWorkspaces ?? {},
                 slotVersions: workspace.slotVersions,
-                taskHistory: workspace.taskHistory,
               }
             : {}),
           ...(assets && workspace && restoreErrors.length === 0
@@ -2170,7 +2164,6 @@ export function createWorkbenchStore(
         generationRecoveryRequired: false,
         generationError: null,
         generationErrorTarget: null,
-        taskHistory: [],
         exportingPlatform: null,
         exportError: null,
         exportErrorPlatform: null,
@@ -2351,7 +2344,6 @@ export function createWorkbenchStore(
           amazonPlannerMode: "listing",
           amazonWorkspaces: {},
           slotVersions: {},
-          taskHistory: [],
           planningPlatformId: null,
           planningError: null,
           resourceRestoreError: null,
@@ -2384,7 +2376,6 @@ export function createWorkbenchStore(
         generationRecoveryRequired: false,
         generationError: null,
         generationErrorTarget: null,
-        taskHistory: [],
         exportingPlatform: null,
         exportError: null,
         exportErrorPlatform: null,
@@ -2433,7 +2424,6 @@ export function createWorkbenchStore(
           amazonPlannerMode: workspace.amazonPlannerMode ?? "listing",
           amazonWorkspaces: workspace.amazonWorkspaces ?? {},
           slotVersions: workspace.slotVersions,
-          taskHistory: workspace.taskHistory,
           planningPlatformId: null,
           planningError: null,
           generatingSlot: null,
@@ -3088,7 +3078,7 @@ export function createWorkbenchStore(
         const plan = normalizePlatformPlan({ ...rawPlan, source: "api" }, baseRulePack);
         ensureCurrentPlanning();
 
-        const { selectedSlotKey, taskHistory, sessions, runs } = await enqueueWorkspaceMutation(async () => {
+        const { selectedSlotKey, sessions, runs } = await enqueueWorkspaceMutation(async () => {
           ensureCurrentPlanning();
           const workspace = await workspaceRepository.load(projectId);
           ensureCurrentPlanning();
@@ -3100,7 +3090,6 @@ export function createWorkbenchStore(
           const selectedSlotKey = plan.slots.some((slot) => slot.slotKey === currentSelected)
             ? currentSelected
             : plan.slots[0]?.slotKey;
-          const taskHistory = workspace.taskHistory;
           const completedAt = now();
           const workflowId = workflowForPlan(platformId, plan);
           const runtimeSettings = get().runtimeSettings;
@@ -3199,7 +3188,6 @@ export function createWorkbenchStore(
               [platformId]: selectedSlotKey,
             },
             slotVersions: { ...workspace.slotVersions, [platformId]: {} },
-            taskHistory,
             updatedAt: now(),
           };
           if (platformId === "amazon") {
@@ -3221,7 +3209,7 @@ export function createWorkbenchStore(
             }
             throw staleError;
           }
-          return { selectedSlotKey, taskHistory, sessions, runs };
+          return { selectedSlotKey, sessions, runs };
         });
         ensureCurrentPlanning();
 
@@ -3246,7 +3234,6 @@ export function createWorkbenchStore(
                 ),
               }
             : {}),
-          taskHistory,
           sessions,
           runs,
           slotVersions: { ...state.slotVersions, [platformId]: {} },
@@ -3796,7 +3783,7 @@ export function createWorkbenchStore(
           parameters: { ...generated.parameters },
         };
 
-        const { nextVersionState, taskHistory, nextSessions, nextRuns } =
+        const { nextVersionState, nextSessions, nextRuns } =
           await enqueueWorkspaceMutation(async () => {
           ensureCurrentGeneration();
           const workspace = await workspaceRepository.load(projectId);
@@ -3809,7 +3796,6 @@ export function createWorkbenchStore(
             versions: [...current.versions, version],
             activeVersionId: version.id,
           };
-          const taskHistory = workspace.taskHistory;
           let nextSessions = workspace.sessions;
           let nextRuns = workspace.runs;
           const currentPlan = plan!;
@@ -3855,7 +3841,6 @@ export function createWorkbenchStore(
                 [slotKey]: nextVersionState,
               },
             },
-            taskHistory,
             updatedAt: now(),
           });
           try {
@@ -3870,7 +3855,7 @@ export function createWorkbenchStore(
             throw staleError;
           }
           workspacePersisted = true;
-          return { nextVersionState, taskHistory, nextSessions, nextRuns };
+          return { nextVersionState, nextSessions, nextRuns };
         });
 
         ensureCurrentGeneration();
@@ -3890,7 +3875,6 @@ export function createWorkbenchStore(
             ...state.assets.filter((asset) => asset.metadata.id !== stored.metadata.id),
             { metadata: stored.metadata, objectUrl },
           ],
-          taskHistory,
           sessions: nextSessions,
           runs: nextRuns,
           generatingSlot: null,
@@ -3956,7 +3940,6 @@ export function createWorkbenchStore(
         const hasCleanupFailure = Boolean(
           workspaceRollbackError || assetCleanupError || cleanupMarkerError || previewCleanupError,
         );
-        let failureTaskHistory: TaskRecord[] | null = null;
         let failureRuns: ProductionRun[] | null = null;
         if (
           !workspaceRollbackError &&
@@ -3970,7 +3953,6 @@ export function createWorkbenchStore(
                 : "failed";
             const failureResult = await enqueueWorkspaceMutation(async () => {
               const workspace = await workspaceRepository.load(projectId);
-              const taskHistory = workspace.taskHistory;
               const workflowId = plan ? workflowForPlan(platformId, plan) : null;
               const currentSession = workflowId
                 ? [...workspace.sessions]
@@ -3990,10 +3972,9 @@ export function createWorkbenchStore(
                       }
                     : run)
                 : workspace.runs;
-              await workspaceRepository.save({ ...workspace, runs, taskHistory, updatedAt: now() });
-              return { taskHistory, runs };
+              await workspaceRepository.save({ ...workspace, runs, updatedAt: now() });
+              return { runs };
             });
-            failureTaskHistory = failureResult.taskHistory;
             failureRuns = failureResult.runs;
           } catch (historyError) {
             messages.push(`生产记录事件保存失败：${errorMessage(historyError)}。`);
@@ -4014,7 +3995,6 @@ export function createWorkbenchStore(
             generationRecoveryRequired: Boolean(workspaceRollbackError),
             generationError: hasCleanupFailure ? messages.join(" ") : CANCELED_GENERATION_MESSAGE,
             generationErrorTarget: { platformId, slotKey },
-            ...(failureTaskHistory ? { taskHistory: failureTaskHistory } : {}),
             ...(failureRuns ? { runs: failureRuns } : {}),
             ...(workspaceRollbackError
               ? {
@@ -4031,7 +4011,6 @@ export function createWorkbenchStore(
           generationRecoveryRequired: Boolean(workspaceRollbackError),
           generationError: messages.join(" "),
           generationErrorTarget: { platformId, slotKey },
-          ...(failureTaskHistory ? { taskHistory: failureTaskHistory } : {}),
           ...(failureRuns ? { runs: failureRuns } : {}),
           ...(workspaceRollbackError
             ? {
@@ -4293,7 +4272,6 @@ export function createWorkbenchStore(
           const nextRuns = workspace.runs.map((run) =>
             run.id === tracedRun.id ? tracedRun : run,
           );
-          const nextTaskHistory = workspace.taskHistory;
           const nextSlotVersions = {
             ...workspace.slotVersions,
             [platformId]: {
@@ -4306,7 +4284,6 @@ export function createWorkbenchStore(
             sessions: nextSessions,
             runs: nextRuns,
             slotVersions: nextSlotVersions,
-            taskHistory: nextTaskHistory,
             updatedAt: timestamp,
           });
           workspacePersisted = true;
@@ -4321,7 +4298,7 @@ export function createWorkbenchStore(
             }
             throw staleError;
           }
-          return { nextVersionState, nextSessions, nextRuns, nextTaskHistory };
+          return { nextVersionState, nextSessions, nextRuns };
         });
         ensureCurrentEdit();
         if (!pendingObjectUrl) throw new Error("图片预览 URL 尚未准备完成");
@@ -4336,7 +4313,6 @@ export function createWorkbenchStore(
           },
           sessions: committed.nextSessions,
           runs: committed.nextRuns,
-          taskHistory: committed.nextTaskHistory,
           assets: [
             ...state.assets.filter((asset) => asset.metadata.id !== stored.metadata.id),
             { metadata: stored.metadata, objectUrl },
@@ -5659,7 +5635,6 @@ export function createWorkbenchStore(
               amazonPlannerMode: workspace.amazonPlannerMode ?? "listing",
               amazonWorkspaces: workspace.amazonWorkspaces ?? {},
               slotVersions: workspace.slotVersions,
-              taskHistory: workspace.taskHistory,
             }
           : {}),
         ...(recoveryResolved

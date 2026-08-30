@@ -29,7 +29,7 @@
 | 3 | A+ 类型与模块编排 | **对齐** | P0 | A+ catalog、模块编排控件、A+ 浏览器证据 |
 | 4 | 主流程与信息架构 | **对齐** | P0 | `PlatformWorkspace`、Listing/A+ 主路径烟测 |
 | 5 | 输入模型与 Listing 解析 | **对齐** | P0 | `parseAmazonListingText`、资料区解析与同步测试 |
-| 6 | 策划引擎与结果模型 | **对齐** | P0 | Demo/API planner、normalizer、session 输入签名 |
+| 6 | 策划引擎与结果模型 | **对齐** | P0 | OpenAI-compatible API planner、normalizer、session 输入签名 |
 | 7 | Prompt Preview、选位、逐张生成 | **对齐** | P0 | SlotBoard/Inspector、版本和生成浏览器证据 |
 | 8 | 生成尺寸与上传建议尺寸 | **对齐** | P0 | `generation-size.ts`、Prompt 双尺寸和导出契约 |
 | 9 | 参考图压缩与请求负载 | **对齐** | P1 | 最多 16 张、1024/768 降级、8 MiB 上限测试 |
@@ -39,7 +39,7 @@
 | 13 | API 配置与 Provider | **部分（已解释）** | P1 | dual/single、OpenRouter/DeepSeek 门禁和连接测试；真实 Provider 质量不由本地测试保证 |
 | 14 | 导出与交付包 | **对齐** | P1 | 当前版本 ZIP、manifest、Prompt 快照、部分/完整导出 |
 | 15 | 遮罩编辑与图片工具 | **可达（P2）** | P2 | Mask Dialog、Provider mask、不可变版本、失败回滚 |
-| 16 | Demo 模式 | **保留** | — | Demo 输出显式标记，不伪装为真实模型 |
+| 16 | API-only 生产运行时 | **对齐** | P0 | runtime factory、transport、API 配置和能力门禁 |
 | 17 | 淘宝 / 天猫 | **N/A** | 非对齐验收 | 独立 `taobao-product` workflow 已完成，另有淘宝专项测试；不纳入 Amazon 对齐结论 |
 
 ## 3. P0 对齐结论
@@ -68,7 +68,7 @@ Ecom 提供三套项目级文本风格预设，也允许项目范围的 style as
 
 ### 4.2 Provider
 
-设置支持 Demo/API、双配置和单连接。OpenRouter、DeepSeek 的能力差异在请求前做门禁；不支持图片编辑的 Provider 不会静默退化为普通生成。连接测试、失败反馈、API Key 不回显和刷新恢复有浏览器证据。外部网络、CORS、账户额度和真实模型质量不属于本地确定性验收。
+设置支持双配置和单连接。OpenRouter、DeepSeek 的能力差异在请求前做门禁；不支持图片编辑的 Provider 不会静默退化为普通生成。连接测试、失败反馈、API Key 不回显和刷新恢复有浏览器证据。外部网络、CORS、账户额度和真实模型质量不属于本地确定性验收。
 
 ### 4.3 历史与导出
 
@@ -90,7 +90,7 @@ Ecom 提供三套项目级文本风格预设，也允许项目范围的 style as
 | 遮罩默认、绘制、错误、保存版本、900px | `artifacts/cross-platform-ais/task11-mask-*.png` |
 | 桌面门禁与滚动/溢出 | `desktop-gate-899.png`、`amazon-compact-900.png`、浏览器烟测几何断言 |
 
-Amazon 对齐相关的最新工程证据：`pnpm check:ui`、`pnpm typecheck`、`pnpm test`（92 个文件、491/491）、`pnpm build`、`VITE_BASE_PATH=/ecom/ pnpm build`、`pnpm test:browser`、`pnpm test:browser:governance` 和 `pnpm test:ui:acceptance` 均通过。浏览器没有未解释的 page error 或流程错误；完整运行的截图和 manifest 保存在 `artifacts/cross-platform-ais/runs/<时间戳>/`。
+Amazon 对齐相关的最新工程证据由 `artifacts/cross-platform-ais/latest.json` 指向的 manifest 记录；其中包含实际 Git SHA、命令结果、测试数量、构建大小、浏览器条件和截图清单。当前运行时为 API-only，浏览器没有未解释的 page error 或流程错误。
 
 ## 7. 对齐完成定义
 

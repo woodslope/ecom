@@ -23,7 +23,6 @@ const productFacts: ProductFacts = {
 
 function createDependencies() {
   let assetSequence = 0;
-  const taskIds = ["task_plan_01", "task_generate_01", "task_export_01"];
   return {
     projectRepository: createMemoryProjectRepository({
       createId: () => "project_01",
@@ -39,7 +38,6 @@ function createDependencies() {
     plannerEngine: mockPlanner,
     imageGenerator: mockImageGenerator,
     createVersionId: () => "version_main",
-    createTaskId: () => taskIds.shift()!,
     now: () => "2026-07-17T10:00:00.000Z",
     compressImageFile: async (file: File) => file,
     createObjectURL: () => "blob:generated/main",
@@ -48,7 +46,7 @@ function createDependencies() {
 }
 
 describe("workbench export", () => {
-  it("returns a real incomplete ZIP and restores the successful export task", async () => {
+  it("returns a real incomplete ZIP and restores the successful export run", async () => {
     const dependencies = createDependencies();
     const store = createWorkbenchStore(dependencies);
     await store.getState().createProject({ name: "旅行颈枕", facts: productFacts });
@@ -61,7 +59,6 @@ describe("workbench export", () => {
     expect(exported?.manifest.ready).toBe(false);
     expect(exported?.manifest.missingSlots).toContain("PT01");
     expect(store.getState().exportingPlatform).toBeNull();
-    expect(store.getState().taskHistory).toEqual([]);
     expect(store.getState().runs.at(-1)?.events.at(-1)).toMatchObject({
       kind: "export",
       status: "success",
@@ -70,7 +67,7 @@ describe("workbench export", () => {
 
     const restored = createWorkbenchStore(dependencies);
     await restored.getState().initialize();
-    expect(restored.getState().taskHistory).toEqual(store.getState().taskHistory);
+    expect(restored.getState().runs).toEqual(store.getState().runs);
   });
 
   it("keeps generated versions and records a failed export when an asset cannot be read", async () => {
@@ -89,7 +86,6 @@ describe("workbench export", () => {
     expect(exported).toBeNull();
     expect(store.getState().exportError).toContain("IndexedDB 读取失败");
     expect(store.getState().slotVersions.amazon?.MAIN).toEqual(previousVersions);
-    expect(store.getState().taskHistory).toEqual([]);
     expect(store.getState().runs.at(-1)?.events.at(-1)).toMatchObject({
       kind: "export",
       status: "failed",

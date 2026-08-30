@@ -105,7 +105,6 @@ function materializeWorkspaceDocument(
     amazonPlannerMode: latestAmazon?.workflowId === "amazon-aplus" ? "aplus" : "listing",
     amazonWorkspaces,
     slotVersions,
-    taskHistory: [],
     updatedAt: v3.updatedAt,
   };
 }

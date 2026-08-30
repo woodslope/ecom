@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, CheckCircle2, CircleAlert, Sparkles } from "lucide-react";
+import { Archive, CircleAlert } from "lucide-react";
 
 import { getPlatformRulePack } from "../domain/platforms/registry";
 import type { PlatformId } from "../domain/platforms/types";
 import type { ProductProject } from "../domain/projects/types";
-import type { TaskRecord } from "../domain/tasks";
 import { queryProductionRuns, type ProductionRunFilters, type ProductionRunRecord } from "../domain/tasks";
 import {
   type HistoryFilters,
@@ -21,63 +20,9 @@ import {
   createLocalStorageWorkspaceRepository,
   type ProjectWorkspaceRepository,
 } from "../domain/workspace/project-workspace";
-import { Button, ConfirmDialog, EmptyState, StatusChip, StatusMessage } from "./ui";
+import { Button, ConfirmDialog, EmptyState, StatusMessage } from "./ui";
 import { ProductionHistoryFilters } from "./ProductionHistoryFilters";
 import { ProductionRunCard } from "./ProductionRunCard";
-
-const taskLabels = {
-  plan: "AI 策划",
-  generate: "生成槽位图片",
-  export: "导出交付包",
-} as const;
-
-export interface ProjectTaskArchive {
-  project: ProductProject;
-  tasks: TaskRecord[];
-}
-
-function TaskList({ tasks }: { tasks: TaskRecord[] }) {
-  return (
-    <ol className="task-history">
-      {[...tasks].reverse().map((task) => (
-        <li key={task.id} className="task-history__item">
-          <span className={`task-history__icon task-history__icon--${task.status}`}>
-            {task.status === "success" ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
-          </span>
-          <span className="task-history__content">
-            <span className="task-history__heading">
-              <strong>{taskLabels[task.kind]}</strong>
-              <StatusChip tone="neutral">{getPlatformRulePack(task.platformId).label}</StatusChip>
-              {task.slotKey ? <StatusChip tone="info">{task.slotKey}</StatusChip> : null}
-            </span>
-            <span>{task.summary}</span>
-            {task.artifactFileName ? <code>{task.artifactFileName}</code> : null}
-            <time dateTime={task.completedAt}>
-              {new Date(task.completedAt).toLocaleString("zh-CN")}
-            </time>
-          </span>
-          {task.kind === "plan" ? <Sparkles size={15} aria-hidden="true" /> : null}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-/** Flat list kept for unit contracts that pass tasks only. */
-export function TaskHistory({ tasks }: { tasks: TaskRecord[] }) {
-  if (tasks.length === 0) {
-    return (
-      <EmptyState
-        variant="dependency"
-        eyebrow="等待工作流产生结果"
-        icon={<Archive size={24} />}
-        title="还没有任务记录"
-        description="完成一次策划、图片生成或导出后，这里会自动保留当前商品的结果。"
-      />
-    );
-  }
-  return <TaskList tasks={tasks} />;
-}
 
 export function TaskHistoryArchive({
   projects,

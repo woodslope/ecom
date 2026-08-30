@@ -347,7 +347,6 @@ describe("workbench generation versions", () => {
       platformId: "amazon",
       slotKey: "PT01",
     });
-    expect(store.getState().taskHistory).toEqual([]);
     expect(store.getState().runs.at(-1)?.events).toEqual([
       expect.objectContaining({ kind: "plan", status: "success" }),
       expect.objectContaining({ kind: "generate", status: "success" }),

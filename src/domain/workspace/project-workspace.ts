@@ -23,7 +23,6 @@ import type { TaobaoProductAnalysis } from "../platforms/taobao-analysis";
 import { resolveRulePackForPlan } from "../platforms/resolve-rule-pack";
 import type { PlatformId, PlatformWorkflowId } from "../platforms/types";
 export type { PlatformWorkflowId } from "../platforms/types";
-import type { TaskRecord } from "../tasks";
 import type { PlatformFactsDraft } from "../localization/product-localizer";
 import type { ProductFacts } from "../projects/types";
 import type { PromptTrace } from "../prompting";
@@ -150,7 +149,6 @@ export interface ProjectWorkspaceDocument {
   amazonPlannerMode?: AmazonWorkspaceMode;
   amazonWorkspaces?: Partial<Record<AmazonWorkspaceMode, AmazonModeWorkspaceSnapshot>>;
   slotVersions: Partial<Record<PlatformId, Record<string, SlotVersionState>>>;
-  taskHistory: TaskRecord[];
   updatedAt: string;
 }
 
@@ -185,7 +183,6 @@ function emptyDocument(projectId: string, now: () => string): ProjectWorkspaceDo
     amazonPlannerMode: "listing",
     amazonWorkspaces: {},
     slotVersions: {},
-    taskHistory: [],
     updatedAt: now(),
   };
 }
@@ -768,40 +765,6 @@ function normalizeRun(value: unknown, projectId: string): ProductionRun | null {
   };
 }
 
-function normalizeTaskRecord(value: unknown): TaskRecord | null {
-  if (
-    !isRecord(value) ||
-    typeof value.id !== "string" ||
-    typeof value.batchId !== "string" ||
-    (value.kind !== "plan" && value.kind !== "generate" && value.kind !== "export") ||
-    (value.platformId !== "taobao" && value.platformId !== "amazon") ||
-    (value.status !== "success" && value.status !== "failed" && value.status !== "canceled") ||
-    typeof value.startedAt !== "string" ||
-    typeof value.completedAt !== "string" ||
-    typeof value.summary !== "string"
-  ) {
-    return null;
-  }
-
-  return {
-    id: value.id,
-    batchId: value.batchId,
-    kind: value.kind,
-    platformId: value.platformId,
-    status: value.status,
-    startedAt: value.startedAt,
-    completedAt: value.completedAt,
-    summary: value.summary,
-    ...(typeof value.slotKey === "string" ? { slotKey: value.slotKey } : {}),
-    ...(typeof value.artifactFileName === "string"
-      ? { artifactFileName: value.artifactFileName }
-      : {}),
-    ...(Array.isArray(value.missingSlots)
-      ? { missingSlots: value.missingSlots.filter((item): item is string => typeof item === "string") }
-      : {}),
-  };
-}
-
 function normalizeDocument(
   value: unknown,
   projectId: string,
@@ -831,11 +794,6 @@ function normalizeDocument(
   const selectedSlotKeys: Partial<Record<PlatformId, string>> = {};
   const slotVersions: Partial<Record<PlatformId, Record<string, SlotVersionState>>> = {};
   const amazonWorkspaces: Partial<Record<AmazonWorkspaceMode, AmazonModeWorkspaceSnapshot>> = {};
-  const taskHistory = (Array.isArray(value.taskHistory) ? value.taskHistory : [])
-    .map(normalizeTaskRecord)
-    .filter((record): record is TaskRecord => record !== null)
-    .slice(-100);
-
   for (const platformId of supportedPlatformIds) {
     const inputSignature = rawPlanInputSignatures[platformId];
     if (typeof inputSignature === "string" && inputSignature.length > 0) {
@@ -954,7 +912,6 @@ function normalizeDocument(
           : savedAmazonPlannerMode,
     amazonWorkspaces,
     slotVersions,
-    taskHistory,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : now(),
   };
 }

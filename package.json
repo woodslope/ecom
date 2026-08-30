@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5192 --strictPort",
     "build": "tsc -b && vite build",
+    "check:repo": "node scripts/check-repo-hygiene.mjs",
     "typecheck": "tsc -b --pretty false",
     "check:ui": "node scripts/check-ui-governance.mjs",
     "check:bundle": "node scripts/check-bundle-budget.mjs",

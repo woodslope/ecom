@@ -98,7 +98,7 @@ Rejected for the current scope. It would add a second model call, extra waiting 
 
 - `tests/workspace-v3.test.ts`
 - `tests/run-repository.test.ts`
-- `tests/repository-compensation.test.ts`
+- `tests/project-delete-compensation.test.ts`
 - `tests/production-history.test.ts`
 - `tests/run-export.test.ts`
 - `tests/settings-store.test.ts`

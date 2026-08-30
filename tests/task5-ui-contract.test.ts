@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import { CompliancePanel } from "../src/components/CompliancePanel";
 import { ExportPanel } from "../src/components/ExportPanel";
-import { TaskHistory } from "../src/components/TaskHistory";
 import type { ComplianceResult } from "../src/domain/compliance";
 
 describe("Task 5 UI contracts", () => {
@@ -77,29 +76,4 @@ describe("Task 5 UI contracts", () => {
     expect(markup).toMatch(/aria-describedby="[^"]+"/);
   });
 
-  it("renders restored task batches with platform, result, and artifact", () => {
-    const markup = renderToStaticMarkup(
-      createElement(TaskHistory, {
-        tasks: [
-          {
-            id: "task_01",
-            batchId: "task_01",
-            kind: "export",
-            platformId: "amazon",
-            status: "success",
-            startedAt: "2026-07-17T10:00:00.000Z",
-            completedAt: "2026-07-17T10:00:01.000Z",
-            summary: "已导出当前结果，缺少 14 个槽位。",
-            artifactFileName: "旅行颈枕-amazon-2026-07-17.zip",
-            missingSlots: ["PT01"],
-          },
-        ],
-      }),
-    );
-
-    expect(markup).toContain("Amazon");
-    expect(markup).toContain("导出交付包");
-    expect(markup).toContain("缺少 14 个槽位");
-    expect(markup).toContain("旅行颈枕-amazon-2026-07-17.zip");
-  });
 });

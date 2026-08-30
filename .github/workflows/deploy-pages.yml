@@ -33,13 +33,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check UI and types
-        run: pnpm check:ui && pnpm typecheck
+      - name: Check repository, UI, types, and tests
+        run: pnpm check:repo && pnpm check:ui && pnpm typecheck && pnpm test
 
       - name: Build static site
         env:
           VITE_BASE_PATH: /ecom/
         run: pnpm build
+
+      - name: Check bundle budget
+        run: pnpm check:bundle
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

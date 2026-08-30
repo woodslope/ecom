@@ -94,7 +94,6 @@ describe("production history query", () => {
       plannerEngine: mockPlanner,
       imageGenerator: mockImageGenerator,
       createVersionId: () => `version_${++id}`,
-      createTaskId: () => `event_${++id}`,
       now: () => `2026-07-20T${String(Math.min(++id, 23)).padStart(2, "0")}:00:00.000Z`,
       compressImageFile: async (file: File) => file,
       createObjectURL: () => `blob:${id}`,
