@@ -12,7 +12,7 @@ import { useId } from "react";
 
 import { getPlatformRulePack } from "../domain/platforms/registry";
 import type { PlatformId } from "../domain/platforms/types";
-import { Button, IconButton, OperationStatus, StatusMessage } from "./ui";
+import { Button, IconButton, OperationStatus, StatusMessage, Toast } from "./ui";
 
 export interface GenerationTarget {
   platformId: PlatformId;
@@ -40,21 +40,34 @@ export function GenerationTaskStatus({
   const owner = `${getPlatformRulePack(target.platformId).label} · ${target.slotKey}`;
 
   return (
-    <OperationStatus
+    <Toast
       live="polite"
+      loading
+      className="operation-status"
       data-testid="generation-operation-status"
-      icon={<LoaderCircle className="spin" size={16} />}
-      title={`${owner} ${canceling ? "正在取消生成" : "正在生成"}`}
-      description={canceling
-        ? "正在回滚未完成写入并清理临时素材，请稍候。"
-        : "已有版本保持可用；其他槽位请先等待或取消。"}
       actions={(
         <Button variant="secondary" size="compact" disabled={canceling} onClick={onCancel}>
           {canceling ? <LoaderCircle className="spin" size={15} /> : <Square size={15} />}
           {canceling ? "正在取消..." : "取消生成"}
         </Button>
       )}
-    />
+    >
+      <span className="operation-status__copy">
+        <span className="operation-status__icon">
+          <LoaderCircle className="spin" size={16} />
+        </span>
+        <span className="operation-status__text">
+          <strong className="operation-status__title">
+            {owner} {canceling ? "正在取消生成" : "正在生成"}
+          </strong>
+          <span className="operation-status__description">
+            {canceling
+              ? "正在回滚未完成写入并清理临时素材，请稍候。"
+              : "已有版本保持可用；其他槽位请先等待或取消。"}
+          </span>
+        </span>
+      </span>
+    </Toast>
   );
 }
 

@@ -149,6 +149,7 @@ describe("generation UI contract", () => {
     expect(pendingMarkup).not.toContain("取消生成");
     expect(taskMarkup).toContain("Amazon · PT01 正在生成");
     expect(taskMarkup).toContain('data-testid="generation-operation-status"');
+    expect(taskMarkup).toContain("toast");
     expect(taskMarkup).toContain("operation-status");
     expect(taskMarkup).toContain('role="status"');
     expect(taskMarkup).toContain("取消生成");

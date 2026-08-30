@@ -791,8 +791,6 @@ export function App() {
             <span>{error}</span>
           </Toast>
         ) : null}
-      </ToastRegion>
-      <div className="workspace-content-stack">
         {generatingSlot ? (
           <GenerationTaskStatus
             target={generatingSlot}
@@ -800,6 +798,8 @@ export function App() {
             onCancel={cancelGeneration}
           />
         ) : null}
+      </ToastRegion>
+      <div className="workspace-content-stack">
         {copilotTarget ? (
           <CopilotTaskStatus target={copilotTarget} onCancel={cancelCopilot} />
         ) : null}
