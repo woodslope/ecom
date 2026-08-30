@@ -19,6 +19,15 @@ export interface GenerationTarget {
   slotKey: string;
 }
 
+export function compactGenerationError(message: string): string {
+  if (/API 设置不可用|未配置图片 API|无法连接图片 API/.test(message)) {
+    return "图片 API 不可用，请检查设置。";
+  }
+  const withoutVersionNote = message.replace(/已有版本未受影响。?$/, "").trim();
+  if (withoutVersionNote.length <= 32) return withoutVersionNote;
+  return `${withoutVersionNote.slice(0, 31)}…`;
+}
+
 export function GenerationTaskStatus({
   target,
   canceling = false,
@@ -132,6 +141,17 @@ export function GenerationActions({
   return (
     <div className="generation-actions">
       <div className="generation-actions__primary">
+        {errorMessage ? (
+          <StatusMessage
+            tone="danger"
+            live="assertive"
+            appearance="inline"
+            className="generation-actions__error"
+            title={errorMessage}
+          >
+            {compactGenerationError(errorMessage)}
+          </StatusMessage>
+        ) : null}
         <Button
           variant={variant}
           size="compact"
@@ -148,11 +168,6 @@ export function GenerationActions({
           )}
           {generating ? "正在生成..." : hasVersion ? "重新生成" : "生成图片"}
         </Button>
-        {errorMessage ? (
-          <StatusMessage tone="danger" live="assertive" appearance="inline">
-            {errorMessage}
-          </StatusMessage>
-        ) : null}
       </div>
       {disabledReason ? (
         <StatusMessage id={disabledReasonId} className="generation-actions__hint" live="off">

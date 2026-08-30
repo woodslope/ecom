@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
+  compactGenerationError,
   GenerationActions,
   GenerationFailureStatus,
   GenerationTaskStatus,
@@ -82,6 +83,13 @@ const assets = [
 ];
 
 describe("generation UI contract", () => {
+  it("keeps generation errors compact and actionable", () => {
+    expect(compactGenerationError("API 设置不可用：未配置图片模型，请先在设置中填写图片模型。"))
+      .toBe("图片 API 不可用，请检查设置。");
+    expect(compactGenerationError("图片生成失败：无法连接图片 API，请检查网络、CORS 配置和接口地址。已有版本未受影响。"))
+      .toBe("图片 API 不可用，请检查设置。");
+  });
+
   it("renders honest first-generation, pending cancel, and retry actions", () => {
     const firstMarkup = renderToStaticMarkup(
       createElement(GenerationActions, {
@@ -150,6 +158,8 @@ describe("generation UI contract", () => {
     expect(lockedMarkup).toContain("Amazon · PT01 正在生成，请先等待或取消。");
     expect(lockedMarkup).toContain("disabled");
     expect(errorMarkup).toContain("status-message--inline");
+    expect(errorMarkup.indexOf("图片 API 不可用，请检查设置。"))
+      .toBeLessThan(errorMarkup.indexOf("重新生成"));
     expect(errorMarkup).toContain('role="alert"');
   });
 
