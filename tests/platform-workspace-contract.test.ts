@@ -448,7 +448,8 @@ describe("platform workspace contract", () => {
 
     expect(markup).toContain("Amazon 正在生成平台策划，请先等待或取消。");
     expect(markup).toContain("Amazon 正在生成平台策划");
-    expect(markup.match(/取消策划/g)).toHaveLength(1);
+    expect(markup).not.toContain("取消策划");
+    expect(markup).not.toContain("planning-operation-status");
     for (const label of ["重试策划", "生成平台策划"]) {
       expect(buttonAttributes(markup, label)).toContain('disabled=""');
     }

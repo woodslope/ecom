@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { History, RefreshCw } from "lucide-react";
+import { History, RefreshCw, Square } from "lucide-react";
 
 import { AppShell } from "./components/AppShell";
 import { AmazonWorkspace } from "./components/AmazonWorkspace";
@@ -711,6 +711,22 @@ export function App() {
         {!initialized && loading ? (
           <Toast live="polite" loading>
             正在恢复本地商品资料与图片...
+          </Toast>
+        ) : null}
+        {planningPlatformId ? (
+          <Toast
+            live="polite"
+            loading
+            id="planning-task-status"
+            data-testid="planning-toast"
+            actions={(
+              <Button variant="secondary" size="compact" onClick={cancelPlanning}>
+                <Square size={13} />
+                取消策划
+              </Button>
+            )}
+          >
+            <span>{getPlatformRulePack(planningPlatformId).label} 正在生成平台策划</span>
           </Toast>
         ) : null}
         {warning && warningVisible ? (

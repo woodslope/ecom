@@ -5,7 +5,6 @@ import {
   RotateCcw,
   Smartphone,
   Sparkles,
-  Square,
   X,
 } from "lucide-react";
 
@@ -47,7 +46,7 @@ import { SlotInspector } from "./SlotInspector";
 import { TaobaoMobilePreview } from "./TaobaoMobilePreview";
 import { TaobaoIntake } from "./TaobaoIntake";
 import type { GenerationTarget } from "./GenerationActions";
-import { Button, ConfirmDialog, EmptyState, IconButton, OperationStatus, Panel, StatusChip, StatusMessage } from "./ui";
+import { Button, ConfirmDialog, EmptyState, IconButton, Panel, StatusChip, StatusMessage } from "./ui";
 
 export function workspaceDraftReason(sourceDirty: boolean, slotDirty: boolean): string | null {
   if (sourceDirty) return "商品资料有未保存修改，请先保存资料。";
@@ -439,23 +438,6 @@ export function PlatformWorkspace({
         )
       ) : (
         <>
-      {planningPlatformId ? (
-        <OperationStatus
-          live="polite"
-          id="planning-task-status"
-          data-testid="planning-operation-status"
-          icon={<LoaderCircle className="spin" size={16} />}
-          title={`${getPlatformRulePack(planningPlatformId).label} 正在生成平台策划`}
-          description="其他平台的策划入口已锁定；可等待完成或取消当前任务。"
-          actions={(
-            <Button variant="secondary" onClick={onCancelPlanning}>
-              <Square size={13} />
-              取消策划
-            </Button>
-          )}
-        />
-      ) : null}
-
       {planRefreshReason ? (
         <StatusMessage id="plan-freshness-status" tone="warning" live="polite">
           {planRefreshReason}
