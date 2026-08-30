@@ -14,6 +14,9 @@ export interface OpenAIImageGeneratorOptions {
   transport?: "images-api" | "chat-completions";
 }
 
+/** Five minutes gives slower image providers enough time to finish generation and delivery. */
+export const DEFAULT_IMAGE_REQUEST_TIMEOUT_MS = 300_000;
+
 export type OpenAIImageGeneratorErrorCode =
   | "timeout"
   | "http"
@@ -282,7 +285,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
           );
           reject(error);
           requestController.abort(error);
-        }, this.options.timeoutMs ?? 120_000);
+        }, this.options.timeoutMs ?? DEFAULT_IMAGE_REQUEST_TIMEOUT_MS);
       });
 
       return await Promise.race([

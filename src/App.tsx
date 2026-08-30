@@ -136,7 +136,6 @@ export function App() {
     amazon: 1,
   });
   const [workspaceDirtyReason, setWorkspaceDirtyReason] = useState<string | null>(null);
-  const [navigationWarning, setNavigationWarning] = useState<string | null>(null);
   const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
   const [exportFeedback, setExportFeedback] = useState<string | null>(null);
   const [warningVisible, setWarningVisible] = useState(false);
@@ -256,27 +255,19 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [warning]);
 
-  useEffect(() => {
-    if (!navigationWarning) return;
-    const timer = window.setTimeout(() => setNavigationWarning(null), 5200);
-    return () => window.clearTimeout(timer);
-  }, [navigationWarning]);
-
   const handleWorkspaceDirtyChange = useCallback((reason: string | null) => {
     setWorkspaceDirtyReason(reason);
-    if (!reason) setNavigationWarning(null);
   }, []);
 
-  const blockUnsavedNavigation = () => {
+  const blockUnsavedNavigation = (item: NavigationItemId = activeItem) => {
     if (!workspaceDirtyReason) return false;
-    setNavigationWarning(`${workspaceDirtyReason} 离开后内容会丢失，请取消或放弃并离开。`);
+    setPendingLeave({ kind: "nav", item });
     return true;
   };
   const requestNavigation = (item: NavigationItemId) => {
     if (item === activeItem) return;
     if (workspaceDirtyReason) {
       setPendingLeave({ kind: "nav", item });
-      setNavigationWarning(`${workspaceDirtyReason} 离开后内容会丢失，请取消或放弃并离开。`);
       return;
     }
     changeActiveItem(item);
@@ -284,7 +275,6 @@ export function App() {
   const discardPendingLeave = () => {
     const pending = pendingLeave;
     setPendingLeave(null);
-    setNavigationWarning(null);
     handleWorkspaceDirtyChange(null);
     if (!pending) return;
     setActiveItem(pending.item);
@@ -343,7 +333,7 @@ export function App() {
   };
   const startNewTask = (platform: PlatformId) => {
     if (platform !== "taobao" && platform !== "amazon") return;
-    if (blockUnsavedNavigation()) return;
+    if (blockUnsavedNavigation(platform)) return;
     setNewTaskTokens((current) => ({ ...current, [platform]: current[platform] + 1 }));
     setActiveItem(platform);
     clearPlanningError();
@@ -353,7 +343,7 @@ export function App() {
     setNewTaskTokens((current) => ({ ...current, [platform]: 0 }));
   };
   const changeActiveItem = (item: NavigationItemId) => {
-    if (item !== activeItem && blockUnsavedNavigation()) return;
+    if (item !== activeItem && blockUnsavedNavigation(item)) return;
     setActiveItem(item);
     clearPlanningError();
     if (item === "taobao" || item === "amazon") {
@@ -747,11 +737,6 @@ export function App() {
             {warning}
           </Toast>
         ) : null}
-        {navigationWarning ? (
-          <Toast tone="warning" live="polite">
-            {navigationWarning}
-          </Toast>
-        ) : null}
         {uploadFeedback ? (
           <Toast
             tone="success"
@@ -828,7 +813,6 @@ export function App() {
         onDiscard={discardPendingLeave}
         onCancel={() => {
           setPendingLeave(null);
-          setNavigationWarning(null);
         }}
       />
     </AppShell>

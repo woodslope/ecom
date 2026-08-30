@@ -29,6 +29,9 @@ export interface TextTransportOptions {
   timeoutMs?: number;
 }
 
+/** Five minutes gives slower providers enough time to finish generation and response delivery. */
+export const DEFAULT_AI_REQUEST_TIMEOUT_MS = 300_000;
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let offset = 0; offset < bytes.length; offset += 0x8000) {
@@ -94,7 +97,7 @@ export class OpenAICompatibleTextTransport {
       timeoutTriggered = true;
       controller.abort(timeoutError);
       rejectTimeout?.(timeoutError);
-    }, this.options.timeoutMs ?? 120_000);
+    }, this.options.timeoutMs ?? DEFAULT_AI_REQUEST_TIMEOUT_MS);
     try {
       const images = (request.referenceImages ?? []).filter((image) => image.blob.size > 0 && image.mimeType.startsWith("image/"));
       const content = await userContent(request.prompt, images);

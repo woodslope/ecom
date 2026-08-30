@@ -12,6 +12,7 @@ import {
 import { buildCopilotPrompt } from "../domain/prompting";
 import {
   AiTransportError,
+  DEFAULT_AI_REQUEST_TIMEOUT_MS,
   OpenAICompatibleTextTransport,
   inferTextProtocol,
   unwrapStructuredJson,
@@ -134,7 +135,7 @@ export class OpenAICopilot implements CopilotEngine {
         model: this.options.model,
         protocol: this.options.protocol ?? inferTextProtocol(this.options.endpoint),
         fetch: this.fetch,
-        timeoutMs: this.options.timeoutMs ?? 20_000,
+        timeoutMs: this.options.timeoutMs ?? DEFAULT_AI_REQUEST_TIMEOUT_MS,
       });
       const result = await transport.request({
         service: "copilot",

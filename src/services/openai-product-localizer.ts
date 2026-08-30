@@ -7,6 +7,7 @@ import type { ProductFacts } from "../domain/projects/types";
 import { buildLocalizationPrompt } from "../domain/prompting";
 import {
   AiTransportError,
+  DEFAULT_AI_REQUEST_TIMEOUT_MS,
   OpenAICompatibleTextTransport,
   inferTextProtocol,
   unwrapStructuredJson,
@@ -91,7 +92,7 @@ export class OpenAIProductLocalizer implements ProductLocalizer {
         model: this.options.model,
         protocol: this.options.protocol ?? inferTextProtocol(this.options.endpoint),
         fetch: this.fetch,
-        timeoutMs: this.options.timeoutMs ?? 30_000,
+        timeoutMs: this.options.timeoutMs ?? DEFAULT_AI_REQUEST_TIMEOUT_MS,
       });
       const response = await transport.request({
         service: "localizer",

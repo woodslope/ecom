@@ -168,6 +168,7 @@ import {
 } from "../domain/settings";
 import type { AiRuntimeFactory } from "../services/ai/runtime-factory";
 import { createAiRuntimeFactory } from "../services/ai/runtime-factory";
+import { DEFAULT_IMAGE_REQUEST_TIMEOUT_MS } from "../services/openai-image-generator";
 import { DEFAULT_PLANNER_REQUEST_TIMEOUT_MS } from "../services/openai-planner";
 import { PROMPT_BUNDLE_VERSION, PROMPT_CONTRACT_VERSION } from "../domain/prompting";
 import { createPlannerTaskSettings } from "../domain/prompting/planner-settings";
@@ -710,7 +711,9 @@ export function createWorkbenchStore(
     }
     return null;
   };
-  const generationTimeoutMs = dependencies.generationTimeoutMs ?? 60_000;
+  // Keep the lifecycle guard slightly longer than the image API request timeout so
+  // the API can finish before persistence and rollback are given a chance to settle.
+  const generationTimeoutMs = dependencies.generationTimeoutMs ?? DEFAULT_IMAGE_REQUEST_TIMEOUT_MS + 15_000;
   const createVersionId = dependencies.createVersionId ?? (() => createStableId("version"));
   const now = dependencies.now ?? (() => new Date().toISOString());
   let lifecycleVersion = 0;

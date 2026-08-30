@@ -6,6 +6,7 @@ import type {
 import { buildIndustryTemplatePrompt } from "../domain/prompting";
 import {
   AiTransportError,
+  DEFAULT_AI_REQUEST_TIMEOUT_MS,
   OpenAICompatibleTextTransport,
   inferTextProtocol,
   unwrapStructuredJson,
@@ -69,7 +70,7 @@ export class OpenAIIndustryTemplateTransformer implements IndustryTemplateTransf
     signal.addEventListener("abort", forwardAbort, { once: true });
     const timeout = setTimeout(
       () => controller.abort(new DOMException("行业模板改造超时", "TimeoutError")),
-      this.options.timeoutMs ?? 90_000,
+      this.options.timeoutMs ?? DEFAULT_AI_REQUEST_TIMEOUT_MS,
     );
     try {
       const transport = new OpenAICompatibleTextTransport({
@@ -78,7 +79,7 @@ export class OpenAIIndustryTemplateTransformer implements IndustryTemplateTransf
         model: this.options.model,
         protocol: this.options.protocol ?? inferTextProtocol(this.options.endpoint),
         fetch: this.fetch,
-        timeoutMs: this.options.timeoutMs ?? 90_000,
+        timeoutMs: this.options.timeoutMs ?? DEFAULT_AI_REQUEST_TIMEOUT_MS,
       });
       const response = await transport.request({
         service: "industry-template",
