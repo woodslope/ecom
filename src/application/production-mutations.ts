@@ -1,6 +1,7 @@
 import type {
   PlatformSession,
   PlatformSessionOptions,
+  PlatformRunContext,
   PlatformWorkflowId,
   ProductionEvent,
   ProductionRun,
@@ -9,6 +10,7 @@ import type { PlatformId } from "../domain/platforms/types";
 import type { PlatformPlan } from "../domain/planning/types";
 import type { SlotVersion, SlotVersionState } from "../domain/generation/types";
 import { currentSlotVersion } from "../domain/generation/current-version";
+import type { PromptTrace } from "../domain/prompting";
 
 export interface PlanCommitInput {
   projectId: string;
@@ -23,6 +25,8 @@ export interface PlanCommitInput {
   taobaoAnalysis?: PlatformSession["taobaoAnalysis"];
   localizedFactsDraft?: PlatformSession["localizedFactsDraft"];
   industryTemplate?: PlatformSession["industryTemplate"];
+  promptTrace?: PromptTrace;
+  providerSummary?: PlatformRunContext["providerSummary"];
   plan: PlatformPlan;
   planInputSignature?: string;
   selectedSlotKey?: string;
@@ -125,6 +129,8 @@ export function commitPlan(input: PlanCommitInput): {
       ...(input.industryTemplate
         ? { industryTemplate: structuredClone(input.industryTemplate) }
         : {}),
+      ...(input.promptTrace ? { promptTrace: structuredClone(input.promptTrace) } : {}),
+      ...(input.providerSummary ? { providerSummary: structuredClone(input.providerSummary) } : {}),
     },
     planSnapshot: structuredClone(input.plan),
     ...(input.planInputSignature
@@ -300,6 +306,12 @@ export function forkRun(
       : {}),
     ...(sourceRun.contextSnapshot.industryTemplate
       ? { industryTemplate: structuredClone(sourceRun.contextSnapshot.industryTemplate) }
+      : {}),
+    ...(sourceRun.contextSnapshot.promptTrace
+      ? { promptTrace: structuredClone(sourceRun.contextSnapshot.promptTrace) }
+      : {}),
+    ...(sourceRun.contextSnapshot.providerSummary
+      ? { providerSummary: structuredClone(sourceRun.contextSnapshot.providerSummary) }
       : {}),
     plan,
     planInputSignature: input.planInputSignature,

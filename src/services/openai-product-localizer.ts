@@ -4,12 +4,22 @@ import {
   type ProductLocalizer,
 } from "../domain/localization/product-localizer";
 import type { ProductFacts } from "../domain/projects/types";
+import { buildLocalizationPrompt } from "../domain/prompting";
+import {
+  AiTransportError,
+  OpenAICompatibleTextTransport,
+  inferTextProtocol,
+  unwrapStructuredJson,
+} from "./ai/transport";
+import type { TextServiceProtocol } from "../domain/settings/types";
 
 export interface OpenAIProductLocalizerOptions {
   endpoint: string;
   apiKey: string;
   model: string;
   fetch?: typeof fetch;
+  timeoutMs?: number;
+  protocol?: TextServiceProtocol;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -74,47 +84,39 @@ export class OpenAIProductLocalizer implements ProductLocalizer {
     rules: LocalizationRules,
     signal: AbortSignal,
   ): Promise<ProductFacts> {
-    const response = await this.fetch(this.options.endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.options.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: this.options.model,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: [
-              "Return JSON only. Localize the supplied product facts for the target locale.",
-              "Keep the exact JSON shape and array lengths.",
-              "Never change brand, model, SKU, numbers, dimensions, quantities, certification identifiers, or factual meaning.",
-              "Do not convert units and do not add claims or facts.",
-              "Specification keys may be localized, but preserve their order and values precisely.",
-            ].join("\n"),
-          },
-          {
-            role: "user",
-            content: JSON.stringify({ targetLocale, facts }),
-          },
-        ],
-      }),
-      signal,
-    });
-    if (!response.ok) {
-      throw new Error(`站点语言草稿生成失败（HTTP ${response.status}）。`);
-    }
-    const payload = await response.json() as { choices?: Array<{ message?: { content?: unknown } }> };
-    const rawContent = payload.choices?.[0]?.message?.content;
-    const content = typeof rawContent === "string" ? rawContent.trim() : "";
-    const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(content);
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(fenced ? fenced[1] : content);
-    } catch {
-      throw new Error("AI 本地化结果无法解析，请重试。");
+      const transport = new OpenAICompatibleTextTransport({
+        endpoint: this.options.endpoint,
+        apiKey: this.options.apiKey,
+        model: this.options.model,
+        protocol: this.options.protocol ?? inferTextProtocol(this.options.endpoint),
+        fetch: this.fetch,
+        timeoutMs: this.options.timeoutMs ?? 30_000,
+      });
+      const response = await transport.request({
+        service: "localizer",
+        model: this.options.model,
+        prompt: buildLocalizationPrompt({
+          facts: facts as unknown as Record<string, unknown>,
+          targetLocale,
+          rules,
+        }),
+        signal,
+        maxOutputTokens: 4_000,
+      });
+      const content = unwrapStructuredJson(response.text);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        throw new Error("AI 本地化结果无法解析，请重试。");
+      }
+      return enforceLocalizationRules(facts, parseFacts(parsed), rules);
+    } catch (error) {
+      if (error instanceof AiTransportError) {
+        throw new Error(`站点语言草稿生成失败：${error.userMessage}`);
+      }
+      throw error;
     }
-    return enforceLocalizationRules(facts, parseFacts(parsed), rules);
   }
 }

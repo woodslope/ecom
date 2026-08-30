@@ -3,10 +3,14 @@ import type {
   IndustryTemplateTransformRequest,
   IndustryTemplateTransformResult,
 } from "../domain/prompt-templates/industry-template-transformer";
-
-interface ChatCompletionsResponse {
-  choices?: Array<{ message?: { content?: unknown } }>;
-}
+import { buildIndustryTemplatePrompt } from "../domain/prompting";
+import {
+  AiTransportError,
+  OpenAICompatibleTextTransport,
+  inferTextProtocol,
+  unwrapStructuredJson,
+} from "./ai/transport";
+import type { TextServiceProtocol } from "../domain/settings/types";
 
 export interface OpenAIIndustryTemplateTransformerOptions {
   endpoint: string;
@@ -14,27 +18,15 @@ export interface OpenAIIndustryTemplateTransformerOptions {
   model: string;
   fetch?: typeof fetch;
   timeoutMs?: number;
-}
-
-function responseText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return String(content ?? "");
-  return content.map((item) =>
-    typeof item === "object" && item !== null && "text" in item && typeof item.text === "string"
-      ? item.text
-      : "",
-  ).join("");
+  protocol?: TextServiceProtocol;
 }
 
 function parseResult(
-  body: ChatCompletionsResponse,
+  body: { slots?: unknown },
   request: IndustryTemplateTransformRequest,
 ): IndustryTemplateTransformResult {
-  const raw = responseText(body.choices?.[0]?.message?.content).trim();
-  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(raw);
-  const parsed = JSON.parse(fenced?.[1] ?? raw) as { slots?: unknown };
-  if (!Array.isArray(parsed.slots)) throw new Error("AI 返回的行业模板格式不正确");
-  const byKey = new Map(parsed.slots.flatMap((value) => {
+  if (!Array.isArray(body.slots)) throw new Error("AI 返回的行业模板格式不正确");
+  const byKey = new Map(body.slots.flatMap((value) => {
     if (
       typeof value !== "object" ||
       value === null ||
@@ -80,48 +72,32 @@ export class OpenAIIndustryTemplateTransformer implements IndustryTemplateTransf
       this.options.timeoutMs ?? 90_000,
     );
     try {
-      const response = await this.fetch(this.options.endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.options.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: this.options.model,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content: [
-                "Return JSON only with one field: slots.",
-                "Rewrite every supplied slot into reusable industry-level image planning guidance.",
-                "Do not include concrete SKU facts, exact product dimensions, colors, package contents, certifications, or fixed scenes unless explicitly stated as a reusable industry constraint.",
-                "Each slot must contain slotKey, guidance, and negativeGuidance.",
-                `Return these slot keys exactly once: ${request.rulePack.slots.map((slot) => slot.key).join(", ")}.`,
-                "Write guidance in Simplified Chinese so an operator can review it; final model prompt language is handled later by the product planner.",
-              ].join("\n"),
-            },
-            {
-              role: "user",
-              content: JSON.stringify({
-                platform: request.rulePack.label,
-                brief: request.brief,
-                baseTemplate: request.baseTemplate.slots,
-              }),
-            },
-          ],
+      const transport = new OpenAICompatibleTextTransport({
+        endpoint: this.options.endpoint,
+        apiKey: this.options.apiKey,
+        model: this.options.model,
+        protocol: this.options.protocol ?? inferTextProtocol(this.options.endpoint),
+        fetch: this.fetch,
+        timeoutMs: this.options.timeoutMs ?? 90_000,
+      });
+      const response = await transport.request({
+        service: "industry-template",
+        model: this.options.model,
+        prompt: buildIndustryTemplatePrompt({
+          rulePack: request.rulePack,
+          platform: request.rulePack,
+          brief: request.brief,
+          baseTemplate: request.baseTemplate,
         }),
         signal: controller.signal,
+        maxOutputTokens: 6_000,
       });
-      if (!response.ok) {
-        throw new Error(response.status === 401 || response.status === 403
-          ? "行业模板改造鉴权失败，请检查文本 API 设置"
-          : `行业模板改造请求失败（HTTP ${response.status}）`);
-      }
-      return parseResult(await response.json() as ChatCompletionsResponse, request);
+      const parsed = JSON.parse(unwrapStructuredJson(response.text)) as { slots?: unknown };
+      return parseResult(parsed, request);
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
       if (controller.signal.aborted) throw new Error("行业模板改造超时，请重试");
+      if (error instanceof AiTransportError) throw new Error(error.userMessage);
       throw error;
     } finally {
       clearTimeout(timeout);

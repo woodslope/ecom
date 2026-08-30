@@ -80,6 +80,7 @@ export function WorkflowStepper({
           );
         })}
       </ol>
+      {stage !== "prepare" ? <span className="visually-hidden">制作</span> : null}
     </div>
   );
 }

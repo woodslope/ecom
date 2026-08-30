@@ -3,6 +3,7 @@ import type {
   ImageGenerationRequest,
   ImageGenerator,
 } from "../domain/generation/types";
+import { buildGenerationPrompt } from "../domain/prompting";
 
 export interface OpenAIImageGeneratorOptions {
   baseUrl: string;
@@ -82,18 +83,6 @@ interface ChatImageResponse {
 
 function endpoint(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/${path}`;
-}
-
-function composedPrompt(request: ImageGenerationRequest): string {
-  const sizeHint = `Expected output resolution: ${request.dimensions.width}x${request.dimensions.height}. Upload reference size: ${request.uploadDimensions.width}x${request.uploadDimensions.height}.`;
-  return [
-    request.prompt.trim(),
-    sizeHint,
-    request.visibleCopy.trim() ? `Visible copy: ${request.visibleCopy.trim()}` : "",
-    request.negativePrompt.trim() ? `Avoid: ${request.negativePrompt.trim()}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
 }
 
 function decodeBase64(value: string): ArrayBuffer {
@@ -325,7 +314,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
     signal: AbortSignal,
   ): Promise<GeneratedImage> {
     const size = `${request.dimensions.width}x${request.dimensions.height}`;
-    const prompt = composedPrompt(request);
+    const prompt = buildGenerationPrompt({ request }).user;
     if (this.options.transport === "chat-completions") {
       if (request.edit) {
         throw new OpenAIImageGeneratorError(

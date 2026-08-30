@@ -173,12 +173,16 @@ export function AmazonIntake({
     return () => onDirtyChange?.(null);
   }, [dirty, onDirtyChange]);
 
+  const assessedFacts = useMemo(
+    () => resolveAmazonPlanningFacts(facts, listingText, "library"),
+    [facts, listingText],
+  );
   const assessment = useMemo(
     () => assessPlanningInput({
-      facts,
+      facts: assessedFacts,
       productImageCount: selectedReferenceAssetIds.length + files.length,
     }),
-    [facts, files.length, selectedReferenceAssetIds.length],
+    [assessedFacts, files.length, selectedReferenceAssetIds.length],
   );
   const assessmentMessage = planningInputQualityMessage(assessment);
 
@@ -296,6 +300,7 @@ export function AmazonIntake({
           <Button
             variant="quiet"
             type="button"
+            aria-label="选择图片"
             className={`reference-upload${isDraggingFiles ? " reference-upload--dragging" : ""}`}
             disabled={disabled}
             onClick={() => fileInputRef.current?.click()}

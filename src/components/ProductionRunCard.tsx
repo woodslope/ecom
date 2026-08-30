@@ -42,9 +42,6 @@ export function ProductionRunCard({ record, current, assetUrls, busy, compact = 
   });
   const visiblePreviewAssetKey = visiblePreviewAssetIds.join("|");
   const hiddenPreviewCount = Math.max(0, run.planSnapshot.slots.length - visibleSlots.length);
-  const generatedSlotKeys = new Set(previewOutputs.map((event) => event.slotKey));
-  const imagesComplete = run.planSnapshot.slots.length > 0 &&
-    run.planSnapshot.slots.every((slot) => generatedSlotKeys.has(slot.slotKey));
   const canPreview = Boolean(
     run.planningInputSignatureSnapshot &&
       run.slotVersionsSnapshot &&
@@ -123,7 +120,7 @@ export function ProductionRunCard({ record, current, assetUrls, busy, compact = 
 
         <div className="production-run-card__actions">
           <Button variant="secondary" size="compact" disabled={busy} onClick={onResume}>
-            <CopyPlus size={14} />{imagesComplete ? "载入任务" : "继续任务"}
+            <CopyPlus size={14} />继续任务
           </Button>
           {!compact && manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存商品</Button> : null}
           {canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}

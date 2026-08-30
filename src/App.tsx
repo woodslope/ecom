@@ -4,7 +4,7 @@ import { History, RefreshCw, X } from "lucide-react";
 import { AppShell } from "./components/AppShell";
 import { AmazonWorkspace } from "./components/AmazonWorkspace";
 import { ExecutionJobPanel } from "./components/ExecutionJobPanel";
-import { CopilotTaskStatus } from "./components/GenerationActions";
+import { CopilotTaskStatus, GenerationTaskStatus } from "./components/GenerationActions";
 import { ConfirmLeaveDialog } from "./components/ConfirmLeaveDialog";
 import { PlatformWorkspace } from "./components/PlatformWorkspace";
 import { TaobaoWorkspace } from "./components/TaobaoWorkspace";
@@ -166,6 +166,7 @@ export function App() {
     planningPlatformId,
     planningError,
     generatingSlot,
+    generationCanceling,
     generationRecoveryRequired,
     generationError,
     generationErrorTarget,
@@ -192,6 +193,7 @@ export function App() {
     planPlatform,
     selectAmazonPlannerMode,
     cancelPlanning,
+    cancelGeneration,
     selectSessionSlot,
     selectPlannedSlot,
     updatePlannedSlot,
@@ -763,6 +765,13 @@ export function App() {
         ) : null}
       </div>
       <div className="workspace-content-stack">
+        {generatingSlot ? (
+          <GenerationTaskStatus
+            target={generatingSlot}
+            canceling={generationCanceling}
+            onCancel={cancelGeneration}
+          />
+        ) : null}
         {copilotTarget ? (
           <CopilotTaskStatus target={copilotTarget} onCancel={cancelCopilot} />
         ) : null}

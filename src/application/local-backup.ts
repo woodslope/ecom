@@ -6,7 +6,10 @@ import { DEFAULT_RUN_DATABASE_NAME } from "../domain/runs/repository";
 import { CUSTOM_PROMPT_PROFILES_STORAGE_KEY } from "../domain/prompt-profiles/prompt-profiles";
 import { SLOT_PROMPT_ASSETS_STORAGE_KEY } from "../domain/prompt-profiles/slot-prompt-assets";
 import { INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY } from "../domain/prompt-templates/industry-template-packs";
-import { RUNTIME_SETTINGS_STORAGE_KEY } from "../domain/settings/runtime-settings";
+import {
+  RUNTIME_SETTINGS_STORAGE_KEY,
+  RUNTIME_SETTINGS_STORAGE_KEY_V2,
+} from "../domain/settings/runtime-settings";
 import { PROJECT_WORKSPACE_STORAGE_PREFIX } from "../domain/workspace/project-workspace";
 import {
   AMAZON_DRAFT_PROJECT_CONFIRM_SKIP_KEY,
@@ -565,7 +568,11 @@ export function parseLocalBackup(serialized: string): LocalBackupFile {
   }
 
   const storage = Object.fromEntries(Object.entries(value.storage).map(([key, item]) => {
-    if (!isBusinessStorageKey(key) || key === RUNTIME_SETTINGS_STORAGE_KEY || typeof item !== "string") {
+    if (
+      !isBusinessStorageKey(key) ||
+      (key !== undefined && [RUNTIME_SETTINGS_STORAGE_KEY, RUNTIME_SETTINGS_STORAGE_KEY_V2].includes(key)) ||
+      typeof item !== "string"
+    ) {
       throw new Error("备份文件包含不允许的本地设置");
     }
     try {

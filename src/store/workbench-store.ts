@@ -154,12 +154,10 @@ import {
   createMemorySettingsRepository,
   defaultRuntimeSettings,
   normalizeRuntimeSettings,
-  runtimeImageApiKey,
-  runtimeImageBaseUrl,
+  runtimeImageServiceSummary,
   runtimeTextApiKey,
-  runtimeTextBaseUrl,
+  runtimeTextServiceSummary,
   runtimeSupportsImageEditing,
-  detectProviderCapabilities,
   testApiConnection,
   testImageApiConnection,
   testTextApiConnection,
@@ -168,7 +166,10 @@ import {
   type RuntimeSettings,
   type SettingsRepository,
 } from "../domain/settings";
+import type { AiRuntimeFactory } from "../services/ai/runtime-factory";
+import { createAiRuntimeFactory } from "../services/ai/runtime-factory";
 import type { TaskRecord } from "../domain/tasks";
+import { PROMPT_BUNDLE_VERSION, PROMPT_CONTRACT_VERSION } from "../domain/prompting";
 import {
   createLocalStorageWorkspaceRepository,
   createMemoryWorkspaceRepository,
@@ -193,12 +194,7 @@ import {
   interactiveDemoCopilot,
   slowInteractiveDemoCopilot,
 } from "../services/demo-copilot";
-import { OpenAICopilot } from "../services/openai-copilot";
-import { OpenAIPlanner } from "../services/openai-planner";
-import { OpenAIImageGenerator } from "../services/openai-image-generator";
-import { OpenAIProductLocalizer } from "../services/openai-product-localizer";
 import { demoIndustryTemplateTransformer } from "../services/demo-industry-template-transformer";
-import { OpenAIIndustryTemplateTransformer } from "../services/openai-industry-template-transformer";
 import {
   createFailOnceImageGenerator,
   demoImageGenerator,
@@ -265,6 +261,8 @@ export interface WorkbenchStoreDependencies {
   executionJobCoordinator?: ExecutionJobCoordinator;
   historyQueryService?: HistoryQueryService;
   settingsRepository?: SettingsRepository;
+  /** Preferred runtime boundary; legacy engine factories remain supported during migration. */
+  aiRuntimeFactory?: AiRuntimeFactory;
   plannerEngine?: PlannerEngine;
   createPlannerEngine?: (settings: RuntimeSettings) => PlannerEngine;
   productLocalizer?: ProductLocalizer;
@@ -600,6 +598,23 @@ function revokeAssets(
   }
 }
 
+function withGenerationPromptTrace(run: ProductionRun): ProductionRun {
+  return {
+    ...run,
+    contextSnapshot: {
+      ...run.contextSnapshot,
+      promptTrace: {
+        ...(run.contextSnapshot.promptTrace ?? {}),
+        generation: {
+          promptId: "ecom.generation",
+          promptVersion: PROMPT_BUNDLE_VERSION,
+          contractVersion: PROMPT_CONTRACT_VERSION,
+        },
+      },
+    },
+  };
+}
+
 const PENDING_GENERATED_CLEANUP_TAG = "system:pending-cleanup";
 
 interface LoadedAssetViews {
@@ -685,6 +700,22 @@ export function createWorkbenchStore(
   const copilotEngine = dependencies.copilotEngine ?? demoCopilot;
   const industryTemplateTransformer =
     dependencies.industryTemplateTransformer ?? demoIndustryTemplateTransformer;
+  const aiRuntimeFactory = dependencies.aiRuntimeFactory;
+  const resolveAiRuntime = (settings: RuntimeSettings) => {
+    // Keep the browser's unconfigured API state on the local demo engines. The
+    // runtime factory is still available for configured API settings, while a
+    // fresh install remains offline and deterministic until credentials/models
+    // are supplied.
+    const configured = Boolean(
+      runtimeTextApiKey(settings) ||
+        settings.imageApiKey?.trim() ||
+        settings.planningModel.trim() ||
+        settings.imageModel.trim(),
+    );
+    return settings.mode === "api" && configured && aiRuntimeFactory
+      ? aiRuntimeFactory.resolve(settings)
+      : null;
+  };
   const generationTimeoutMs = dependencies.generationTimeoutMs ?? 60_000;
   const createVersionId = dependencies.createVersionId ?? (() => createStableId("version"));
   const now = dependencies.now ?? (() => new Date().toISOString());
@@ -2929,16 +2960,18 @@ export function createWorkbenchStore(
           let localizedFacts = cloneProductFacts(sourcePlanningFacts);
           let status: PlatformFactsDraft["status"] = targetLocale === "zh-CN"
             ? "confirmed"
-            : !dependencies.createProductLocalizer && !dependencies.productLocalizer
+            : !dependencies.aiRuntimeFactory && !dependencies.createProductLocalizer && !dependencies.productLocalizer
               ? "pending"
               : "generated";
           let localizationFailure: unknown = null;
           if (targetLocale !== "zh-CN") {
             try {
-              const activeLocalizer =
+              const runtime = resolveAiRuntime(get().runtimeSettings);
+              const activeLocalizer = runtime?.productLocalizer ?? (
                 get().runtimeSettings.mode === "api" && dependencies.createProductLocalizer
                   ? dependencies.createProductLocalizer(get().runtimeSettings)
-                  : productLocalizer;
+                  : productLocalizer
+              );
               localizedFacts = await activeLocalizer.localize(
                 sourcePlanningFacts,
                 targetLocale,
@@ -3019,10 +3052,12 @@ export function createWorkbenchStore(
           get().assets.map((asset) => asset.metadata),
           selectedReferenceAssetIds,
         );
-        const activePlannerEngine =
+        const runtime = resolveAiRuntime(get().runtimeSettings);
+        const activePlannerEngine = runtime?.planner ?? (
           get().runtimeSettings.mode === "api" && dependencies.createPlannerEngine
             ? dependencies.createPlannerEngine(get().runtimeSettings)
-            : plannerEngine;
+            : plannerEngine
+        );
         const plannerFacts = platformId === "amazon"
           ? {
               ...planningFacts,
@@ -3057,6 +3092,28 @@ export function createWorkbenchStore(
           const taskHistory = workspace.taskHistory;
           const completedAt = now();
           const workflowId = workflowForPlan(platformId, plan);
+          const runtimeSettings = get().runtimeSettings;
+          const apiRun = runtimeSettings.mode === "api" && plan.source === "api";
+          const plannerTrace = apiRun
+            ? {
+                promptId: `ecom.planner`,
+                promptVersion: PROMPT_BUNDLE_VERSION,
+                contractVersion: PROMPT_CONTRACT_VERSION,
+                profileId: platformId === "amazon"
+                  ? (effectiveAmazonOptions && "stylePresetId" in effectiveAmazonOptions
+                    ? effectiveAmazonOptions.stylePresetId ?? null
+                    : null)
+                  : (taobaoProfileId ?? null),
+                ...(planningSession?.industryTemplate
+                  ? {
+                      industryTemplateId: planningSession.industryTemplate.id,
+                      industryTemplateVersion: planningSession.industryTemplate.version,
+                    }
+                  : {}),
+              }
+            : undefined;
+          const textSummary = apiRun ? runtimeTextServiceSummary(runtimeSettings) : undefined;
+          const imageSummary = apiRun ? runtimeImageServiceSummary(runtimeSettings) : undefined;
           const existingSession = [...workspace.sessions]
             .filter((session) => session.workflowId === workflowId)
             .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
@@ -3083,6 +3140,17 @@ export function createWorkbenchStore(
                 : {}),
             ...(existingSession?.industryTemplate
               ? { industryTemplate: existingSession.industryTemplate }
+              : {}),
+            ...(plannerTrace
+              ? { promptTrace: { planner: plannerTrace } }
+              : {}),
+            ...(textSummary || imageSummary
+              ? {
+                  providerSummary: {
+                    ...(textSummary ? { text: textSummary } : {}),
+                    ...(imageSummary ? { image: imageSummary } : {}),
+                  },
+                }
               : {}),
             plan,
             planInputSignature: inputSignature,
@@ -3645,10 +3713,12 @@ export function createWorkbenchStore(
         }
         ensureCurrentGeneration();
 
-        const activeImageGenerator =
+        const runtime = resolveAiRuntime(get().runtimeSettings);
+        const activeImageGenerator = runtime?.imageGenerator ?? (
           get().runtimeSettings.mode === "api" && dependencies.createImageGenerator
             ? dependencies.createImageGenerator(get().runtimeSettings)
-            : imageGenerator;
+            : imageGenerator
+        );
         const stylePresetId =
           platformId === "amazon" ? plan?.amazonSession?.stylePresetId : undefined;
         const selectedStyle = applyStyleReference && activeSession?.selectedStyleReferenceId
@@ -3760,8 +3830,9 @@ export function createWorkbenchStore(
               nextSessions = workspace.sessions.map((session) =>
                 session.id === committed.session.id ? committed.session : session,
               );
+              const tracedRun = withGenerationPromptTrace(committed.run);
               nextRuns = workspace.runs.map((run) =>
-                run.id === committed.run.id ? committed.run : run,
+                run.id === tracedRun.id ? tracedRun : run,
               );
             }
           }
@@ -4106,10 +4177,12 @@ export function createWorkbenchStore(
         );
         ensureCurrentEdit();
 
-        const activeImageGenerator =
+        const runtime = resolveAiRuntime(get().runtimeSettings);
+        const activeImageGenerator = runtime?.imageGenerator ?? (
           get().runtimeSettings.mode === "api" && dependencies.createImageGenerator
             ? dependencies.createImageGenerator(get().runtimeSettings)
-            : imageGenerator;
+            : imageGenerator
+        );
         const sizeTier = session.options.platformId === "amazon" ? session.options.sizeTier : undefined;
         const dimensions = platformId === "amazon"
           ? generationDimensionsForUpload(rule.dimensions, sizeTier ?? "2K")
@@ -4208,8 +4281,9 @@ export function createWorkbenchStore(
           const nextSessions = workspace.sessions.map((candidate) =>
             candidate.id === sessionId ? nextSession : candidate,
           );
+          const tracedRun = withGenerationPromptTrace(versionCommit.run);
           const nextRuns = workspace.runs.map((run) =>
-            run.id === versionCommit.run.id ? versionCommit.run : run,
+            run.id === tracedRun.id ? tracedRun : run,
           );
           const nextTaskHistory = workspace.taskHistory;
           const nextSlotVersions = {
@@ -4693,10 +4767,12 @@ export function createWorkbenchStore(
       ].join(" ");
       if (/[\u3400-\u9fff]/u.test(candidateText)) return candidate;
       try {
-        const activeLocalizer =
+        const runtime = resolveAiRuntime(get().runtimeSettings);
+        const activeLocalizer = runtime?.productLocalizer ?? (
           get().runtimeSettings.mode === "api" && dependencies.createProductLocalizer
             ? dependencies.createProductLocalizer(get().runtimeSettings)
-            : productLocalizer;
+            : productLocalizer
+        );
         return await activeLocalizer.localize(
           candidate,
           "zh-CN",
@@ -5267,9 +5343,12 @@ export function createWorkbenchStore(
       activeIndustryTemplateTransformController = controller;
       set({ industryTemplateTransforming: true, industryTemplateTransformError: null });
       try {
-        const transformer = settings.mode === "api" && dependencies.createIndustryTemplateTransformer
-          ? dependencies.createIndustryTemplateTransformer(settings)
-          : industryTemplateTransformer;
+        const runtime = resolveAiRuntime(settings);
+        const transformer = runtime?.industryTemplateTransformer ?? (
+          settings.mode === "api" && dependencies.createIndustryTemplateTransformer
+            ? dependencies.createIndustryTemplateTransformer(settings)
+            : industryTemplateTransformer
+        );
         const result = await transformer.transform(request, controller.signal);
         if (
           controller.signal.aborted ||
@@ -5381,10 +5460,12 @@ export function createWorkbenchStore(
       });
 
       try {
-        const activeCopilot =
+        const runtime = resolveAiRuntime(get().runtimeSettings);
+        const activeCopilot = runtime?.copilot ?? (
           get().runtimeSettings.mode === "api" && dependencies.createCopilotEngine
             ? dependencies.createCopilotEngine(get().runtimeSettings)
-            : copilotEngine;
+            : copilotEngine
+        );
         const copilotSession = [...get().sessions]
           .filter((session) => session.platformId === platformId)
           .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
@@ -5745,6 +5826,7 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
     }
   }
 
+  const defaultAiRuntimeFactory = createAiRuntimeFactory();
   return {
     projectRepository,
     assetRepository,
@@ -5753,49 +5835,16 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
     executionJobRepository,
     executionJobCoordinator,
     settingsRepository,
+    aiRuntimeFactory: defaultAiRuntimeFactory,
     plannerEngine: defaultPlannerEngine,
     imageGenerator: defaultImageGenerator,
     copilotEngine: defaultCopilotEngine,
-    createPlannerEngine(settings) {
-      const capabilities = detectProviderCapabilities(runtimeTextBaseUrl(settings));
-      return new OpenAIPlanner({
-        endpoint: `${runtimeTextBaseUrl(settings)}/chat/completions`,
-        apiKey: runtimeTextApiKey(settings),
-        model: settings.planningModel,
-        plannerReferenceImages: capabilities.plannerReferenceImages,
-      });
-    },
-    createProductLocalizer(settings) {
-      return new OpenAIProductLocalizer({
-        endpoint: `${runtimeTextBaseUrl(settings)}/chat/completions`,
-        apiKey: runtimeTextApiKey(settings),
-        model: settings.planningModel,
-      });
-    },
-    createImageGenerator(settings) {
-      const imageBaseUrl = runtimeImageBaseUrl(settings);
-      const capabilities = detectProviderCapabilities(imageBaseUrl);
-      return new OpenAIImageGenerator({
-        baseUrl: imageBaseUrl,
-        apiKey: runtimeImageApiKey(settings),
-        model: settings.imageModel,
-        transport: capabilities.imageTransport,
-      });
-    },
-    createCopilotEngine(settings) {
-      return new OpenAICopilot({
-        endpoint: `${runtimeTextBaseUrl(settings)}/chat/completions`,
-        apiKey: runtimeTextApiKey(settings),
-        model: settings.planningModel,
-      });
-    },
     industryTemplateTransformer: demoIndustryTemplateTransformer,
-    createIndustryTemplateTransformer(settings) {
-      return new OpenAIIndustryTemplateTransformer({
-        endpoint: `${runtimeTextBaseUrl(settings)}/chat/completions`,
-        apiKey: runtimeTextApiKey(settings),
-        model: settings.planningModel,
-      });
+    testTextConnection(settings) {
+      return defaultAiRuntimeFactory.testTextConnection(settings);
+    },
+    testImageConnection(settings) {
+      return defaultAiRuntimeFactory.testImageConnection(settings);
     },
     testConnection: testApiConnection,
     compressImageFile,

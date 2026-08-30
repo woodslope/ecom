@@ -26,7 +26,7 @@ const navigationGroups: Array<{
   label: string;
   ids: NavigationItemId[];
 }> = [
-  { label: "平台", ids: ["amazon", "taobao"] },
+  { label: "平台", ids: ["taobao", "amazon"] },
 ];
 
 export function PlatformRail({

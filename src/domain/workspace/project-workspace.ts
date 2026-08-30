@@ -26,6 +26,7 @@ export type { PlatformWorkflowId } from "../platforms/types";
 import type { TaskRecord } from "../tasks";
 import type { PlatformFactsDraft } from "../localization/product-localizer";
 import type { ProductFacts } from "../projects/types";
+import type { PromptTrace } from "../prompting";
 import {
   normalizeIndustryTemplateSnapshot,
   type IndustryTemplateSnapshot,
@@ -106,6 +107,13 @@ export interface PlatformRunContext {
   taobaoAnalysis?: TaobaoProductAnalysis;
   localizedFactsDraft?: PlatformFactsDraft;
   industryTemplate?: IndustryTemplateSnapshot;
+  /** Immutable prompt/version provenance captured when the run was created. */
+  promptTrace?: PromptTrace;
+  /** Non-sensitive text/image runtime summary; API keys are never stored here. */
+  providerSummary?: {
+    text?: { provider?: string; model?: string; protocol?: string };
+    image?: { provider?: string; model?: string; protocol?: string };
+  };
 }
 
 export interface ProductionRun {
@@ -596,6 +604,73 @@ function normalizeProductionEvent(value: unknown, runId: string): ProductionEven
   };
 }
 
+function normalizePromptTrace(value: unknown): PromptTrace | null {
+  if (!isRecord(value)) return null;
+  const trace: PromptTrace = {};
+  for (const key of ["requestId", "runId", "provider", "model", "source", "version", "createdAt", "startedAt", "completedAt"] as const) {
+    if (typeof value[key] === "string") trace[key] = value[key] as never;
+  }
+  if (typeof value.durationMs === "number" && Number.isFinite(value.durationMs)) {
+    trace.durationMs = value.durationMs;
+  }
+  if (isRecord(value.metadata)) {
+    trace.metadata = Object.fromEntries(
+      Object.entries(value.metadata).filter(([, item]) =>
+        typeof item === "string" || typeof item === "number" || typeof item === "boolean" || item === null,
+      ),
+    ) as Record<string, string | number | boolean | null>;
+  }
+  for (const kind of ["planner", "generation"] as const) {
+    const entry = value[kind];
+    if (!isRecord(entry) || typeof entry.promptId !== "string" || typeof entry.promptVersion !== "string" || typeof entry.contractVersion !== "string") continue;
+    if (kind === "planner") {
+      trace.planner = {
+        promptId: entry.promptId,
+        promptVersion: entry.promptVersion,
+        contractVersion: entry.contractVersion,
+        ...(typeof entry.profileId === "string" || entry.profileId === null ? { profileId: entry.profileId } : {}),
+        ...(typeof entry.industryTemplateId === "string" ? { industryTemplateId: entry.industryTemplateId } : {}),
+        ...(typeof entry.industryTemplateVersion === "number" ? { industryTemplateVersion: entry.industryTemplateVersion } : {}),
+        ...(Array.isArray(entry.slotAssetRefs)
+          ? {
+              slotAssetRefs: entry.slotAssetRefs.flatMap((item) =>
+                isRecord(item) && typeof item.slotKey === "string" && typeof item.assetId === "string" && typeof item.version === "number"
+                  ? [{ slotKey: item.slotKey, assetId: item.assetId, version: item.version }]
+                  : [],
+              ),
+            }
+          : {}),
+      };
+    } else {
+      trace.generation = {
+        promptId: entry.promptId,
+        promptVersion: entry.promptVersion,
+        contractVersion: entry.contractVersion,
+      };
+    }
+  }
+  if (isRecord(value.providerSummary)) {
+    const summary: NonNullable<PromptTrace["providerSummary"]> = {};
+    for (const key of ["text", "image"] as const) {
+      const service = value.providerSummary[key];
+      if (!isRecord(service)) continue;
+      const normalized = Object.fromEntries(
+        ["provider", "model", "protocol"].flatMap((field) =>
+          typeof service[field] === "string" ? [[field, service[field]]] : [],
+        ),
+      );
+      if (Object.keys(normalized).length > 0) summary[key] = normalized;
+    }
+    if (summary.text || summary.image) trace.providerSummary = summary;
+  }
+  return Object.keys(trace).length > 0 ? trace : null;
+}
+
+function normalizeProviderSummary(value: unknown): PlatformRunContext["providerSummary"] | null {
+  const trace = normalizePromptTrace({ providerSummary: value });
+  return trace?.providerSummary ?? null;
+}
+
 function normalizeRun(value: unknown, projectId: string): ProductionRun | null {
   if (
     !isRecord(value) ||
@@ -669,6 +744,12 @@ function normalizeRun(value: unknown, projectId: string): ProductionRun | null {
               value.contextSnapshot.industryTemplate,
             )!,
           }
+        : {}),
+      ...(normalizePromptTrace(value.contextSnapshot.promptTrace)
+        ? { promptTrace: normalizePromptTrace(value.contextSnapshot.promptTrace)! }
+        : {}),
+      ...(normalizeProviderSummary(value.contextSnapshot.providerSummary)
+        ? { providerSummary: normalizeProviderSummary(value.contextSnapshot.providerSummary)! }
         : {}),
     },
     planSnapshot,

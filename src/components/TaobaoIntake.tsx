@@ -361,6 +361,7 @@ export function TaobaoIntake({
           <Button
             variant="quiet"
             type="button"
+            aria-label="选择图片"
             className={`reference-upload${isDraggingFiles ? " reference-upload--dragging" : ""}`}
             disabled={controlsDisabled}
             onClick={() => fileInputRef.current?.click()}

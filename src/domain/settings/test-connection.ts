@@ -3,6 +3,7 @@ import {
   runtimeImageBaseUrl,
   runtimeTextApiKey,
   runtimeTextBaseUrl,
+  runtimeTextService,
   validateRuntimeSettings,
 } from "./runtime-settings";
 import type { ConnectionTestResult, RuntimeSettings } from "./types";
@@ -42,7 +43,7 @@ function serviceValidation(settings: RuntimeSettings, service: "text" | "image")
     if (!runtimeTextBaseUrl(settings)) return "请填写文本 API 根地址。";
   } else {
     if (!runtimeImageApiKey(settings)) return "请填写图片生成 API Key。";
-    if (!settings.imageModel) return "请填写图片生成模型。";
+    if (settings.connectionMode !== "single" && !settings.imageModel) return "请填写图片生成模型。";
     if (!runtimeImageBaseUrl(settings)) return "请填写图片 API 根地址。";
   }
   return null;
@@ -66,21 +67,32 @@ async function testService(
   );
   const fetcher = options.fetch ?? fetch;
   try {
+    const textService = service === "text" ? runtimeTextService(settings) : null;
     const response =
       service === "text"
-        ? await fetcher(endpoint(runtimeTextBaseUrl(settings), "chat/completions"), {
+        ? await fetcher(
+            textService?.endpoint || endpoint(runtimeTextBaseUrl(settings), textService?.protocol === "responses" ? "responses" : "chat/completions"),
+            {
             method: "POST",
             headers: {
               Authorization: `Bearer ${runtimeTextApiKey(settings)}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              model: settings.planningModel,
-              messages: [{ role: "user", content: "Reply with OK." }],
-              max_tokens: 1,
-            }),
+            body: JSON.stringify(textService?.protocol === "responses"
+              ? {
+                  model: textService.model,
+                  instructions: "Reply with OK.",
+                  input: "Reply with OK.",
+                  max_output_tokens: 1,
+                }
+              : {
+                  model: textService?.model ?? settings.planningModel,
+                  messages: [{ role: "user", content: "Reply with OK." }],
+                  max_tokens: 1,
+                }),
             signal: controller.signal,
-          })
+          },
+          )
         : await fetcher(endpoint(runtimeImageBaseUrl(settings), "models"), {
             method: "GET",
             headers: { Authorization: `Bearer ${runtimeImageApiKey(settings)}` },

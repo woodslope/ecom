@@ -13,14 +13,19 @@ import type {
 import type { PlanningInputAssessment } from "../domain/planning/input-assessment";
 import type { PlatformRulePack } from "../domain/platforms/types";
 import { hasAmazonChinesePromptTemplate } from "../domain/platforms/prompt-language";
-import { getAmazonMarketplaceByLocale } from "../domain/platforms/amazon-marketplaces";
-import { isAPlusExternalTextSlotRule } from "../domain/platforms/amazon-catalog";
 import {
-  type PromptProfile,
   buildPlanningStrategySnippet,
   resolvePromptProfile,
 } from "../domain/prompt-profiles/prompt-profiles";
 import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
+import { buildPlannerPrompt } from "../domain/prompting";
+import {
+  AiTransportError,
+  OpenAICompatibleTextTransport,
+  inferTextProtocol,
+  unwrapStructuredJson,
+} from "./ai/transport";
+import type { TextServiceProtocol } from "../domain/settings/types";
 
 export interface OpenAIPlannerOptions {
   endpoint: string;
@@ -29,6 +34,7 @@ export interface OpenAIPlannerOptions {
   fetch?: typeof fetch;
   timeoutMs?: number;
   plannerReferenceImages?: boolean;
+  protocol?: TextServiceProtocol;
 }
 
 export const DEFAULT_PLANNER_REQUEST_TIMEOUT_MS = 120_000;
@@ -64,112 +70,6 @@ function safePlannerError(error: OpenAIPlannerError, apiKey: string): OpenAIPlan
     redactSecret(error.userMessage, apiKey),
     error.status,
   );
-}
-
-interface ChatCompletionsResponse {
-  choices?: Array<{
-    message?: {
-      content?: unknown;
-    };
-  }>;
-}
-
-function contentText(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((block) => {
-        if (typeof block !== "object" || block === null || !("text" in block)) {
-          return "";
-        }
-        return typeof block.text === "string" ? block.text : "";
-      })
-      .join("");
-  }
-  return String(content);
-}
-
-function structuredJsonText(content: unknown): string {
-  const text = contentText(content).trim();
-  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(text);
-  return fenced ? fenced[1].trim() : text;
-}
-
-function planningSystemPrompt(
-  rulePack: PlatformRulePack,
-  profile?: PromptProfile | null,
-  industryTemplate?: IndustryTemplateSnapshot,
-): string {
-  const slotKeys = rulePack.slots.map((slot) => slot.key).join(", ");
-  const externalTextSlotKeys = rulePack.slots
-    .filter(isAPlusExternalTextSlotRule)
-    .map((slot) => slot.key);
-  const amazonMarketplace = rulePack.platformId === "amazon"
-    ? getAmazonMarketplaceByLocale(rulePack.locale)
-    : null;
-  const platformCopyRule =
-    amazonMarketplace
-      ? [
-          'For Amazon, MAIN.visibleCopy must be exactly "".',
-          externalTextSlotKeys.length > 0
-            ? `For ${externalTextSlotKeys.join(", ")}, visibleCopy must be exactly ""; their localized copy belongs in externalText.`
-            : null,
-          `Every other non-empty visibleCopy must use natural ${amazonMarketplace.copyLanguage} for ${amazonMarketplace.domain}.`,
-          ...amazonMarketplace.localGuidance,
-        ].filter(Boolean).join("\n")
-      : "For Taobao, visibleCopy may use Simplified Chinese.";
-  const promptLanguageRule =
-    rulePack.promptLanguage === "en"
-      ? [
-          "Language contract: strategy and evidence are user-facing planning notes and must be written in Simplified Chinese.",
-          "prompt and negativePrompt must use natural-English model instructions and evidence labels.",
-          "Translate descriptive product facts when it is safe; preserve brand names, model numbers, SKUs, proper nouns, dimensions, units, numeric values, and any fact value whose translation could alter evidence.",
-          "Do not put Chinese planning explanations or labels such as 事实依据 inside prompt or negativePrompt.",
-        ].join("\n")
-      : "Language contract: prompt and negativePrompt should use the platform source language; strategy and evidence remain readable planning notes in that source language.";
-  const amazonListingRule = rulePack.platformId === "amazon"
-    ? [
-        "Amazon Listing source rule: when project.listingText is present, treat the original pasted Listing as the primary source for title, bullets, product facts, and buyer benefits; parsed project fields are supporting structure only.",
-        "For every Amazon slot, strategy must be a detailed Simplified Chinese planning card explaining the visual objective, composition, product evidence, on-image copy approach, and compliance boundaries. This is the human-readable Chinese plan, not the image-model prompt.",
-        "For every Amazon slot, prompt is the complete professional US English image-generation prompt. negativePrompt is a separate concise US English exclusion list for the image model.",
-      ].join("\n")
-    : "";
-
-  return [
-    "Return JSON only, without commentary or Markdown.",
-    `platformId must be ${rulePack.platformId} and source must be api.`,
-    `promptLanguage is ${rulePack.promptLanguage}.`,
-    `slots must contain each of these keys exactly once: ${slotKeys}.`,
-    "Every slot must contain these base fields: slotKey, visibleCopy, strategy, evidence, prompt, negativePrompt.",
-    ...(externalTextSlotKeys.length > 0
-      ? [
-          `Only these slots must also contain externalText with non-empty title and body: ${externalTextSlotKeys.join(", ")}.`,
-          "externalText is customer-facing copy outside the image; keep visibleCopy empty and do not include externalText title or body in prompt or negativePrompt.",
-        ]
-      : []),
-    "evidence must be a non-empty string array; all other slot fields must be strings.",
-    platformCopyRule,
-    promptLanguageRule,
-    amazonListingRule,
-    "Evidence policy: distinguish three categories explicitly: user-supplied facts, information directly visible in a selected product image, and missing facts.",
-    "User-supplied facts may be used as factual copy and evidence. Image-visible information may describe only directly observable appearance, color, shape, count, layout, and visible construction.",
-    "Never infer hidden dimensions, material composition, performance, efficacy, certification, warranty, compatibility, package contents, or safety claims from an image.",
-    "When a fact is missing, mark it as missing in evidence and keep copy/prompt neutral instead of inventing it.",
-    ...(profile ? [buildPlanningStrategySnippet(profile)] : []),
-    ...(industryTemplate
-      ? [
-          `Industry template: ${industryTemplate.name} v${industryTemplate.version}.`,
-          industryTemplate.brief.stylePreference
-            ? `Template style preference: ${industryTemplate.brief.stylePreference}.`
-            : "",
-          "Treat the industry template as reusable slot direction, not as product evidence.",
-          "Current product facts, reference-image evidence, marketplace rules, and slot compliance always override template guidance.",
-          "Do not copy concrete product facts from template guidance unless the same fact is present in the current project evidence.",
-        ]
-      : []),
-  ].join("\n");
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -220,22 +120,12 @@ async function planningUserContent(
       ? { referenceImagesSkipped: "The configured planner provider accepts text only; reference images were intentionally omitted." }
       : {}),
   });
-  if (images.length === 0) return text;
-
-  const content: Array<Record<string, unknown>> = [{ type: "text", text }];
-  for (const image of images) {
-    if (signal.aborted) throwAbortReason(signal, apiKey);
-    const bytes = new Uint8Array(await image.blob.arrayBuffer());
-    if (signal.aborted) throwAbortReason(signal, apiKey);
-    content.push({
-      type: "image_url",
-      image_url: {
-        url: `data:${image.mimeType};base64,${bytesToBase64(bytes)}`,
-        detail: "low",
-      },
-    });
-  }
-  return content;
+  // Image bytes are appended by the shared text transport. The domain prompt
+  // remains a deterministic text payload and never owns network encoding.
+  void images;
+  void signal;
+  void apiKey;
+  return text;
 }
 
 function enforcePlatformCandidate(
@@ -255,49 +145,6 @@ function enforcePlatformCandidate(
       return slot.slotKey === "MAIN" ? { ...slot, visibleCopy: "" } : slot;
     }),
   };
-}
-
-function httpError(response: Response): OpenAIPlannerError {
-  if (response.status === 401) {
-    return new OpenAIPlannerError(
-      "auth",
-      "API 密钥校验失败（401）。排查步骤：1. 确认密钥完整复制无多余空格；2. 检查密钥是否过期或被吊销；3. 确认密钥属于这个 API 地址对应的服务商。",
-      response.status,
-    );
-  }
-  if (response.status === 403) {
-    return new OpenAIPlannerError(
-      "auth",
-      "API 权限不足（403）。排查步骤：1. 确认账户已绑定有效支付方式；2. 检查模型是否有访问权限；3. 部分服务商需先充值才能调用。",
-      response.status,
-    );
-  }
-  if (response.status === 404) {
-    return new OpenAIPlannerError(
-      "path",
-      "API 地址不存在（404）。排查步骤：1. 确认地址以 /v1 结尾；2. 完整的 Chat Completions 地址应为 https://你的服务商/v1/chat/completions；3. 检查地址中是否有拼写错误。",
-      response.status,
-    );
-  }
-  if (response.status === 429) {
-    return new OpenAIPlannerError(
-      "quota",
-      "请求过于频繁或额度不足（429）。排查步骤：1. 等待 30 秒后重试；2. 检查账户余额和配额限制；3. 降低并发请求数。",
-      response.status,
-    );
-  }
-  if (response.status >= 500) {
-    return new OpenAIPlannerError(
-      "http",
-      `服务商服务器错误（${response.status}）。排查步骤：1. 等待 1-2 分钟后重试；2. 访问服务商状态页面确认服务是否正常；3. 尝试更换 API 地址。`,
-      response.status,
-    );
-  }
-  return new OpenAIPlannerError(
-    "http",
-    `API 请求失败（HTTP ${response.status}）。排查步骤：1. 检查网络连接是否正常；2. 确认服务商是否支持浏览器 CORS 访问；3. 查看浏览器 Console 是否有更多错误信息。`,
-    response.status,
-  );
 }
 
 function abortReason(signal: AbortSignal, apiKey: string): Error {
@@ -321,15 +168,13 @@ function throwAbortReason(signal: AbortSignal, apiKey: string): never {
   throw abortReason(signal, apiKey);
 }
 
-async function parsePlanResponse(
-  response: Response,
+function parsePlanText(
+  rawText: string,
   rulePack: PlatformRulePack,
   amazonSession?: PlatformPlan["amazonSession"],
-): Promise<PlatformPlan> {
+): PlatformPlan {
   try {
-    const payload = (await response.json()) as ChatCompletionsResponse;
-    const content = payload.choices?.[0]?.message?.content;
-    const parsedCandidate = JSON.parse(structuredJsonText(content)) as Record<string, unknown>;
+    const parsedCandidate = JSON.parse(unwrapStructuredJson(rawText)) as Record<string, unknown>;
     const candidate = enforcePlatformCandidate(parsedCandidate, rulePack);
 
     const plan = normalizePlatformPlan(
@@ -448,38 +293,43 @@ export class OpenAIPlanner implements PlannerEngine {
         if (requestController.signal.aborted) {
           throwAbortReason(requestController.signal, this.options.apiKey);
         }
-        const response = await this.fetch(this.options.endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${this.options.apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: this.options.model,
-            response_format: { type: "json_object" },
-            messages: [
-              {
-                role: "system",
-                content: planningSystemPrompt(rulePack, promptProfile, industryTemplate),
-              },
-              {
-                role: "user",
-                content: userContent,
-              },
-            ],
-          }),
+        const prompt = buildPlannerPrompt({
+          project,
+          rulePack,
+          referenceImages,
+          inputAssessment,
+          industryTemplate,
+          strategySnippet: promptProfile ? buildPlanningStrategySnippet(promptProfile) : undefined,
+        });
+        const transport = new OpenAICompatibleTextTransport({
+          endpoint: this.options.endpoint,
+          apiKey: this.options.apiKey,
+          model: this.options.model,
+          protocol: this.options.protocol ?? inferTextProtocol(this.options.endpoint),
+          fetch: this.fetch,
+          timeoutMs: this.options.timeoutMs ?? DEFAULT_PLANNER_REQUEST_TIMEOUT_MS,
+        });
+        const result = await transport.request({
+          service: "planner",
+          model: this.options.model,
+          prompt: { ...prompt, user: String(userContent) },
+          referenceImages: this.options.plannerReferenceImages === false ? [] : referenceImages,
+          maxOutputTokens: 12_000,
           signal: requestController.signal,
         });
-        if (!response.ok) {
-          throw httpError(response);
-        }
-        return parsePlanResponse(response, rulePack, amazonSession);
+        return parsePlanText(result.text, rulePack, amazonSession);
       };
 
       return await Promise.race([request(), abortPromise, timeoutPromise]);
     } catch (error) {
       if (signal.aborted) {
         throwAbortReason(signal, this.options.apiKey);
+      }
+      if (error instanceof AiTransportError) {
+        const code = error.code === "timeout" || error.code === "auth" || error.code === "path" || error.code === "quota" || error.code === "format" || error.code === "capability"
+          ? error.code
+          : error.code === "network" ? "http" : "http";
+        throw new OpenAIPlannerError(code, error.userMessage, error.status);
       }
       if (error instanceof OpenAIPlannerError) {
         throw safePlannerError(error, this.options.apiKey);

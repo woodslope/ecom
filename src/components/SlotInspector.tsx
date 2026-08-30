@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ArrowRight, Columns3, Copy, Save } from "lucide-react";
 
 import {
@@ -125,6 +125,7 @@ export function SlotInspector({
   const [maskEditorError, setMaskEditorError] = useState<string | null>(null);
   const [industryTemplateMessage, setIndustryTemplateMessage] = useState<string | null>(null);
   const [industryTemplateConfirmOpen, setIndustryTemplateConfirmOpen] = useState(false);
+  const slotKeyRef = useRef(slot.slotKey);
   const nextSlotDisabledReasonId = useId();
   const [renderedDimensions, setRenderedDimensions] = useState<{
     width: number;
@@ -136,6 +137,9 @@ export function SlotInspector({
   const busy = saving || generating || saveState === "saving";
   const submitting = busy || planNeedsRefresh;
   const hasExternalText = Boolean(slot.externalText);
+  const saveLabel = typeof window !== "undefined" && hasExternalText
+    ? "保存外部文案与提示词"
+    : "保存";
   const externalText = hasExternalText
     ? { title: externalTitle, body: externalBody }
     : undefined;
@@ -225,12 +229,14 @@ export function SlotInspector({
     : "";
 
   useEffect(() => {
+    const slotChanged = slotKeyRef.current !== slot.slotKey;
+    slotKeyRef.current = slot.slotKey;
     setVisibleCopy(slot.visibleCopy);
     setPrompt(slot.prompt);
     setExternalTitle(slot.externalText?.title ?? "");
     setExternalBody(slot.externalText?.body ?? "");
     setCopyState("idle");
-    setSaveState("idle");
+    if (slotChanged) setSaveState("idle");
     setActivePane("copy");
   }, [slot.externalText?.body, slot.externalText?.title, slot.prompt, slot.slotKey, slot.visibleCopy]);
 
@@ -539,6 +545,10 @@ export function SlotInspector({
 
       </div>
 
+      {saveState === "saved" ? (
+        <StatusMessage tone="success" live="polite">用户编辑：槽位草稿已保存。</StatusMessage>
+      ) : null}
+
       {/* Fixed bottom: primary actions always visible; disabled reason via GenerationActions. */}
       <ActionBar
         className="slot-inspector__chrome-bottom"
@@ -559,7 +569,7 @@ export function SlotInspector({
                 onClick={() => void saveDraft()}
               >
                 <Save size={15} />
-                保存
+                {saveLabel}
               </Button>
             ) : null}
             {nextSlotAction && activeVersion ? (

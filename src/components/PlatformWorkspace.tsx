@@ -40,6 +40,7 @@ import {
 } from "./AmazonSessionControls";
 import { AmazonIntake } from "./AmazonIntake";
 import { AmazonMobilePreview } from "./AmazonMobilePreview";
+import { ExportPanel } from "./ExportPanel";
 import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
 import type { WorkflowStage } from "./WorkflowStepper";
 import { SlotBoard } from "./SlotBoard";
@@ -81,6 +82,7 @@ export function PlatformWorkspace({
   generationError = null,
   copilotTarget = null,
   exporting = false,
+  exportError = null,
   onPlan,
   onCancelPlanning,
   onClearPlanningError,
@@ -94,7 +96,8 @@ export function PlatformWorkspace({
   onDownloadVersion,
   onUseAsReference,
   onMaskEdit,
-  onExport = () => undefined,
+  onExport,
+  onClearExportError,
   onWorkspaceDirtyChange = () => undefined,
   onStartBatch,
   historyAction,
@@ -636,6 +639,41 @@ export function PlatformWorkspace({
           </Panel>
         )}
       </div>
+
+      {/* Delivery is available after the first usable output or when an export failed. */}
+      {onExport && (completedSlots > 0 || Boolean(exportError)) ? (
+        <ExportPanel
+          platformLabel={rulePack.label}
+          completedSlots={completedSlots}
+          totalSlots={plan?.slots.length ?? 0}
+          exporting={exporting}
+          error={exportError}
+          disabled={Boolean(
+            loading ||
+              planning ||
+              generatingSlot ||
+              copilotTarget ||
+              generationRecoveryRequired ||
+              planNeedsRefresh,
+          )}
+          disabledReason={
+            loading
+              ? "工作台正在加载或保存项目。"
+              : generationRecoveryRequired
+                ? "请先恢复图片版本与素材。"
+                : planning || generatingSlot || copilotTarget
+                  ? "请等待当前策划、图片生成或 Copilot 任务完成。"
+                  : planRefreshReason
+                    ? planRefreshReason
+                    : !plan
+                      ? "请先完成平台策划。"
+                      : undefined
+          }
+          onExport={onExport}
+          onClearError={onClearExportError ?? (() => undefined)}
+          compact
+        />
+      ) : null}
 
         </>
       )}
