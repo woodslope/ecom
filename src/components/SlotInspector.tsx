@@ -80,6 +80,7 @@ export function SlotInspector({
   generationActionVariant = "primary",
   generationError,
   complianceResult,
+  taskContext,
 }: {
   rulePack: PlatformRulePack;
   slot: PlannedSlot;
@@ -108,6 +109,11 @@ export function SlotInspector({
   generationActionVariant?: "primary" | "secondary";
   generationError?: string;
   complianceResult?: ComplianceResult;
+  taskContext?: {
+    name: string;
+    mode: string;
+    status: string;
+  };
 }) {
   const [visibleCopy, setVisibleCopy] = useState(slot.visibleCopy);
   const [prompt, setPrompt] = useState(slot.prompt);
@@ -287,6 +293,14 @@ export function SlotInspector({
       {/* Fixed top: slot identity and detail-view switcher. */}
       <header className="slot-inspector__chrome-top" aria-label="槽位身份">
         <div className="slot-inspector__identity">
+          {taskContext ? (
+            <span
+              className="slot-inspector__task-context"
+              title={`${taskContext.name} · ${taskContext.mode} · ${taskContext.status}`}
+            >
+              {taskContext.name} · {taskContext.mode} · {taskContext.status}
+            </span>
+          ) : null}
           <span className="slot-inspector__key">{slot.slotKey}</span>
           {slotRule ? <span className="slot-inspector__label">{slotRule.uiLabel ?? slotRule.label}</span> : null}
         </div>
@@ -553,7 +567,9 @@ export function SlotInspector({
         secondary={
           <div className="slot-inspector__secondary-actions">
             {saveState === "error" ? (
-              <span className="slot-inspector__save-error" role="alert">保存失败，请重试。</span>
+              <StatusMessage tone="danger" live="assertive" appearance="inline">
+                保存失败，请重试。
+              </StatusMessage>
             ) : null}
             {activePane === "copy" ? (
               <Button

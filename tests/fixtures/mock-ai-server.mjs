@@ -179,12 +179,14 @@ function localizationResult(body) {
   }
 }
 
-function textResponse(body) {
+function textResponse(body, options = {}) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   const system = String(messages.find((message) => message?.role === "system")?.content ?? "");
   let result;
   if (system.includes("one field: slots")) result = industryResult(body);
-  else if (system.includes("Localize the supplied product facts")) result = localizationResult(body);
+  else if (system.includes("Localize the supplied product facts")) {
+    result = options.failLocalization ? { invalidLocalization: true } : localizationResult(body);
+  }
   else if (system.includes("Return exactly") && system.includes("visibleCopy")) result = copilotResult(body);
   else result = plannerCandidate(extractPlannerPayload(body));
   return { choices: [{ message: { content: JSON.stringify(result) } }] };
@@ -235,7 +237,7 @@ export async function startMockAiServer(options = {}) {
     let body = {};
     try { body = JSON.parse(bodyText); } catch { /* multipart image requests do not need parsing */ }
     if (url.pathname.endsWith("/chat/completions") || url.pathname.endsWith("/responses")) {
-      json(response, 200, textResponse(body));
+      json(response, 200, textResponse(body, options));
       return;
     }
     if (url.pathname.endsWith("/images/generations") || url.pathname.endsWith("/images/edits")) {

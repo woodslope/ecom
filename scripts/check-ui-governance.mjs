@@ -156,8 +156,7 @@ function walkTsx(dir, out = []) {
     }
   }
 
-  // Typography and shape declarations must consume semantic tokens. The few
-  // literal values below are structural exceptions documented in the guide.
+  // Typography and shape declarations must consume semantic tokens.
   const governedCss = afterRoot;
   const directFontSizes = (governedCss.match(/font-size:\s*[^;]+;/g) ?? [])
     .filter((declaration) => !declaration.includes("var(--"));
@@ -171,14 +170,56 @@ function walkTsx(dir, out = []) {
     fail(`business CSS contains hard-coded line-height declarations (${directLineHeights.join(", ")}). Use a line-height token.`);
   }
 
-  const rawScaleSpacing = [
-    ...governedCss.matchAll(
-      /^\s*(?:gap|row-gap|column-gap|padding(?:-[a-z-]+)?|margin(?:-[a-z-]+)?)\s*:\s*[^;{}]*\b(?:4|8|12|16|20|24|32)px\b[^;{}]*;/gm,
-    ),
-  ].map((match) => match[0].trim());
-  if (rawScaleSpacing.length > 0) {
+  const cssBlocks = [...governedCss.matchAll(/(^|[}])\s*([^@{}][^{}]*?)\s*\{([^{}]*)\}/gm)]
+    .map((match) => ({
+      selector: match[2].trim().replace(/\s+/g, " "),
+      declarations: match[3],
+    }));
+
+  const typographyPairFailures = [];
+  for (const { selector, declarations } of cssBlocks) {
+    const fontRoles = [...declarations.matchAll(/font-size:\s*var\(--font-([\w-]+)\)/g)]
+      .map((match) => match[1]);
+    const lineRoles = [...declarations.matchAll(/line-height:\s*var\(--line-([\w-]+)\)/g)]
+      .map((match) => match[1]);
+    for (const fontRole of fontRoles) {
+      for (const lineRole of lineRoles) {
+        if (fontRole !== lineRole) {
+          typographyPairFailures.push(`${selector}: --font-${fontRole} / --line-${lineRole}`);
+        }
+      }
+    }
+  }
+  if (typographyPairFailures.length > 0) {
     fail(
-      `business CSS contains raw spacing-scale literals (${rawScaleSpacing.join(", ")}). Use --space-1 through --space-7; retain only documented non-scale geometry values.`,
+      `business CSS mixes typography roles (${typographyPairFailures.join(", ")}). Pair --font-* with the matching --line-* token.`,
+    );
+  }
+
+  // These literals are component geometry, not layout rhythm. Keep the list
+  // exact so new raw spacing values cannot enter under a broad exemption.
+  const geometrySpacingAllowlist = new Map([
+    [".visually-hidden", new Set(["margin: -1px"])],
+    [".filter-search input", new Set(["padding-left: 34px"])],
+    [".style-reference-editor__palette input[type=\"color\"]", new Set(["padding: 3px"])],
+    [".workbench-stepper", new Set([
+      "--workflow-step-gap: 64px",
+      "--workflow-connector-width: 48px",
+    ])],
+  ]);
+  const rawSpacingFailures = [];
+  for (const { selector, declarations } of cssBlocks) {
+    const declarationPattern = /(?:^|;)\s*((?:gap|row-gap|column-gap|padding(?:-[a-z-]+)?|margin(?:-[a-z-]+)?|--workflow-(?:step-gap|connector-width))\s*:\s*[^;{}]*[+-]?(?:\d*\.)?\d+px\b[^;{}]*)/g;
+    for (const match of declarations.matchAll(declarationPattern)) {
+      const declaration = match[1].trim().replace(/\s+/g, " ");
+      if (!geometrySpacingAllowlist.get(selector)?.has(declaration)) {
+        rawSpacingFailures.push(`${selector}: ${declaration}`);
+      }
+    }
+  }
+  if (rawSpacingFailures.length > 0) {
+    fail(
+      `business CSS contains raw layout spacing (${rawSpacingFailures.join(", ")}). Use --space-1 through --space-7 or add an exact documented geometry exception.`,
     );
   }
   const directRadii = (governedCss.match(/border-radius:\s*[^;]+;/g) ?? [])
@@ -203,9 +244,7 @@ function walkTsx(dir, out = []) {
   }
 
   const duplicateSelectors = new Map();
-  const selectorPattern = /(^|[}])\s*([^@{}][^{}]*?)\s*\{/gm;
-  for (const match of governedCss.matchAll(selectorPattern)) {
-    const selector = match[2].trim().replace(/\s+/g, " ");
+  for (const { selector } of cssBlocks) {
     if (!selector || selector.startsWith(":root") || selector === "*") continue;
     duplicateSelectors.set(selector, (duplicateSelectors.get(selector) ?? 0) + 1);
   }
@@ -273,16 +312,26 @@ function walkTsx(dir, out = []) {
     "amazon-session-controls--embedded",
     "workbench-chrome__controls",
     "workbench-chrome__onboarding",
+    "app-toast",
+    "generation-task-status",
+    "workbench-error",
+    "production-history__load-error",
+    "generation-actions__error-message",
+    "slot-inspector__save-error",
+    "export-panel__error",
   ]) {
     if (css.includes(`.${selectorFamily}`)) {
       fail(`styles.css still contains retired selector family ".${selectorFamily}".`);
     }
   }
 
-  const afterTokens = firstClose >= 0 ? css.slice(firstClose + 1) : css;
-  const brandLiterals = afterTokens.match(/#(?:2563eb|1d4ed8|eaf1ff|9f4e25|7e391b|f6e6dc|e6c1ad)\b/gi) ?? [];
-  if (brandLiterals.length > 0) {
-    fail(`styles.css contains brand color literals outside :root (${[...new Set(brandLiterals)].join(", ")}).`);
+  const colorLiterals = governedCss.match(
+    /#[0-9a-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\([^)]*\)/gi,
+  ) ?? [];
+  if (colorLiterals.length > 0) {
+    fail(
+      `styles.css contains color literals outside :root (${[...new Set(colorLiterals)].join(", ")}). Add or reuse a semantic color token.`,
+    );
   }
 
   const guide = read(guidePath).toLowerCase();
@@ -532,6 +581,10 @@ function walkTsx(dir, out = []) {
     "desktopContent.inert = gateActive || modalActive",
     "layer.inert = !active",
     'live = "off"',
+    'appearance?: "surface" | "inline"',
+    "export function ToastRegion",
+    "export function Toast",
+    "export function OperationStatus",
   ]) {
     if (!ui.includes(needle)) {
       fail(`ui.tsx missing shared modal/live-region governance hook ${JSON.stringify(needle)}.`);
@@ -540,6 +593,21 @@ function walkTsx(dir, out = []) {
   const app = read(appTsx);
   if (!app.includes('variant="sidebar"') || app.includes("platform-history-backdrop")) {
     fail("App.tsx history must use the shared sidebar Dialog without a private backdrop owner.");
+  }
+  if (!app.includes("<ToastRegion>") || !app.includes("<Toast")) {
+    fail("App.tsx global feedback must render through ToastRegion and Toast.");
+  }
+
+  const businessFiles = [...walkTsx(componentsDir), appTsx]
+    .filter((path) => !path.endsWith(`${join("components", "ui.tsx")}`));
+  for (const file of businessFiles) {
+    const source = read(file);
+    const rel = relative(root, file).replaceAll("\\", "/");
+    const directAlerts = source.match(/role="alert"/g) ?? [];
+    const allowedCount = rel === "src/components/TaskHistory.tsx" ? 1 : 0;
+    if (directAlerts.length !== allowedCount) {
+      fail(`${rel}: dynamic alerts must use StatusMessage; only the full-history EmptyState alert is allowlisted.`);
+    }
   }
 }
 
@@ -642,6 +710,30 @@ function walkTsx(dir, out = []) {
   const amazonWorkspace = read(join(componentsDir, "AmazonWorkspace.tsx"));
   const amazonIntake = read(join(componentsDir, "AmazonIntake.tsx"));
   const taobaoIntake = read(join(componentsDir, "TaobaoIntake.tsx"));
+  const ui = read(join(componentsDir, "ui.tsx"));
+  const css = read(stylesPath);
+  const retiredFeedbackHooks = [
+    "app-toast",
+    "generation-task-status",
+    "copilot-task-status",
+    "workbench-error",
+    "production-history__load-error",
+    "generation-actions__error-message",
+    "slot-inspector__save-error",
+    "export-panel__error",
+  ];
+  const businessFeedbackSources = [...walkTsx(componentsDir), appTsx]
+    .filter((path) => !path.endsWith(`${join("components", "ui.tsx")}`));
+  for (const hook of retiredFeedbackHooks) {
+    for (const file of businessFeedbackSources) {
+      if (read(file).includes(hook)) {
+        fail(`${relative(root, file)}: retired feedback hook "${hook}" must stay removed.`);
+      }
+    }
+  }
+  if (ui.includes("export function Badge") || /\.badge(?:--|\s*\{)/.test(css)) {
+    fail("The zero-consumer Badge primitive and its CSS family must stay removed; use StatusChip for status labels.");
+  }
   for (const legacyProp of [
     "onOpenHistory",
     "onOpenLibrary",

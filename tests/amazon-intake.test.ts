@@ -603,4 +603,54 @@ describe("Amazon direct intake", () => {
     expect(summary).toContain("已保存任务资料");
     expect(summary).toContain("达标策划");
   });
+
+  it("keeps an unconfirmed legacy localization draft inside the shared production frame", () => {
+    const pendingSession: PlatformSession = {
+      id: "session_pending_localization",
+      projectId: "project_01",
+      platformId: "amazon",
+      workflowId: "amazon-listing",
+      sourceInput: { listingText: "Title: Pending localization" },
+      options: {
+        platformId: "amazon",
+        marketplaceId: "us",
+        plannerMode: "listing",
+        listingImageCount: 7,
+        sizeTier: "2K",
+      },
+      selectedReferenceAssetIds: [],
+      localizedFactsDraft: {
+        sourceFactsSnapshot: sharedFacts,
+        targetLocale: "en-US",
+        localizedFacts: sharedFacts,
+        status: "pending",
+        updatedAt: "2026-07-20T01:00:00.000Z",
+      },
+      slotVersions: {},
+      createdAt: "2026-07-20T01:00:00.000Z",
+      updatedAt: "2026-07-20T01:00:00.000Z",
+    };
+    const markup = renderToStaticMarkup(
+      createElement(AmazonWorkspace, {
+        activeProject: {
+          id: "project_01",
+          name: "共享商品",
+          facts: sharedFacts,
+          createdAt: "2026-07-20T01:00:00.000Z",
+          updatedAt: "2026-07-20T01:00:00.000Z",
+        },
+        assets: [],
+        session: pendingSession,
+        loading: false,
+        planning: false,
+        error: null,
+        onStartSession: async () => null,
+        children: createElement("div", null, "统一生产工作台"),
+      }),
+    );
+
+    expect(markup).toContain("统一生产工作台");
+    expect(markup).not.toContain('aria-label="站点语言草稿"');
+    expect(markup).not.toContain("确认并生成策划");
+  });
 });

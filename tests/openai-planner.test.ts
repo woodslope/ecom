@@ -7,7 +7,11 @@ import type {
 } from "../src/domain/planning/types";
 import { amazonRulePack } from "../src/domain/platforms/amazon";
 import { taobaoRulePack } from "../src/domain/platforms/taobao";
-import { OpenAIPlanner, OpenAIPlannerError } from "../src/services/openai-planner";
+import {
+  DEFAULT_PLANNER_REQUEST_TIMEOUT_MS,
+  OpenAIPlanner,
+  OpenAIPlannerError,
+} from "../src/services/openai-planner";
 
 const project: PlanningProjectFacts = {
   productName: "便携水杯",
@@ -62,7 +66,7 @@ function completeAmazonCandidate(): PlatformPlanCandidate {
 }
 
 describe("OpenAIPlanner", () => {
-  it("allows a full planning request to run beyond the former 30 second limit", async () => {
+  it("allows a full planning request to run for the default five-minute limit", async () => {
     vi.useFakeTimers();
     try {
       let requestSignal: AbortSignal | null | undefined;
@@ -88,11 +92,12 @@ describe("OpenAIPlanner", () => {
       expect(result).toBe("still-pending");
       expect(requestSignal?.aborted).toBe(false);
 
-      await vi.advanceTimersByTimeAsync(90_000);
+      await vi.advanceTimersByTimeAsync(DEFAULT_PLANNER_REQUEST_TIMEOUT_MS - 30_000);
       expect(result).toEqual(
         expect.objectContaining({
           name: "OpenAIPlannerError",
           code: "timeout",
+          userMessage: expect.stringContaining("5 分钟"),
         }),
       );
       expect(requestSignal?.aborted).toBe(true);

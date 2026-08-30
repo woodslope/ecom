@@ -20,7 +20,7 @@ import { getPlatformRulePack } from "../domain/platforms/registry";
 import { resolveRulePackForPlan } from "../domain/platforms/resolve-rule-pack";
 import type { PlatformId } from "../domain/platforms/types";
 import type { ProductProject, UpdateProductProjectInput } from "../domain/projects/types";
-import type { PlatformSession } from "../domain/workspace/project-workspace";
+import type { PlatformSession, ProductionRun } from "../domain/workspace/project-workspace";
 import { resolveSessionEffectiveProject } from "../domain/workspace/effective-facts";
 import {
   getAmazonCompletedSlotKeys,
@@ -47,7 +47,7 @@ import { SlotInspector } from "./SlotInspector";
 import { TaobaoMobilePreview } from "./TaobaoMobilePreview";
 import { TaobaoIntake } from "./TaobaoIntake";
 import type { GenerationTarget } from "./GenerationActions";
-import { Button, ConfirmDialog, EmptyState, IconButton, Panel, StatusChip, StatusMessage } from "./ui";
+import { Button, ConfirmDialog, EmptyState, IconButton, OperationStatus, Panel, StatusChip, StatusMessage } from "./ui";
 
 export function workspaceDraftReason(sourceDirty: boolean, slotDirty: boolean): string | null {
   if (sourceDirty) return "商品资料有未保存修改，请先保存资料。";
@@ -100,6 +100,7 @@ export function PlatformWorkspace({
   onStartBatch,
   historyAction,
   batchJob,
+  activeRunStatus,
 }: {
   platform: PlatformId;
   activeProject: ProductProject | null;
@@ -155,6 +156,7 @@ export function PlatformWorkspace({
   onStartBatch?: () => void;
   historyAction?: ReactNode;
   batchJob?: ExecutionJob;
+  activeRunStatus?: ProductionRun["status"];
 }) {
   const rulePack = resolveRulePackForPlan(platform, plan);
   const isAmazon = platform === "amazon";
@@ -368,6 +370,25 @@ export function PlatformWorkspace({
     runAmazonPlan();
   };
   const inspectorPrimaryAction = isAmazon ? amazonPrimaryAction : platformPrimaryAction;
+  const taskName = effectiveProject?.facts.productName.trim() || effectiveProject?.name || "未命名任务";
+  const taskMode = productionSession?.options.platformId === "amazon"
+    ? productionSession.options.plannerMode === "listing"
+      ? `Listing ${productionSession.options.listingImageCount ?? plan?.slots.length ?? 7} 张`
+      : `A+ ${productionSession.options.aPlusModuleSpecs?.length ?? plan?.slots.length ?? 0} 个模块`
+    : "淘宝商品生产包";
+  const runStatusLabels: Record<ProductionRun["status"], string> = {
+    planned: "已策划",
+    producing: "生产中",
+    ready: "已完整",
+    partial: "部分交付",
+    failed: "失败",
+    canceled: "已取消",
+  };
+  const taskContext = {
+    name: taskName,
+    mode: taskMode,
+    status: activeRunStatus ? runStatusLabels[activeRunStatus] : plan ? "已策划" : "准备中",
+  };
   const shellActions = (
     <>
       {onStartNewTask ? (
@@ -419,23 +440,20 @@ export function PlatformWorkspace({
       ) : (
         <>
       {planningPlatformId ? (
-        <StatusMessage
+        <OperationStatus
           live="polite"
           id="planning-task-status"
-          className="generation-task-status planning-task-status"
-        >
-          <span className="generation-task-status__copy">
-            <LoaderCircle className="spin" size={16} />
-            <span>
-              <strong>{getPlatformRulePack(planningPlatformId).label} 正在生成平台策划</strong>
-              <span>其他平台的策划入口已锁定；可等待完成或取消当前任务。</span>
-            </span>
-          </span>
-          <Button variant="secondary" onClick={onCancelPlanning}>
-            <Square size={13} />
-            取消策划
-          </Button>
-        </StatusMessage>
+          data-testid="planning-operation-status"
+          icon={<LoaderCircle className="spin" size={16} />}
+          title={`${getPlatformRulePack(planningPlatformId).label} 正在生成平台策划`}
+          description="其他平台的策划入口已锁定；可等待完成或取消当前任务。"
+          actions={(
+            <Button variant="secondary" onClick={onCancelPlanning}>
+              <Square size={13} />
+              取消策划
+            </Button>
+          )}
+        />
       ) : null}
 
       {planRefreshReason ? (
@@ -451,26 +469,31 @@ export function PlatformWorkspace({
       ) : null}
 
       {planningError && !slotDirty ? (
-        <StatusMessage tone="danger" live="assertive" className="workbench-error planning-error">
+        <StatusMessage
+          tone="danger"
+          live="assertive"
+          actions={(
+            <>
+              {canPlan && !planning ? (
+                <Button
+                  variant="secondary"
+                  size="compact"
+                  disabled={planActionDisabled}
+                  title={planDisabledReason}
+                  aria-describedby={planDescriptionId}
+                  onClick={runAmazonPlan}
+                >
+                  <RotateCcw size={14} />
+                  重试策划
+                </Button>
+              ) : null}
+              <IconButton label="关闭策划提示" onClick={onClearPlanningError}>
+                <X size={15} />
+              </IconButton>
+            </>
+          )}
+        >
           <span>{planningError}</span>
-          <span className="status-message__actions">
-            {canPlan && !planning ? (
-              <Button
-                variant="secondary"
-                size="compact"
-                disabled={planActionDisabled}
-                title={planDisabledReason}
-                aria-describedby={planDescriptionId}
-                onClick={runAmazonPlan}
-              >
-                <RotateCcw size={14} />
-                重试策划
-              </Button>
-            ) : null}
-            <IconButton label="关闭策划提示" onClick={onClearPlanningError}>
-              <X size={15} />
-            </IconButton>
-          </span>
         </StatusMessage>
       ) : null}
 
@@ -581,6 +604,7 @@ export function PlatformWorkspace({
               generationLockReason={generationLockReason}
               generationError={selectedSlotGenerationError}
               complianceResult={selectedSlotCompliance}
+              taskContext={taskContext}
               onDirtyChange={setSlotDirty}
               onSave={(patch) => onUpdateSlot(selectedSlot.slotKey, patch)}
               onGenerate={() => onGenerateSlot(selectedSlot.slotKey)}

@@ -174,7 +174,7 @@ New sessions and runs persist the optional `planningInput` snapshot. Readers nor
 
 Runtime settings use `ecom-workbench.runtime-settings.api.v1`; old v1/v2 keys are not read or migrated. Removing a project removes that project's runs, assets, API workspace, and project metadata in a retryable order; it does not clear unrelated browser storage or runtime settings.
 
-The product runtime is API-only. The history “流程示例” is a static, read-only `ExampleTaskSeed`, never a `ProductionRun`; copying it creates a `task-draft` without calling an API. Structured task options enter through `taskSettings`; `src/domain/prompting/builders.ts` is the sole Prompt construction entry point.
+The product runtime is API-only. Structured task options enter through `taskSettings`; `src/domain/prompting/builders.ts` is the sole Prompt construction entry point.
 
 Current export is a platform ZIP with manifest, Prompt snapshot, active version files, and missing-slot information. Partial export is allowed when explicitly labeled; historical re-export reads the independent RunRepository snapshot and does not change the current session.
 

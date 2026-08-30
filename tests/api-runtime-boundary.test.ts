@@ -9,7 +9,8 @@ import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project
 import { mockCopilot, mockImageGenerator, mockIndustryTemplateTransformer } from "./fixtures/mock-ai";
 import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
-import { getHistoryProcessExamples } from "../src/domain/history/examples";
+import { createGeneralIndustryTemplateSnapshot } from "../src/domain/prompt-templates/industry-template-packs";
+import { amazonRulePack } from "../src/domain/platforms/amazon";
 
 const facts: ProductFacts = {
   productName: "云感旅行颈枕",
@@ -125,11 +126,14 @@ describe("API-only runtime boundaries", () => {
 
   it("requires text API for industry template changes and Copilot", async () => {
     const store = await initializedStore(settings({ textApiKey: "text-key", planningModel: "text-model" }));
-    const example = getHistoryProcessExamples("amazon")[0]!;
+    const baseTemplate = createGeneralIndustryTemplateSnapshot(
+      { platformId: "amazon", workflowId: "amazon-listing" },
+      amazonRulePack,
+    );
     expect(await store.getState().transformIndustryTemplate({
-      baseTemplate: example.industryTemplate,
-      brief: example.industryTemplate.brief,
-      rulePack: (await import("../src/domain/platforms/registry")).getPlatformRulePack("amazon"),
+      baseTemplate,
+      brief: baseTemplate.brief,
+      rulePack: amazonRulePack,
     })).not.toBeNull();
     expect(await store.getState().planPlatform("amazon")).not.toBeNull();
     expect(await store.getState().saveRuntimeSettings(settings())).toBe(true);

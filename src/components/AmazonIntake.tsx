@@ -186,6 +186,12 @@ export function AmazonIntake({
     [assessedFacts, files.length, selectedReferenceAssetIds.length],
   );
   const assessmentMessage = planningInputQualityMessage(assessment);
+  const taskName = facts.productName.trim() || activeProject?.name || null;
+  const taskSettingsSummary = [
+    taskName,
+    amazonControlsSummary(controls),
+    industryTemplate?.name ?? "通用模板",
+  ].filter(Boolean).join(" · ");
 
   const addFiles = (next: File[]) => {
     const images = next.filter((file) => file.type.startsWith("image/"));
@@ -254,7 +260,11 @@ export function AmazonIntake({
   const content = (
     <div className={`amazon-intake${readOnly ? " amazon-intake--readonly" : ""}`} onPaste={pasteFiles}>
       <details className="task-advanced-settings">
-        <summary><span>任务设置</span><small>{amazonControlsSummary(controls)} · {industryTemplate?.name ?? "通用模板"}</small><ChevronDown size={15} /></summary>
+        <summary>
+          <span>任务设置</span>
+          <small title={taskSettingsSummary}>{taskSettingsSummary}</small>
+          <ChevronDown size={15} />
+        </summary>
         <div className="task-advanced-settings__body">
           <AmazonSessionControls
             value={controls}

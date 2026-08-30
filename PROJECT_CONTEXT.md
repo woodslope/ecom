@@ -88,7 +88,7 @@ flowchart LR
 - 项目风格预设、style asset、MAIN 排除和风格引用保护。
 - 槽位级合规提醒、站点语言约束和人工复核边界。
 - dual/single Provider、OpenRouter/DeepSeek 代表路径与能力门禁。
-- ProductionRun 筛选/恢复/fork/复用/历史重导出；生产来源固定为 API。历史区另有一条只读“流程示例”，不属于生产记录。
+- ProductionRun 筛选/恢复/fork/复用/历史重导出；生产来源固定为 API。
 - 遮罩局部编辑、图片工具、Provider mask、版本追加和失败回滚。
 
 完整状态、证据和限制见 `AIS_ALIGNMENT_CHECKLIST.md`。这里的“完成”指锁定 AIS commit 下的行为对齐基线，不包括像素级视觉复制、真实外部模型质量或 Seller Central 最终批准。

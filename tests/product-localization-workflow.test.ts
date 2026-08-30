@@ -164,6 +164,91 @@ describe("task-localized product facts", () => {
     });
   });
 
+  it("continues directly into the shared production workspace after successful localization", async () => {
+    const deps = {
+      ...dependencies(),
+      productLocalizer: {
+        async localize(source: ProductFacts, targetLocale: string) {
+          return {
+            ...source,
+            productName: targetLocale === "en-US" ? "Northwind 500 ml Travel Mug" : source.productName,
+            category: targetLocale === "en-US" ? "Drinkware" : source.category,
+            targetAudience: targetLocale === "en-US" ? "Commuters" : source.targetAudience,
+            description: targetLocale === "en-US"
+              ? "A 500 ml travel mug with a lockable lid."
+              : source.description,
+            sellingPoints: targetLocale === "en-US"
+              ? ["500 ml capacity", "Lockable lid"]
+              : source.sellingPoints,
+          };
+        },
+      },
+    };
+    const store = createWorkbenchStore(deps);
+    await store.getState().initialize();
+    const project = await store.getState().createProject({
+      name: "Amazon 自动本地化任务",
+      scope: "task-draft",
+      facts,
+    });
+
+    const session = await store.getState().startAmazonSession({
+      projectId: project!.id,
+      sourceMode: "library",
+      workflowId: "amazon-listing",
+      listingText: "",
+      files: [],
+      selectedReferenceAssetIds: [],
+      options: { marketplaceId: "us", plannerMode: "listing", listingImageCount: 7 },
+    });
+
+    expect(session?.localizedFactsDraft).toMatchObject({
+      targetLocale: "en-US",
+      status: "confirmed",
+      localizedFacts: { productName: "Northwind 500 ml Travel Mug" },
+    });
+    expect(session?.plan?.slots).toHaveLength(7);
+    expect(store.getState().plans.amazon?.slots).toHaveLength(7);
+    expect(store.getState().runs).toHaveLength(1);
+    expect(store.getState().planningError).toBeNull();
+  });
+
+  it("falls back to source facts and continues planning when localization fails", async () => {
+    const store = createWorkbenchStore({
+      ...dependencies(),
+      productLocalizer: {
+        async localize() {
+          throw new Error("localizer unavailable");
+        },
+      },
+    });
+    await store.getState().initialize();
+    const project = await store.getState().createProject({
+      name: "Amazon 本地化降级任务",
+      scope: "task-draft",
+      facts,
+    });
+
+    const session = await store.getState().startAmazonSession({
+      projectId: project!.id,
+      sourceMode: "library",
+      workflowId: "amazon-listing",
+      listingText: "",
+      files: [],
+      selectedReferenceAssetIds: [],
+      options: { marketplaceId: "us", plannerMode: "listing", listingImageCount: 7 },
+    });
+
+    expect(session?.localizedFactsDraft).toMatchObject({
+      targetLocale: "en-US",
+      status: "confirmed",
+      localizedFacts: { productName: facts.productName },
+    });
+    expect(session?.plan?.slots).toHaveLength(7);
+    expect(store.getState().plans.amazon?.slots).toHaveLength(7);
+    expect(store.getState().planningError).toBeNull();
+  });
+
   it("creates a fresh unconfirmed draft after switching Amazon marketplace", async () => {
     const store = createWorkbenchStore(dependencies());
     await store.getState().initialize();

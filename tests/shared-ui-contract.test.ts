@@ -30,10 +30,13 @@ import {
   Field,
   IconButton,
   MediaSlot,
+  OperationStatus,
   SegmentedControl,
   Select,
   StatusChip,
   StatusMessage,
+  Toast,
+  ToastRegion,
   Tooltip,
 } from "../src/components/ui";
 import { ExportPanel } from "../src/components/ExportPanel";
@@ -193,6 +196,78 @@ describe("shared workbench primitives", () => {
     expect(exportMarkup).toMatch(/aria-describedby="[^"]+"/);
     expect(contextMarkup).toContain('aria-label="未命名任务，分析详情"');
     expect(contextMarkup).not.toContain('aria-label="分析详情"');
+  });
+
+  it("owns surface, inline, toast, and operation feedback contracts", () => {
+    const tones = renderToStaticMarkup(
+      createElement(
+        "div",
+        null,
+        ...(["neutral", "success", "warning", "danger"] as const).map((tone) =>
+          createElement(StatusMessage, { key: tone, tone }, tone),
+        ),
+      ),
+    );
+    const inline = renderToStaticMarkup(
+      createElement(
+        StatusMessage,
+        { tone: "danger", live: "assertive", appearance: "inline" },
+        "保存失败",
+      ),
+    );
+    const actionable = renderToStaticMarkup(
+      createElement(
+        StatusMessage,
+        {
+          tone: "danger",
+          live: "assertive",
+          actions: createElement(Button, { variant: "secondary" }, "重试"),
+        },
+        "读取失败",
+      ),
+    );
+    const toast = renderToStaticMarkup(
+      createElement(
+        ToastRegion,
+        null,
+        createElement(
+          Toast,
+          {
+            live: "polite",
+            loading: true,
+            onDismiss: () => undefined,
+            dismissLabel: "关闭恢复提示",
+          },
+          "正在恢复",
+        ),
+      ),
+    );
+    const operation = renderToStaticMarkup(
+      createElement(OperationStatus, {
+        tone: "danger",
+        live: "assertive",
+        icon: "!",
+        title: "Amazon 生成未完成",
+        description: "服务暂时不可用",
+        actions: createElement(Button, { variant: "secondary" }, "查看槽位"),
+      }),
+    );
+
+    for (const tone of ["neutral", "success", "warning", "danger"]) {
+      expect(tones).toContain(`status-message--${tone}`);
+    }
+    expect(inline).toContain("status-message--inline");
+    expect(inline).toContain('role="alert"');
+    expect(actionable).toContain("status-message--actionable");
+    expect(actionable).toContain("status-message__actions");
+    expect(toast).toContain('class="toast-region"');
+    expect(toast).toContain('role="region"');
+    expect(toast).toContain("toast--loading");
+    expect(toast).toContain('role="status"');
+    expect(toast).toContain('aria-label="关闭恢复提示"');
+    expect(operation).toContain("operation-status__title");
+    expect(operation).toContain("operation-status__description");
+    expect(operation).toContain('role="alert"');
   });
 
   it("protects shared select, compact size, and disabled visual contracts", () => {

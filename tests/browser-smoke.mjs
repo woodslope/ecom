@@ -71,6 +71,18 @@ async function assertModalIsolation(page, label) {
   assert(state.leakedFocusTargets === 0, `${label} 外仍有 ${state.leakedFocusTargets} 个可聚焦目标`);
 }
 
+async function assertComputedStyles(locator, expected, label) {
+  assert((await locator.count()) > 0, `${label} 未找到目标元素`);
+  const properties = Object.keys(expected);
+  const actual = await locator.first().evaluate((node, propertyNames) => {
+    const style = getComputedStyle(node);
+    return Object.fromEntries(propertyNames.map((property) => [property, style.getPropertyValue(property).trim()]));
+  }, properties);
+  for (const property of properties) {
+    assert(actual[property] === expected[property], `${label} ${property} 应为 ${expected[property]}，实际为 ${actual[property]}`);
+  }
+}
+
 async function openPort() {
   const server = createServer();
   server.unref();
@@ -194,6 +206,10 @@ try {
       await page.getByRole("button", { name: platform, exact: true }).click();
       const requirement = page.locator(".planning-input-requirement");
       assert(await requirement.isVisible(), `${width}px ${platform} 空输入要求不可见`);
+      const intakePanel = platform === "Amazon"
+        ? page.locator(".amazon-intake__listing > .panel__body")
+        : page.locator(".panel").filter({ hasText: "商品资料" }).locator(".panel__body");
+      await assertComputedStyles(intakePanel, { padding: "16px" }, `${width}px ${platform} 准备页 Panel 正文`);
       const planningButton = page.getByRole("button", { name: "AI策划", exact: true });
       const describedBy = await planningButton.getAttribute("aria-describedby");
       assert(describedBy, `${width}px ${platform} 禁用策划按钮缺少 aria-describedby`);
@@ -223,6 +239,21 @@ try {
         await page.getByRole("button", { name: "管理模板", exact: true }).click();
         const templateDialog = page.getByRole("dialog", { name: "行业模板库", exact: true });
         await templateDialog.waitFor({ state: "visible" });
+        await assertComputedStyles(templateDialog.locator(".dialog__header"), {
+          "padding-top": "16px",
+          "padding-right": "16px",
+          "padding-bottom": "16px",
+          "padding-left": "16px",
+        }, `${width}px 行业模板弹窗 Header 内边距`);
+        await assertComputedStyles(templateDialog.locator(".industry-template-library__list"), { padding: "16px" }, `${width}px 行业模板列表内边距`);
+        await assertComputedStyles(templateDialog.locator(".industry-template-library__detail"), { padding: "16px" }, `${width}px 行业模板详情内边距`);
+        await assertComputedStyles(templateDialog.locator(".dialog__footer"), {
+          "padding-top": "16px",
+          "padding-right": "16px",
+          "padding-bottom": "16px",
+          "padding-left": "16px",
+        }, `${width}px 行业模板弹窗 Footer 内边距`);
+        await assertComputedStyles(templateDialog.locator(".industry-template-card"), { padding: "8px" }, `${width}px 行业模板卡内边距`);
         const selectedTemplate = templateDialog.locator(".industry-template-card[aria-pressed='true']");
         assert(await selectedTemplate.count() === 1, `${width}px Amazon 模板库选中卡片缺少 aria-pressed=true`);
         await templateDialog.getByRole("button", { name: "完成", exact: true }).click();
@@ -255,6 +286,31 @@ try {
     }
     const railLabels = await page.locator(".platform-rail .rail-item").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label")));
     assert(JSON.stringify(railLabels) === JSON.stringify(["淘宝 / 天猫", "Amazon", "设置"]), "左栏不是两个平台加设置");
+    await context.close();
+  }
+
+  {
+    const context = await createMonitoredContext(browser, { viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+    await page.goto(baseUrl, { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "Amazon", exact: true }).click();
+    await page.locator("details.task-advanced-settings").first().evaluate((element) => {
+      if (element instanceof HTMLDetailsElement) element.open = true;
+    });
+    await page.getByRole("button", { name: "A+ 图", exact: true }).click();
+    await page.getByRole("button", { name: "A+模板编排", exact: true }).click();
+    const aplusDialog = page.getByRole("dialog", { name: "编排 A+ 模块", exact: true });
+    await aplusDialog.waitFor({ state: "visible" });
+    await assertComputedStyles(aplusDialog.locator(".dialog__header h2"), {
+      "font-size": "18px",
+      "line-height": "26px",
+    }, "A+ 编排弹窗标题层级");
+    await assertComputedStyles(aplusDialog.locator(".dialog__header"), {
+      "padding-top": "16px",
+      "padding-right": "16px",
+      "padding-bottom": "16px",
+      "padding-left": "16px",
+    }, "A+ 编排弹窗 Header 内边距");
     await context.close();
   }
 
@@ -395,6 +451,35 @@ try {
   }
 
   {
+    const healthyMockServer = mockServer;
+    const failingMockServer = await startMockAiServer({ failLocalization: true, responseDelayMs: 1 });
+    mockServer = failingMockServer;
+    let context;
+    try {
+      context = await createMonitoredContext(browser, { viewport: { width: 1280, height: 800 } });
+      const page = await context.newPage();
+      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      await page.getByRole("button", { name: "Amazon", exact: true }).click();
+      await page.getByLabel("商品名称", { exact: true }).fill("1234");
+      await page.getByRole("button", { name: "AI策划", exact: true }).click();
+      await page.locator(".slot-card").first().waitFor({ state: "visible" });
+      assert((await page.locator(".slot-card").count()) === 7, "Amazon 本地化失败后未继续生成 7 个 Listing 槽位");
+      assert(await page.locator(".workbench-panel--slots").isVisible(), "Amazon 本地化失败后未进入共享槽位工作区");
+      assert(await page.locator(".workbench-panel--inspector").isVisible(), "Amazon 本地化失败后未进入共享槽位检查器");
+      assert((await page.locator('[aria-label="站点语言草稿"]').count()) === 0, "Amazon 本地化失败后仍显示站点语言草稿页");
+      assert((await page.getByRole("button", { name: "确认并生成策划", exact: true }).count()) === 0, "Amazon 本地化失败后仍要求确认并生成策划");
+      await page.screenshot({
+        path: resolve(evidenceDir, "governance-amazon-localization-fallback-1280.png"),
+        animations: "disabled",
+      });
+    } finally {
+      await context?.close();
+      await failingMockServer.close();
+      mockServer = healthyMockServer;
+    }
+  }
+
+  {
     const context = await createMonitoredContext(browser, {
       viewport: { width: 1280, height: 800 },
       colorScheme: "dark",
@@ -478,6 +563,11 @@ try {
       await settingsDialog.getByText(/备份已导出：/).isVisible(),
       "按需加载后的本地备份没有显示成功反馈",
     );
+    await assertComputedStyles(settingsDialog.locator(".status-message"), {
+      padding: "12px 16px",
+      "font-size": "12px",
+      "line-height": "18px",
+    }, "设置弹窗状态消息");
     await page.screenshot({ path: resolve(evidenceDir, "governance-settings-api-dual-1280.png"), animations: "disabled" });
     await settingsDialog.getByRole("button", { name: "单连接", exact: true }).click();
     assert((await settingsDialog.getByText("图片生成服务", { exact: true }).count()) === 0, "单连接模式仍显示独立图片服务");
@@ -538,7 +628,7 @@ try {
     await page.getByRole("button", { name: "关闭历史记录", exact: true }).click();
     await page.getByLabel("Amazon Listing 原文").fill("Title: Travel Pillow\n- Foldable memory foam\n- Washable cover");
     await page.getByRole("button", { name: "AI策划", exact: true }).click();
-    await page.getByRole("button", { name: "确认并生成策划", exact: true }).click();
+    await page.locator(".slot-card").first().waitFor({ state: "visible" });
     await page.getByRole("button", { name: "历史记录", exact: true }).click();
     await page.locator(".production-run-card").waitFor();
     assert((await page.locator(".production-run-card").count()) === 1, "Amazon 策划后历史未显示");
@@ -582,9 +672,14 @@ try {
     await page.getByLabel("商品描述", { exact: true }).fill("316L 不锈钢内胆，容量 500ml，杯盖可拆洗。");
     await page.getByLabel("核心卖点", { exact: true }).fill("便携防漏\n杯盖可拆洗");
     await page.getByRole("button", { name: "AI策划", exact: true }).click();
-    await page.getByRole("button", { name: "确认并生成策划", exact: true }).click();
     await page.locator(".slot-card").first().waitFor({ state: "visible" });
     assert((await page.locator(".slot-card").count()) === 7, "Amazon 结构化资料未生成 7 个 Listing 槽位");
+    await assertComputedStyles(page.locator(".slot-card"), { padding: "8px" }, "生产槽位卡内边距");
+    await assertComputedStyles(page.locator(".slot-inspector__scroll"), { padding: "16px" }, "Inspector 正文内边距");
+    await assertComputedStyles(page.locator(".slot-inspector__label"), {
+      "font-size": "15px",
+      "line-height": "22px",
+    }, "Inspector 槽位标题层级");
     assert(await page.locator(".slot-card__title", { hasText: "核心卖点" }).isVisible(), "Amazon 槽位未使用中文 UI 标签");
     assert((await page.locator(".slot-card__media small").count()) === 0, "空缩略图重复显示槽位 key");
     assert((await page.locator(".workbench-chrome__tools").getByRole("button", { name: /生成下一张|导出/ }).count()) === 0, "生产顶栏仍复制生成或导出主动作");
@@ -622,6 +717,23 @@ try {
     await page.getByRole("button", { name: "设置", exact: true }).click();
     const settingsDialog = page.getByRole("dialog", { name: "运行设置", exact: true });
     assert(await settingsDialog.isVisible(), "900×650 设置弹窗未打开");
+    await assertComputedStyles(settingsDialog.locator(".dialog__header h2"), {
+      "font-size": "18px",
+      "line-height": "26px",
+    }, "设置弹窗标题层级");
+    await assertComputedStyles(settingsDialog.locator(".dialog__body"), { padding: "16px" }, "设置弹窗 Body 内边距");
+    await assertComputedStyles(settingsDialog.locator(".dialog__header"), {
+      "padding-top": "16px",
+      "padding-right": "16px",
+      "padding-bottom": "16px",
+      "padding-left": "16px",
+    }, "设置弹窗 Header 内边距");
+    await assertComputedStyles(settingsDialog.locator(".dialog__footer"), {
+      "padding-top": "16px",
+      "padding-right": "16px",
+      "padding-bottom": "16px",
+      "padding-left": "16px",
+    }, "设置弹窗 Footer 内边距");
     const settingsGeometry = await settingsDialog.evaluate((node) => {
       const body = node.querySelector(".dialog__body");
       const footer = node.querySelector(".dialog__footer");

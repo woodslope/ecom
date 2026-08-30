@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { History, RefreshCw, X } from "lucide-react";
+import { History, RefreshCw } from "lucide-react";
 
 import { AppShell } from "./components/AppShell";
 import { AmazonWorkspace } from "./components/AmazonWorkspace";
@@ -8,7 +8,7 @@ import { CopilotTaskStatus, GenerationTaskStatus } from "./components/Generation
 import { ConfirmLeaveDialog } from "./components/ConfirmLeaveDialog";
 import { PlatformWorkspace } from "./components/PlatformWorkspace";
 import { TaobaoWorkspace } from "./components/TaobaoWorkspace";
-import { Button, Dialog, IconButton, StatusMessage } from "./components/ui";
+import { Button, Dialog, StatusMessage, Toast, ToastRegion } from "./components/ui";
 import type { NavigationItemId, PlatformId } from "./domain/platforms/types";
 import type { ExecutionJob } from "./domain/jobs/types";
 import type { HistoryQueryService } from "./domain/history/query";
@@ -457,6 +457,10 @@ export function App() {
       : activeItem === "taobao"
         ? currentTaobaoSession ? plans.taobao : undefined
         : undefined;
+  const activeRunStatusFor = (session: (typeof sessions)[number] | undefined) =>
+    session?.activeRunId
+      ? runs.find((run) => run.id === session.activeRunId)?.status
+      : undefined;
 
   const activeView = (
     <>
@@ -498,6 +502,7 @@ export function App() {
               loading={loading}
               plan={currentPlan}
               batchJob={isBlankTask ? undefined : activeAmazonBatchJob}
+              activeRunStatus={activeRunStatusFor(currentAmazonSession)}
               planInputSignature={isBlankTask ? undefined : planInputSignatures.amazon}
               selectedSlotKey={isBlankTask ? undefined : selectedSlotKeys.amazon}
               planning={planningPlatformId === "amazon"}
@@ -590,6 +595,7 @@ export function App() {
               loading={loading}
               plan={currentPlan}
               batchJob={isBlankTask ? undefined : activeTaobaoBatchJob}
+              activeRunStatus={activeRunStatusFor(currentTaobaoSession)}
               planInputSignature={isBlankTask ? undefined : planInputSignatures.taobao}
               selectedSlotKey={isBlankTask ? undefined : selectedSlotKeys.taobao}
               planning={planningPlatformId === "taobao"}
@@ -701,42 +707,48 @@ export function App() {
       onExportLocalBackup={exportLocalBackup}
       onImportLocalBackup={importLocalBackup}
     >
-      <div className="app-toast-region" aria-label="状态提示">
+      <ToastRegion>
         {!initialized && loading ? (
-          <StatusMessage live="polite" className="app-toast app-toast--loading">
+          <Toast live="polite" loading>
             正在恢复本地商品资料与图片...
-          </StatusMessage>
+          </Toast>
         ) : null}
         {warning && warningVisible ? (
-          <StatusMessage tone="warning" live="polite" className="app-toast">
+          <Toast tone="warning" live="polite">
             {warning}
-          </StatusMessage>
+          </Toast>
         ) : null}
         {navigationWarning ? (
-          <StatusMessage tone="warning" live="polite" className="app-toast">
+          <Toast tone="warning" live="polite">
             {navigationWarning}
-          </StatusMessage>
+          </Toast>
         ) : null}
         {uploadFeedback ? (
-          <StatusMessage tone="success" live="polite" className="app-toast upload-feedback-banner">
+          <Toast
+            tone="success"
+            live="polite"
+            onDismiss={() => setUploadFeedback(null)}
+            dismissLabel="关闭上传反馈"
+          >
             <span>{uploadFeedback}</span>
-            <IconButton label="关闭上传反馈" onClick={() => setUploadFeedback(null)}>
-              <X size={15} />
-            </IconButton>
-          </StatusMessage>
+          </Toast>
         ) : null}
         {exportFeedback ? (
-          <StatusMessage tone="success" live="polite" className="app-toast export-feedback-banner" data-testid="export-feedback">
+          <Toast
+            tone="success"
+            live="polite"
+            onDismiss={() => setExportFeedback(null)}
+            dismissLabel="关闭导出反馈"
+            data-testid="export-feedback"
+          >
             <span>{exportFeedback}</span>
-            <IconButton label="关闭导出反馈" onClick={() => setExportFeedback(null)}>
-              <X size={15} />
-            </IconButton>
-          </StatusMessage>
+          </Toast>
         ) : null}
         {resourceRestoreError ? (
-          <StatusMessage tone="danger" live="assertive" className="app-toast workbench-error">
-            <span>{resourceRestoreError}</span>
-            <span className="status-message__actions">
+          <Toast
+            tone="danger"
+            live="assertive"
+            actions={(
               <Button
                 variant="secondary"
                 size="compact"
@@ -746,23 +758,24 @@ export function App() {
                 <RefreshCw size={14} />
                 {loading ? "正在重试" : "重试恢复"}
               </Button>
-              {!generationRecoveryRequired ? (
-                <IconButton label="关闭恢复提示" onClick={clearResourceRestoreError}>
-                  <X size={15} />
-                </IconButton>
-              ) : null}
-            </span>
-          </StatusMessage>
+            )}
+            onDismiss={!generationRecoveryRequired ? clearResourceRestoreError : undefined}
+            dismissLabel="关闭恢复提示"
+          >
+            <span>{resourceRestoreError}</span>
+          </Toast>
         ) : null}
         {error ? (
-          <StatusMessage tone="danger" live="assertive" className="app-toast workbench-error">
+          <Toast
+            tone="danger"
+            live="assertive"
+            onDismiss={clearError}
+            dismissLabel="关闭错误提示"
+          >
             <span>{error}</span>
-            <IconButton label="关闭错误提示" onClick={clearError}>
-              <X size={15} />
-            </IconButton>
-          </StatusMessage>
+          </Toast>
         ) : null}
-      </div>
+      </ToastRegion>
       <div className="workspace-content-stack">
         {generatingSlot ? (
           <GenerationTaskStatus

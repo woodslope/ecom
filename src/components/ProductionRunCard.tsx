@@ -49,6 +49,9 @@ export function ProductionRunCard({ record, current, assetUrls, busy, compact = 
   );
   const manual = run.contextSnapshot.planningInput?.sourceMode === "manual" ||
     (!run.contextSnapshot.planningInput && project.scope === "task-draft");
+  const taskName = project.facts.productName.trim() || project.name;
+  const projectLabel = project.name !== taskName ? project.name : null;
+  const runLabel = `Run ${run.id}`;
   useEffect(() => {
     if (!onRequestPreviewAssets || visiblePreviewAssetIds.every((id) => assetUrls[id])) return;
     const card = cardRef.current;
@@ -68,7 +71,10 @@ export function ProductionRunCard({ record, current, assetUrls, busy, compact = 
     <article ref={cardRef} className={`production-run-card${current ? " production-run-card--current" : ""}`}>
       <header className="production-run-card__header">
         <div className="production-run-card__identity">
-          <strong>{project.name}</strong>
+          <strong title={taskName}>{taskName}</strong>
+          <span className="production-run-card__identity-meta" title={`${projectLabel ? `${projectLabel} · ` : ""}${runLabel}`}>
+            {projectLabel ? `${projectLabel} · ` : ""}{runLabel}
+          </span>
         </div>
         <div className="production-run-card__eyeline">
           <time dateTime={run.updatedAt}>{new Date(run.updatedAt).toLocaleString("zh-CN")}</time>
@@ -81,7 +87,7 @@ export function ProductionRunCard({ record, current, assetUrls, busy, compact = 
 
       <div className="production-run-card__results">
         {visibleSlots.length > 0 ? (
-          <div className="production-run-card__gallery" role="list" aria-label={`${project.name} 生成结果`}>
+          <div className="production-run-card__gallery" role="list" aria-label={`${taskName} 生成结果`}>
             {visibleSlots.map((slot) => {
               const event = previewBySlot.get(slot.slotKey);
               const imageUrl = event ? assetUrls[event.assetId] : undefined;

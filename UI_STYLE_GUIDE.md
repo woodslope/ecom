@@ -63,7 +63,7 @@ Digital cobalt represents the active workflow, selection, and primary action. AP
 ### Typography
 
 - Font family: `Avenir Next`, `PingFang SC`, `Microsoft YaHei`, system sans-serif.
-- Page title: `22px / 30px`, weight `700` → CSS `--font-page-title` / `--line-page-title`.
+- Page title: `22px / 30px`, weight `700` → CSS `--font-page-title` / `--line-page-title`; reserve this for page-level titles outside the compact production toolbar.
 - Section title: `15px / 22px`, weight `700` → CSS `--font-section` / `--line-section`.
 - Body: `13px / 20px`, weight `400` → CSS `--font-body` / `--line-body`.
 - Compact labels: `12px / 18px`, weight `600–700` → CSS `--font-label` / `--line-label`.
@@ -76,12 +76,13 @@ Digital cobalt represents the active workflow, selection, and primary action. AP
 - Command headings: `20px / 28px` → CSS `--font-command` / `--line-command`.
 - Value exception: `22px / 28px` → CSS `--font-value` / `--line-value`; use only for compact result counts such as the history overflow marker.
 - No viewport-based font scaling, no negative letter spacing, and no forced uppercase on Chinese eyebrows.
-- All business typography consumes the semantic tokens above. Direct `font-size` or `line-height` literals are prohibited; fixed-height controls may retain `line-height: 1`, and structural dots / asymmetric edge treatments may retain their explicit geometry.
+- All business typography consumes matching semantic token pairs above. Direct `font-size` or `line-height` literals are prohibited; fixed-height controls may retain `line-height: 1`.
 
 ### Spacing And Dimensions
 
 - Spacing scale: `4, 8, 12, 16, 20, 24, 32` → CSS `--space-1` … `--space-7`.
-- Repeated `gap`, `padding`, and `margin` values on this scale must use the matching `--space-*` token. Non-scale values remain only for component geometry, media bounds, pseudo-element offsets, borders, or documented asymmetric treatments.
+- Repeated `gap`, `padding`, and `margin` values on this scale must use the matching `--space-*` token. Layout rhythm uses only `--space-1` … `--space-7`; raw pixel spacing is forbidden except for the exact geometry allowlist enforced by `check-ui-governance.mjs` (visually-hidden offset, search icon inset, native color input inset, and stepper connector dimensions).
+- Content spacing follows four roles: `4px` for micro separation, `8px` for compact cards and controls, `12px` for status/information surfaces, and `16px` for Panel/Dialog/Inspector content. Empty-state setup surfaces may use `32px` padding; ordinary empty states use `24px`.
 - Desktop platform rail stays at `72px` → CSS `--rail-width`; it only switches Taobao / Amazon, while the always-visible API status and settings remain in the footer. There is no second compact-width token or rail variant.
 - Top context band: not rendered; the page toolbar owns context and actions.
 - All controls: `32px` high → CSS `--control-height` and `--control-height-compact`; normal and compact buttons, inputs, selects, and icon buttons share one height, with icon buttons remaining square.
@@ -201,8 +202,10 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 - Every modal and history drawer renders in the shared overlay root. While any dialog is open, the desktop workbench is `inert` and hidden from assistive technology; for nested dialogs only the topmost layer is active, and close returns focus to the trigger when it still exists.
 - Dense workspace details and product switching use the shared sidebar dialog variant; centered dialogs remain for short confirmations and forms.
 - Blocking validation errors stay inside the dialog.
-- Current operation feedback uses shared inline status surfaces. Add a Toast primitive only when transient feedback has a real repeated need and can maintain safe distance from fixed actions.
-- `StatusMessage` is static by default. Set `live="polite"` only for dynamic progress/success and `live="assertive"` for blocking failures; do not make explanatory copy a live region.
+- Feedback uses three shared surfaces: block `StatusMessage`, compact `StatusMessage appearance="inline"`, and global `Toast` inside the single `ToastRegion`. Field validation, media states, and `StatusChip` labels remain separate semantics.
+- Planning, generation, cancellation, and Copilot progress use `OperationStatus`, which composes `StatusMessage` and owns icon, title, description, and actions without business-specific status CSS.
+- `StatusMessage` is static by default. Set `live="polite"` only for dynamic progress/success and `live="assertive"` for blocking failures; do not make explanatory copy a live region or add direct business `role="alert"` markup.
+- Toast timing remains business-owned: upload/export success uses 3600ms, ordinary warnings use 5200ms, and loading or blocking failures remain visible until their source state changes. Toast does not own a queue or infer live-region behavior from tone.
 - Tooltips name unfamiliar rail and icon actions; required workflow information cannot live only in a tooltip.
 - Menus and popovers share border, radius, shadow, active, disabled, and z-index rules.
 - Programmatic upload inputs stay out of the Tab order and assistive-technology tree; a named upload Button owns focus. A native file input directly wrapped by a user-facing `<label>` may retain its browser-native focus behavior.
@@ -257,7 +260,7 @@ Dark operational chrome reuses these tokens instead of one-off hex:
 
 - CSS variables in the single top-level `:root` block of `src/styles.css` are the token source of truth. Keep them in sync with §3 of this file.
 - Shared spacing values must consume `--space-1` … `--space-7`; one-off geometry is kept local and must remain covered by the governance exception list.
-- Shared React primitives in `src/components/ui.tsx` own buttons, icon buttons, selects, fields, dialogs, tooltips, panels, empty-state variants, `StatusChip`, `SegmentedControl`, `MediaSlot`, `ActionBar`, and status surfaces. `Badge` remains a compatibility primitive; business status should use `StatusChip`.
+- Shared React primitives in `src/components/ui.tsx` own buttons, icon buttons, selects, fields, dialogs, tooltips, panels, empty-state variants, `StatusChip`, `SegmentedControl`, `MediaSlot`, `ActionBar`, `StatusMessage`, `ToastRegion`, `Toast`, and `OperationStatus`. Business status labels use `StatusChip`; legacy status-label primitives must not return.
 - Workbench module columns (当前资料 / 平台交付槽位 / 槽位检查器) must render through `Panel` (or a thin wrapper around it). Do not hand-write `<section class="panel">` shells in business views.
 - When a module owns its own chrome bands (e.g. filled 槽位检查器), use `Panel` with `hideHeader` rather than a parallel DOM structure.
 - `PlatformRail` owns workflow grouping, visible scope descriptors, active-location treatment, and runtime/settings footer placement.
@@ -299,7 +302,7 @@ For a visual pass, browser rendering is the acceptance source of truth. Automate
 - A second `:root { … }` token block later in `styles.css` (cascade overrides of tokens are forbidden; component rules may still refine layout)
 - Business views assembling `button button--primary` class strings instead of the `Button` primitive
 - Raw `<button>` in business views except domain selection cards, version cards, preview thumbnails, and canvas tools; navigation, context actions, and file actions use `Button` / `IconButton`
-- New hard-coded brand hex values outside the top `:root` token block (semantic one-offs on the dark rail chrome are the only temporary exception while that region is still being tokenized)
+- Any hard-coded color literal outside the top `:root` token block; all component colors must consume semantic color tokens.
 
 ## 12. Visual Consistency Governance (minimal loop)
 
@@ -330,7 +333,7 @@ pnpm test:browser:governance
 pnpm test:ui:acceptance  # complete gate + timestamped manifest
 ```
 
-`scripts/check-ui-governance.mjs` enforces: one `:root` token block, guide-aligned primary / rail / type tokens, resolved alias contrast checks, no raw spacing-scale literals, one selector owner per cascade scope (with explicit contextual exceptions), state-text and focus contrast thresholds, shared modal/live-region ownership, no business `button--*` class assembly, the explicit raw-button exception list, upload/context/history semantic contracts, workbench modules on `Panel` + `hideHeader` for filled inspector, stable skeleton hooks in `AppShell` / `PlatformWorkspace`, no legacy mobile-pane hooks, and no return of retired zero-consumer component/CSS families.
+`scripts/check-ui-governance.mjs` enforces: one `:root` token block, guide-aligned primary / rail / type tokens, resolved alias contrast checks, matching font/line token pairs, no raw layout spacing outside the exact geometry allowlist, no component color literals outside `:root`, one selector owner per cascade scope (with explicit contextual exceptions), state-text and focus contrast thresholds, shared modal/status/live-region ownership, no direct business alerts outside the full-history EmptyState allowlist, no business `button--*` class assembly, the explicit raw-button exception list, upload/context/history semantic contracts, workbench modules on `Panel` + `hideHeader` for filled inspector, stable skeleton hooks in `AppShell` / `PlatformWorkspace`, no legacy mobile-pane hooks, and no return of retired feedback or zero-consumer component/CSS families.
 
 Browser and full acceptance output goes to `artifacts/cross-platform-ais/runs/<timestamp>/manifest.json`; `artifacts/cross-platform-ais/latest.json` points to the most recent batch. The manifest records suite type, Git SHA/dirty state, tool versions, commands, viewports and conditions, test counts and bundle size when the full suite runs, plus the exact screenshot list. `check:bundle` limits the Vite business entry chunk to `500 kB`.
 
@@ -349,6 +352,7 @@ Still out of scope for this minimal loop (add only when pain is repeated): Story
 - Library, source, history, compliance, export, shell runtime, and Amazon consumers share the same status and control primitives.
 - 淘宝分析、固定 5+7 槽位、手机预览和历史导出继续复用同一套 `Panel`、`Button`、`StatusChip`、`Dialog`、`MediaSlot` 和 `ActionBar`；生产记录样式只引用已声明的视觉 Token。
 - Success/danger text tokens and the solid focus-ring token meet the governed contrast thresholds; status feedback opts into polite/assertive live regions only when it is dynamic.
+- Global feedback now uses one `ToastRegion`; block, inline, toast, and operation layouts share `StatusMessage` tone and action ownership without business-specific error surfaces.
 - Muted and placeholder text use `--text-muted` where they remain readable on page, surface, and soft-surface backgrounds. `--disabled-text` remains reserved for disabled controls; rail text uses the separate dark-chrome tokens.
 - Every centered dialog and history sidebar uses the shared overlay stack, background isolation, topmost-only nested behavior, focus trap, and focus return.
 - Production history loads 50 Runs per page, preserves already loaded records when an older-page read fails, and exposes retry; browser evidence exercises 120 records and both initial/older-page recovery paths.
@@ -357,7 +361,6 @@ Still out of scope for this minimal loop (add only when pain is repeated): Story
 
 ### Remaining Debt
 
-- `Badge` remains exported for compatibility but has no current business-view consumer; remove it only with a separate API cleanup.
 - Screenshot evidence is deterministic acceptance output, not a pixel-diff baseline. Add image diffing only if visual regressions become recurrent.
 - Safari/Firefox, real external Providers, actual marketplace upload review, and browser UI zoom behavior beyond the CSS-pixel/DPR equivalent remain external/manual checks.
 - The product remains desktop-only by decision. A responsive mobile workbench requires a separate product and interaction design scope.

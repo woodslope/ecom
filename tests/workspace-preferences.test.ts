@@ -19,9 +19,9 @@ function createStorage(initial: Record<string, string | null> = {}) {
 }
 
 describe("workspace platform preference", () => {
-  it("defaults a new workspace to Amazon while preserving an explicit platform choice", () => {
+  it("defaults a new workspace to Taobao while preserving an explicit platform choice", () => {
     const storage = createStorage();
-    expect(readLastPlatformOrDefault(storage)).toBe("amazon");
+    expect(readLastPlatformOrDefault(storage)).toBe("taobao");
 
     writeLastPlatform(storage, "taobao");
     expect(readLastPlatformOrDefault(storage)).toBe("taobao");
@@ -34,7 +34,7 @@ describe("workspace platform preference", () => {
     writeLastPlatform(storage, "amazon");
     expect(readLastPlatform(storage)).toBe("amazon");
 
-    storage.setItem("ecom-workbench.last-platform.v1", "pinduoduo");
+    storage.setItem("ecom-workbench.last-platform.v2", "pinduoduo");
     expect(readLastPlatform(storage)).toBeNull();
   });
 

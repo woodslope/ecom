@@ -254,6 +254,7 @@ describe("platform workspace contract", () => {
         loading: false,
         plan,
         productionSession: session,
+        activeRunStatus: "producing",
         planInputSignature: signature,
         selectedSlotKey: "MAIN",
         planning: false,
@@ -273,6 +274,7 @@ describe("platform workspace contract", () => {
     expect(markup).not.toContain('class="workbench-chrome__progress-menu"');
     expect(markup).not.toContain('class="workbench-chrome__slot-progress"');
     expect(markup).toContain("生成交付");
+    expect(markup).toContain("云感旅行颈枕 · Listing 7 张 · 生产中");
     expect(markup).toContain('aria-label="前往准备资料"');
     expect(markup).toContain('aria-label="前往生成交付"');
     expect(markup).not.toContain('class="workbench-chrome__context"');

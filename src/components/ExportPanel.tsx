@@ -78,11 +78,16 @@ export function ExportPanel({
         {buttonLabel}
       </Button>
       {error ? (
-        <StatusMessage tone="danger" live="assertive" className="export-panel__error">
+        <StatusMessage
+          tone="danger"
+          live="assertive"
+          actions={(
+            <IconButton label="关闭导出提示" onClick={onClearError}>
+              <X size={14} />
+            </IconButton>
+          )}
+        >
           <span>{error}</span>
-          <IconButton label="关闭导出提示" onClick={onClearError}>
-            <X size={14} />
-          </IconButton>
         </StatusMessage>
       ) : null}
       {disabledReason ? (

@@ -121,18 +121,6 @@ export function IconButton({
   );
 }
 
-// Compatibility export for restored/third-party consumers. Remove only after a
-// separately approved API cleanup confirms there are no business-view users.
-export function Badge({
-  tone = "neutral",
-  className = "",
-  ...props
-}: HTMLAttributes<HTMLSpanElement> & {
-  tone?: "neutral" | "primary" | "ai" | "success" | "warning" | "danger";
-}) {
-  return <span className={`badge badge--${tone} ${className}`.trim()} {...props} />;
-}
-
 export function StatusChip({
   tone = "neutral",
   className = "",
@@ -361,30 +349,120 @@ export function Select({
   );
 }
 
+export type StatusTone = "neutral" | "success" | "warning" | "danger";
+export type StatusLive = "off" | "polite" | "assertive";
+
+export type StatusMessageProps = HTMLAttributes<HTMLDivElement> & {
+  tone?: StatusTone;
+  live?: StatusLive;
+  appearance?: "surface" | "inline";
+  actions?: ReactNode;
+};
+
 export function StatusMessage({
   tone = "neutral",
   live = "off",
+  appearance = "surface",
+  actions,
   className = "",
   children,
   role,
   "aria-live": ariaLive,
   "aria-atomic": ariaAtomic,
   ...props
-}: HTMLAttributes<HTMLDivElement> & {
-  tone?: "neutral" | "success" | "warning" | "danger";
-  live?: "off" | "polite" | "assertive";
-}) {
+}: StatusMessageProps) {
   const resolvedRole = role ?? (live === "assertive" ? "alert" : live === "polite" ? "status" : undefined);
   return (
     <div
-      className={`status-message status-message--${tone} ${className}`.trim()}
+      className={`status-message status-message--${tone} status-message--${appearance}${actions ? " status-message--actionable" : ""} ${className}`.trim()}
       role={resolvedRole}
       aria-live={ariaLive ?? (live === "off" ? undefined : live)}
       aria-atomic={ariaAtomic ?? (live === "off" ? undefined : true)}
       {...props}
     >
       {children}
+      {actions ? <div className="status-message__actions">{actions}</div> : null}
     </div>
+  );
+}
+
+export function ToastRegion({
+  className = "",
+  children,
+  role = "region",
+  "aria-label": ariaLabel = "状态提示",
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`toast-region ${className}`.trim()} role={role} aria-label={ariaLabel} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export function Toast({
+  loading = false,
+  actions,
+  onDismiss,
+  dismissLabel = "关闭提示",
+  className = "",
+  children,
+  ...props
+}: Omit<StatusMessageProps, "appearance" | "actions"> & {
+  loading?: boolean;
+  actions?: ReactNode;
+  onDismiss?: () => void;
+  dismissLabel?: string;
+}) {
+  const resolvedActions = actions || onDismiss ? (
+    <>
+      {actions}
+      {onDismiss ? (
+        <IconButton label={dismissLabel} onClick={onDismiss}>
+          <X size={15} aria-hidden="true" />
+        </IconButton>
+      ) : null}
+    </>
+  ) : undefined;
+
+  return (
+    <StatusMessage
+      className={`toast${loading ? " toast--loading" : ""} ${className}`.trim()}
+      actions={resolvedActions}
+      {...props}
+    >
+      {children}
+    </StatusMessage>
+  );
+}
+
+export function OperationStatus({
+  icon,
+  title,
+  description,
+  actions,
+  className = "",
+  ...props
+}: Omit<StatusMessageProps, "appearance" | "actions" | "children"> & {
+  icon?: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <StatusMessage
+      className={`operation-status ${className}`.trim()}
+      actions={actions}
+      {...props}
+    >
+      <span className="operation-status__copy">
+        {icon ? <span className="operation-status__icon">{icon}</span> : null}
+        <span className="operation-status__text">
+          <strong className="operation-status__title">{title}</strong>
+          {description ? <span className="operation-status__description">{description}</span> : null}
+        </span>
+      </span>
+    </StatusMessage>
   );
 }
 

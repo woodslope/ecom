@@ -21,7 +21,7 @@ import {
   createLocalStorageWorkspaceRepository,
   type ProjectWorkspaceRepository,
 } from "../domain/workspace/project-workspace";
-import { Button, ConfirmDialog, EmptyState, StatusChip } from "./ui";
+import { Button, ConfirmDialog, EmptyState, StatusChip, StatusMessage } from "./ui";
 import { ProductionHistoryFilters } from "./ProductionHistoryFilters";
 import { ProductionRunCard } from "./ProductionRunCard";
 
@@ -325,17 +325,22 @@ export function TaskHistoryArchive({
         compact={compact}
       />
       {historyError ? (
-        <div className="production-history__load-error" role="alert">
+        <StatusMessage
+          tone="danger"
+          live="assertive"
+          actions={(
+            <Button
+              variant="secondary"
+              size="compact"
+              onClick={() => historyErrorSource === "load-more" ? void loadMore() : setRetryKey((value) => value + 1)}
+              disabled={historyErrorSource === "load-more" ? !nextCursor || loadingMore : loading}
+            >
+              {historyErrorSource === "load-more" ? "重试加载" : "重试读取"}
+            </Button>
+          )}
+        >
           <span>{historyError} 已加载的记录仍可继续使用。</span>
-          <Button
-            variant="secondary"
-            size="compact"
-            onClick={() => historyErrorSource === "load-more" ? void loadMore() : setRetryKey((value) => value + 1)}
-            disabled={historyErrorSource === "load-more" ? !nextCursor || loadingMore : loading}
-          >
-            {historyErrorSource === "load-more" ? "重试加载" : "重试读取"}
-          </Button>
-        </div>
+        </StatusMessage>
       ) : null}
       {filtered.length === 0 ? <EmptyState variant="result" eyebrow="没有匹配记录" icon={<Archive size={24} />} title="筛选条件没有结果" description="调整搜索或状态，也可清除筛选查看全部记录。" action={<Button onClick={() => setFilters(platformId ? { platformId } : {})}>清除筛选</Button>} /> : <div className="production-history__list">
         {filtered.map((record) => <ProductionRunCard key={record.run.id} record={record} compact={compact} current={activeProjectId === record.project.id && activeRunIds.includes(record.run.id)} assetUrls={assetUrls} onRequestPreviewAssets={requestAssetUrls} onResume={() => onResumeRun?.(record)} onFork={() => onForkRun?.(record)} onExport={onExportRun ? () => onExportRun(record) : undefined} onDelete={onDeleteRun ? () => setDeleteTarget(record) : undefined} />)}

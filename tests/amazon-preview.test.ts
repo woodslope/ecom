@@ -196,6 +196,8 @@ describe("Amazon mobile content preview", () => {
       onFork: () => undefined,
     }));
     expect(fullMarkup).toContain(">API<");
+    expect(compactMarkup).toContain("Northwind Travel Pillow");
+    expect(compactMarkup).toContain("Run run_amazon_preview");
     expect(compactMarkup).toContain('aria-label="MAIN 尚未生成"');
     expect(compactMarkup).not.toContain("尚无生成结果");
     expect(compactMarkup).not.toContain("回看阶段");

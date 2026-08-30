@@ -118,7 +118,7 @@ try {
     "Title: Cloud Travel Neck Pillow\n- Memory foam support\n- Foldable for carry-on",
   );
   await page.getByRole("button", { name: "AI策划", exact: true }).click();
-  await page.getByRole("button", { name: "确认并生成策划", exact: true }).click();
+  await page.locator(".slot-card").first().waitFor({ state: "visible" });
   await page.locator(".slot-card").filter({ hasText: "PT01" }).click();
   await page.getByRole("button", { name: "生成图片", exact: true }).click();
   await page.getByRole("img", { name: "PT01 当前生成版本", exact: true }).waitFor();

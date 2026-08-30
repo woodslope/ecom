@@ -134,6 +134,11 @@ describe("planning workspace UI contract", () => {
         rulePack: amazonRulePack,
         slot,
         saving: false,
+        taskContext: {
+          name: "云感旅行颈枕",
+          mode: "Amazon Listing 7 张",
+          status: "生产中",
+        },
         onSave: async () => true,
       }),
     );
@@ -148,6 +153,7 @@ describe("planning workspace UI contract", () => {
     expect(markup).toContain('aria-label="槽位内容"');
     expect(markup).toContain('aria-label="槽位操作"');
     expect(markup).toContain("核心卖点");
+    expect(markup).toContain("云感旅行颈枕 · Amazon Listing 7 张 · 生产中");
     expect(markup.indexOf('aria-label="槽位身份"')).toBeLessThan(
       markup.indexOf('aria-label="槽位内容"'),
     );

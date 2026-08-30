@@ -126,18 +126,31 @@ describe("generation UI contract", () => {
         onGenerate: () => undefined,
       }),
     );
+    const errorMarkup = renderToStaticMarkup(
+      createElement(GenerationActions, {
+        hasVersion: true,
+        generating: false,
+        errorMessage: "图片生成失败",
+        onGenerate: () => undefined,
+      }),
+    );
 
     expect(firstMarkup).toContain("生成图片");
     expect(apiMarkup).not.toContain("本地 mock");
     expect(pendingMarkup).toContain("正在生成");
     expect(pendingMarkup).not.toContain("取消生成");
     expect(taskMarkup).toContain("Amazon · PT01 正在生成");
+    expect(taskMarkup).toContain('data-testid="generation-operation-status"');
+    expect(taskMarkup).toContain("operation-status");
+    expect(taskMarkup).toContain('role="status"');
     expect(taskMarkup).toContain("取消生成");
     expect(cancelingMarkup).toContain("正在取消生成");
     expect(cancelingMarkup).toContain("正在取消...");
     expect(cancelingMarkup).toContain("disabled");
     expect(lockedMarkup).toContain("Amazon · PT01 正在生成，请先等待或取消。");
     expect(lockedMarkup).toContain("disabled");
+    expect(errorMarkup).toContain("status-message--inline");
+    expect(errorMarkup).toContain('role="alert"');
   });
 
   it("detects an unsaved prompt or visible-copy draft before generation", () => {
@@ -168,6 +181,9 @@ describe("generation UI contract", () => {
     expect(markup).toContain("Amazon · PT01 生成未完成");
     expect(markup).toContain("图片生成失败：服务暂时不可用。");
     expect(markup).toContain("查看槽位");
+    expect(markup).toContain('data-testid="generation-failure-status"');
+    expect(markup).toContain("operation-status");
+    expect(markup).toContain('role="alert"');
     expect(markup).toContain('aria-label="关闭生成提示"');
   });
 

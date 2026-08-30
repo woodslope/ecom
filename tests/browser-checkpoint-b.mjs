@@ -530,7 +530,7 @@ async function verifyTask6Workflow(browser, baseUrl) {
     "失败夹具启动后旧活动版本发生变化",
   );
   await page.getByRole("button", { name: "重新生成", exact: true }).click();
-  const failure = page.locator(".generation-task-status--error");
+  const failure = page.getByTestId("generation-failure-status");
   assert((await failure.count()) === 0, "生成失败不应在工作区顶部显示全局提示");
   assert((await page.locator(".version-tile").count()) === 2, "失败覆盖或追加了历史版本");
   assert(

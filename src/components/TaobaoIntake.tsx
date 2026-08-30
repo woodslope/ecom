@@ -23,7 +23,7 @@ import { getPlatformRulePack } from "../domain/platforms/registry";
 import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
 import { IndustryTemplateSelector } from "./IndustryTemplateSelector";
 import { ProductFactsForm } from "./ProductFactsForm";
-import { Button, Dialog, Field, Panel, StatusChip, StatusMessage } from "./ui";
+import { Button, Dialog, Field, OperationStatus, Panel, StatusChip, StatusMessage } from "./ui";
 
 export function taobaoAnalysisHasReference(input: {
   selectedReferenceCount: number;
@@ -255,6 +255,11 @@ export function TaobaoIntake({
     [facts, files.length, selectedIds.length],
   );
   const assessmentMessage = planningInputQualityMessage(assessment);
+  const taskName = facts.productName.trim() || activeProject?.name || null;
+  const taskSettingsSummary = [
+    taskName,
+    industryTemplate?.name ?? "通用模板",
+  ].filter(Boolean).join(" · ");
   const controlsDisabled = readOnly || loading || Boolean(lockedReason);
   const analyzeDisabledReason = lockedReason ??
     (assessment.quality === "empty" ? assessmentMessage : undefined);
@@ -308,21 +313,26 @@ export function TaobaoIntake({
         void submit();
       }}>
       {lockedReason ? (
-        <StatusMessage id="taobao-planning-lock" live="polite" className="planning-task-status">
-          <span className="generation-task-status__copy">
-            <LoaderCircle className="spin" size={16} />
-            <strong>{lockedReason}</strong>
-          </span>
-          {onCancelLockedTask ? (
+        <OperationStatus
+          id="taobao-planning-lock"
+          live="polite"
+          data-testid="taobao-planning-operation-status"
+          icon={<LoaderCircle className="spin" size={16} />}
+          title={lockedReason}
+          actions={onCancelLockedTask ? (
             <Button type="button" variant="secondary" onClick={onCancelLockedTask}>
               <Square size={13} />
               取消策划
             </Button>
-          ) : null}
-        </StatusMessage>
+          ) : undefined}
+        />
       ) : null}
       <details className="task-advanced-settings">
-        <summary><span>任务设置</span><small>{industryTemplate?.name ?? "通用模板"}</small><ChevronDown size={15} /></summary>
+        <summary>
+          <span>任务设置</span>
+          <small title={taskSettingsSummary}>{taskSettingsSummary}</small>
+          <ChevronDown size={15} />
+        </summary>
         <div className="task-advanced-settings__body">
           <section className="planning-settings-group">
             <IndustryTemplateSelector
