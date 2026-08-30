@@ -17,6 +17,7 @@ describe("SlotInspector Copilot", () => {
     expect(markup).toContain("请求仅作用于目标槽位");
     expect(markup).not.toContain("只会保存目标槽位");
     expect(markup).toContain("取消 Copilot");
+    expect(markup).toContain("toast");
   });
 
 });

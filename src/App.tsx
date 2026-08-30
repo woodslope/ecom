@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { History, RefreshCw, Square } from "lucide-react";
+import { History, LoaderCircle, RefreshCw, Square } from "lucide-react";
 
 import { AppShell } from "./components/AppShell";
 import { AmazonWorkspace } from "./components/AmazonWorkspace";
@@ -717,6 +717,7 @@ export function App() {
           <Toast
             live="polite"
             loading
+            className="operation-status"
             id="planning-task-status"
             data-testid="planning-toast"
             actions={(
@@ -726,7 +727,19 @@ export function App() {
               </Button>
             )}
           >
-            <span>{getPlatformRulePack(planningPlatformId).label} 正在生成平台策划</span>
+            <span className="operation-status__copy">
+              <span className="operation-status__icon">
+                <LoaderCircle className="spin" size={16} />
+              </span>
+              <span className="operation-status__text">
+                <strong className="operation-status__title">
+                  {getPlatformRulePack(planningPlatformId).label} 正在生成平台策划
+                </strong>
+                <span className="operation-status__description">
+                  其他平台的策划入口已锁定；可等待完成或取消当前任务。
+                </span>
+              </span>
+            </span>
           </Toast>
         ) : null}
         {warning && warningVisible ? (
@@ -798,11 +811,11 @@ export function App() {
             onCancel={cancelGeneration}
           />
         ) : null}
-      </ToastRegion>
-      <div className="workspace-content-stack">
         {copilotTarget ? (
           <CopilotTaskStatus target={copilotTarget} onCancel={cancelCopilot} />
         ) : null}
+      </ToastRegion>
+      <div className="workspace-content-stack">
         {activeView}
       </div>
       <ConfirmLeaveDialog

@@ -81,19 +81,28 @@ export function CopilotTaskStatus({
   const owner = `${getPlatformRulePack(target.platformId).label} · ${target.slotKey}`;
 
   return (
-    <OperationStatus
+    <Toast
       live="polite"
+      loading
+      className="operation-status"
       data-testid="copilot-operation-status"
-      icon={<Bot size={16} />}
-      title={`${owner} Copilot 请求处理中`}
-      description="请求仅作用于目标槽位；其他任务请先等待或取消。"
       actions={(
         <Button variant="secondary" size="compact" onClick={onCancel}>
           <Square size={15} />
           取消 Copilot
         </Button>
       )}
-    />
+    >
+      <span className="operation-status__copy">
+        <span className="operation-status__icon">
+          <Bot size={16} />
+        </span>
+        <span className="operation-status__text">
+          <strong className="operation-status__title">{owner} Copilot 请求处理中</strong>
+          <span className="operation-status__description">请求仅作用于目标槽位；其他任务请先等待或取消。</span>
+        </span>
+      </span>
+    </Toast>
   );
 }
 
