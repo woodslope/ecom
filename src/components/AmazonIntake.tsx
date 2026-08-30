@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
 import { ChevronDown, ImagePlus, Sparkles } from "lucide-react";
 
 import {
@@ -14,6 +14,7 @@ import type {
   PlatformSession,
 } from "../domain/workspace/project-workspace";
 import type { StartAmazonSessionInput, WorkbenchAsset } from "../store/workbench-store";
+import { extractClipboardImageFiles } from "../domain/assets/clipboard";
 import { resolvePlanningRulePack } from "../domain/planning/resolve-planning-pack";
 import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
 import {
@@ -206,6 +207,14 @@ export function AmazonIntake({
     addFiles(Array.from(event.dataTransfer.files));
   };
 
+  const pasteFiles = (event: ClipboardEvent<HTMLElement>) => {
+    if (disabled) return;
+    const images = extractClipboardImageFiles(event.clipboardData);
+    if (images.length === 0) return;
+    event.preventDefault();
+    addFiles(images);
+  };
+
   const dragOverFiles = (event: DragEvent<HTMLButtonElement>) => {
     event.preventDefault();
     if (!disabled) setIsDraggingFiles(true);
@@ -243,7 +252,7 @@ export function AmazonIntake({
   };
 
   const content = (
-    <div className={`amazon-intake${readOnly ? " amazon-intake--readonly" : ""}`}>
+    <div className={`amazon-intake${readOnly ? " amazon-intake--readonly" : ""}`} onPaste={pasteFiles}>
       <details className="task-advanced-settings">
         <summary><span>任务设置</span><small>{amazonControlsSummary(controls)} · {industryTemplate?.name ?? "通用模板"}</small><ChevronDown size={15} /></summary>
         <div className="task-advanced-settings__body">
@@ -312,7 +321,7 @@ export function AmazonIntake({
             <ImagePlus size={22} aria-hidden="true" />
             <span>
               <strong>添加本次任务商品图</strong>
-              <small>最多 16 张，8 MiB 内</small>
+              <small>最多 16 张，8 MiB 内，支持直接粘贴</small>
             </span>
           </Button>
           <input

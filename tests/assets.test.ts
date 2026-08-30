@@ -5,8 +5,23 @@ import {
   createIndexedDbAssetRepository,
   createMemoryAssetRepository,
 } from "../src/domain/assets/repository";
+import { extractClipboardImageFiles } from "../src/domain/assets/clipboard";
 
 describe("asset repositories", () => {
+  it("extracts pasted images from clipboard files and items without duplicates", () => {
+    const pasted = new File(["image"], "pasted.png", { type: "image/png" });
+    const text = new File(["text"], "notes.txt", { type: "text/plain" });
+    const clipboardData = {
+      files: [pasted, text],
+      items: [
+        { kind: "file", type: "image/png", getAsFile: () => pasted },
+        { kind: "string", type: "text/plain", getAsFile: () => null },
+      ],
+    } as unknown as DataTransfer;
+
+    expect(extractClipboardImageFiles(clipboardData)).toEqual([pasted]);
+  });
+
   it("reports an actionable error when IndexedDB is unavailable", () => {
     expect(() => createIndexedDbAssetRepository({ indexedDB: undefined })).toThrow(
       "IndexedDB is not available",

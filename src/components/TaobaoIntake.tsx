@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
 import { ChevronDown, ImagePlus, LoaderCircle, Sparkles, Square } from "lucide-react";
 
 import type { ProductFacts, ProductProject } from "../domain/projects/types";
@@ -18,6 +18,7 @@ import {
 import type { PlatformSession } from "../domain/workspace/project-workspace";
 import type { AnalyzeTaobaoProductInput, WorkbenchAsset } from "../store/workbench-store";
 import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
+import { extractClipboardImageFiles } from "../domain/assets/clipboard";
 import { getPlatformRulePack } from "../domain/platforms/registry";
 import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
 import { IndustryTemplateSelector } from "./IndustryTemplateSelector";
@@ -275,6 +276,13 @@ export function TaobaoIntake({
     if (controlsDisabled) return;
     addFiles(Array.from(event.dataTransfer.files));
   };
+  const pasteFiles = (event: ClipboardEvent<HTMLElement>) => {
+    if (controlsDisabled) return;
+    const images = extractClipboardImageFiles(event.clipboardData);
+    if (images.length === 0) return;
+    event.preventDefault();
+    addFiles(images);
+  };
   const submit = async () => {
     if (assessment.quality === "empty") return;
     const result = await onAnalyze({
@@ -295,7 +303,7 @@ export function TaobaoIntake({
   };
 
   const content = (
-    <form className={`taobao-intake${readOnly ? " taobao-intake--readonly" : ""}`} onSubmit={(event) => {
+    <form className={`taobao-intake${readOnly ? " taobao-intake--readonly" : ""}`} onPaste={pasteFiles} onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}>
@@ -376,7 +384,7 @@ export function TaobaoIntake({
             <ImagePlus size={22} aria-hidden="true" />
             <span>
               <strong>添加本次任务商品图</strong>
-              <small>最多 16 张，8 MiB 内</small>
+              <small>最多 16 张，8 MiB 内，支持直接粘贴</small>
             </span>
           </Button>
           <input
