@@ -168,6 +168,7 @@ import {
 } from "../domain/settings";
 import type { AiRuntimeFactory } from "../services/ai/runtime-factory";
 import { createAiRuntimeFactory } from "../services/ai/runtime-factory";
+import { DEFAULT_PLANNER_REQUEST_TIMEOUT_MS } from "../services/openai-planner";
 import type { TaskRecord } from "../domain/tasks";
 import { PROMPT_BUNDLE_VERSION, PROMPT_CONTRACT_VERSION } from "../domain/prompting";
 import { createPlannerTaskSettings } from "../domain/prompting/planner-settings";
@@ -684,7 +685,7 @@ export function createWorkbenchStore(
   const plannerEngine = dependencies.plannerEngine;
   const productLocalizer = dependencies.productLocalizer;
   // Keep the operation guard slightly longer than the API planner's own request timeout.
-  const planningTimeoutMs = dependencies.planningTimeoutMs ?? 135_000;
+  const planningTimeoutMs = dependencies.planningTimeoutMs ?? DEFAULT_PLANNER_REQUEST_TIMEOUT_MS + 15_000;
   const imageGenerator = dependencies.imageGenerator;
   const copilotEngine = dependencies.copilotEngine;
   const industryTemplateTransformer = dependencies.industryTemplateTransformer;

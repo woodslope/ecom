@@ -1,9 +1,12 @@
 import type { PlatformId } from "../platforms/types";
 
-export const LAST_PLATFORM_STORAGE_KEY = "ecom-workbench.last-platform.v1";
+// v2 resets the development baseline to Taobao without deleting platform tasks.
+export const LAST_PLATFORM_STORAGE_KEY = "ecom-workbench.last-platform.v2";
+export const LEGACY_LAST_PLATFORM_STORAGE_KEY = "ecom-workbench.last-platform.v1";
 export const AMAZON_DRAFT_PROJECT_CONFIRM_SKIP_KEY =
   "ecom-workbench.amazon-draft-project-confirm-skip.v1";
-export const DEFAULT_FIRST_PLATFORM: PlatformId = "amazon";
+// 淘宝是当前工作台的首要视觉与交互基准；Amazon 仍可从平台导航进入。
+export const DEFAULT_FIRST_PLATFORM: PlatformId = "taobao";
 
 type PreferenceStorage = Pick<Storage, "getItem" | "setItem">;
 

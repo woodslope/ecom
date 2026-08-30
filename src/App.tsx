@@ -17,7 +17,6 @@ import { getPlatformRulePack } from "./domain/platforms/registry";
 import type { ProductProject, UpdateProductProjectInput } from "./domain/projects/types";
 import { runtimeSupportsImageEditing } from "./domain/settings";
 import type { ProductionRunRecord } from "./domain/tasks";
-import type { HistoryExampleRefillPayload } from "./domain/history/examples";
 import {
   readLastPlatformOrDefault,
   writeLastPlatform,
@@ -51,7 +50,6 @@ function PlatformHistoryPane({
   onForkRun,
   onExportRun,
   onDeleteRun,
-  onRefillExample,
   historyQueryService,
   historyRefreshKey,
 }: {
@@ -71,7 +69,6 @@ function PlatformHistoryPane({
   onForkRun: (record: ProductionRunRecord) => void;
   onExportRun: (record: ProductionRunRecord) => void;
   onDeleteRun: (record: ProductionRunRecord) => Promise<boolean>;
-  onRefillExample: (payload: HistoryExampleRefillPayload) => void;
   historyQueryService: HistoryQueryService | null;
   historyRefreshKey: string;
 }) {
@@ -116,7 +113,6 @@ function PlatformHistoryPane({
             onForkRun={onForkRun}
             onExportRun={onExportRun}
             onDeleteRun={onDeleteRun}
-            onRefillExample={onRefillExample}
             historyQueryService={historyQueryService}
             refreshKey={historyRefreshKey}
             compact
@@ -392,38 +388,6 @@ export function App() {
     const exported = await exportRun(runId);
     if (exported) downloadExport(exported);
   };
-  const refillHistoryExample = useCallback((payload: HistoryExampleRefillPayload) => {
-    setHistoryOpen(false);
-    setActiveItem(payload.platformId);
-    clearPlanningError();
-    if (payload.platformId === "amazon") {
-      void startAmazonSession({
-        sourceMode: "manual",
-        workflowId: payload.workflowId === "amazon-aplus" ? "amazon-aplus" : "amazon-listing",
-        listingText: payload.listingText ?? "",
-        facts: payload.project.facts,
-        files: [],
-        selectedReferenceAssetIds: [],
-        selectedStyleReferenceId: payload.selectedStyleReferenceId,
-        industryTemplate: payload.industryTemplate,
-        options: payload.options ?? { marketplaceId: "us", plannerMode: "listing", sizeTier: "2K" },
-        autoPlan: false,
-      }).then((session) => {
-        if (session) clearNewTask("amazon");
-      });
-      return;
-    }
-    void startTaobaoSession({
-      sourceMode: "manual",
-      productText: payload.productText ?? "",
-      facts: payload.project.facts,
-      selectedReferenceAssetIds: [],
-      stylePresetId: payload.stylePresetId,
-      industryTemplate: payload.industryTemplate,
-    }).then((session) => {
-      if (session) clearNewTask("taobao");
-    });
-  }, [clearPlanningError, startAmazonSession, startTaobaoSession]);
   const settingsLockReason = loading
     ? "工作台正在加载或保存项目与素材，请完成后再修改运行设置。"
     : generatingSlot
@@ -709,7 +673,6 @@ export function App() {
           }}
           onExportRun={(record) => void exportHistoryRun(record.run.id)}
           onDeleteRun={(record) => removeRun(record.run.id)}
-          onRefillExample={refillHistoryExample}
           historyQueryService={historyQueryService}
           historyRefreshKey={productionHistoryRevision(runs)}
           />

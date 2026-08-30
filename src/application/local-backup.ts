@@ -12,6 +12,7 @@ import {
 import { PROJECT_WORKSPACE_STORAGE_PREFIX } from "../domain/workspace/project-workspace";
 import {
   AMAZON_DRAFT_PROJECT_CONFIRM_SKIP_KEY,
+  LEGACY_LAST_PLATFORM_STORAGE_KEY,
   LAST_PLATFORM_STORAGE_KEY,
 } from "../domain/workspace/preferences";
 import { PROJECT_WORKSPACE_V3_STORAGE_PREFIX } from "../domain/workspace/workspace-v3";
@@ -83,6 +84,7 @@ const JOB_DATABASE: DatabaseSpec = {
 
 const PREFERENCE_STORAGE_KEYS = new Set([
   LAST_PLATFORM_STORAGE_KEY,
+  LEGACY_LAST_PLATFORM_STORAGE_KEY,
   AMAZON_DRAFT_PROJECT_CONFIRM_SKIP_KEY,
 ]);
 const EXACT_STORAGE_KEYS = new Set([

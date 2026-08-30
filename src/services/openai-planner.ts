@@ -38,7 +38,9 @@ export interface OpenAIPlannerOptions {
   protocol?: TextServiceProtocol;
 }
 
-export const DEFAULT_PLANNER_REQUEST_TIMEOUT_MS = 120_000;
+// Planning prompts can contain several reference images and a large structured output.
+// Five minutes gives slower but otherwise healthy providers enough time to finish.
+export const DEFAULT_PLANNER_REQUEST_TIMEOUT_MS = 300_000;
 
 export type OpenAIPlannerErrorCode =
   | "timeout"
@@ -111,6 +113,12 @@ function abortReason(signal: AbortSignal, apiKey: string): Error {
 
 function throwAbortReason(signal: AbortSignal, apiKey: string): never {
   throw abortReason(signal, apiKey);
+}
+
+function timeoutLabel(timeoutMs: number): string {
+  const seconds = Math.max(1, Math.ceil(timeoutMs / 1_000));
+  if (seconds >= 60 && seconds % 60 === 0) return `${seconds / 60} 分钟`;
+  return `${seconds} 秒`;
 }
 
 function parsePlanText(
@@ -208,6 +216,7 @@ export class OpenAIPlanner implements PlannerEngine {
       referenceImages.map((image) => image.name),
     );
     const requestController = new AbortController();
+    const timeoutMs = this.options.timeoutMs ?? DEFAULT_PLANNER_REQUEST_TIMEOUT_MS;
     let removeAbortListener: () => void = () => undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -224,11 +233,11 @@ export class OpenAIPlanner implements PlannerEngine {
         timeoutId = setTimeout(() => {
           const error = new OpenAIPlannerError(
             "timeout",
-            "策划请求超时（>2 分钟）。排查步骤：1. 检查网络连接是否稳定；2. 尝试更换更快的模型；3. 减少参考图数量或改用已压缩的小图。",
+            `策划请求超时（超过 ${timeoutLabel(timeoutMs)}）。排查步骤：1. 检查网络连接是否稳定；2. 尝试更换更快的模型；3. 减少参考图数量或改用已压缩的小图。`,
           );
           reject(error);
           requestController.abort(error);
-        }, this.options.timeoutMs ?? DEFAULT_PLANNER_REQUEST_TIMEOUT_MS);
+        }, timeoutMs);
       });
       const request = async () => {
         const prompt = buildPlannerPrompt({
@@ -249,7 +258,7 @@ export class OpenAIPlanner implements PlannerEngine {
           model: this.options.model,
           protocol: this.options.protocol ?? inferTextProtocol(this.options.endpoint),
           fetch: this.fetch,
-          timeoutMs: this.options.timeoutMs ?? DEFAULT_PLANNER_REQUEST_TIMEOUT_MS,
+          timeoutMs,
         });
         const result = await transport.request({
           service: "planner",
