@@ -18,7 +18,6 @@ import {
   type IndustryTemplateSnapshot,
 } from "../domain/prompt-templates/industry-template-packs";
 import type { PlatformRulePack } from "../domain/platforms/types";
-import type { RuntimeMode } from "../domain/settings";
 import type { WorkbenchAsset } from "../store/workbench-store";
 import { GenerationActions } from "./GenerationActions";
 import { ImageTools } from "./ImageTools";
@@ -63,7 +62,6 @@ export function SlotInspector({
   saving = false,
   versionState,
   assets = [],
-  runtimeMode = "demo",
   generating = false,
   planNeedsRefresh = false,
   planningInputSignature,
@@ -89,7 +87,6 @@ export function SlotInspector({
   saving?: boolean;
   versionState?: SlotVersionState;
   assets?: WorkbenchAsset[];
-  runtimeMode?: RuntimeMode;
   generating?: boolean;
   planNeedsRefresh?: boolean;
   planningInputSignature?: string;
@@ -576,7 +573,6 @@ export function SlotInspector({
               <GenerationActions
                 hasVersion
                 generating={generating}
-                runtimeMode={runtimeMode}
                 variant="secondary"
                 disabled={generationDisabled}
                 disabledReason={generationDisabledReason}
@@ -609,7 +605,6 @@ export function SlotInspector({
             <GenerationActions
               hasVersion={Boolean(activeVersion)}
               generating={generating}
-              runtimeMode={runtimeMode}
               variant={generationActionVariant}
               disabled={generationDisabled}
               disabledReason={generationDisabledReason}

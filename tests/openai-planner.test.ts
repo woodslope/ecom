@@ -14,7 +14,7 @@ const project: PlanningProjectFacts = {
   sellingPoints: ["500ml", "Tritan 材质"],
 };
 
-function completeTaobaoCandidate(source: "demo" | "api" = "api"): PlatformPlanCandidate {
+function completeTaobaoCandidate(source: "api" | "api" = "api"): PlatformPlanCandidate {
   return {
     platformId: "taobao",
     source,
@@ -102,7 +102,7 @@ describe("OpenAIPlanner", () => {
   });
 
   it("calls a Chat Completions endpoint and returns a normalized API plan", async () => {
-    const candidate = completeTaobaoCandidate("demo");
+    const candidate = completeTaobaoCandidate("api");
     candidate.slots.reverse();
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(
@@ -141,6 +141,51 @@ describe("OpenAIPlanner", () => {
         { role: "system", content: expect.any(String) },
         { role: "user", content: expect.stringContaining("便携水杯") },
       ],
+    });
+  });
+
+  it("sends the selected Amazon task settings as explicit planner variables", async () => {
+    const candidate = completeAmazonCandidate();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(candidate) } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const planner = new OpenAIPlanner({
+      endpoint: "https://provider.example/v1/chat/completions",
+      apiKey: "test-secret-key",
+      model: "planning-model",
+      fetch: fetchMock,
+    });
+
+    await planner.plan(
+      project,
+      amazonRulePack,
+      new AbortController().signal,
+      [],
+      {
+        marketplaceId: "jp",
+        plannerMode: "legacy-combined",
+        listingImageCount: 7,
+        sizeTier: "4K",
+        stylePresetId: "soft-lifestyle",
+      },
+    );
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(JSON.parse(body.messages[1]!.content)).toMatchObject({
+      taskSettings: {
+        platformId: "amazon",
+        workflowId: "amazon-listing",
+        locale: "en-US",
+        marketplaceId: "jp",
+        plannerMode: "legacy-combined",
+        sizeTier: "4K",
+        stylePresetId: "soft-lifestyle",
+      },
     });
   });
 

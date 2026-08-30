@@ -4,7 +4,7 @@ import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import type { ProductFacts } from "../src/domain/projects/types";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 const productFacts: ProductFacts = {
@@ -34,7 +34,7 @@ function createDependencies(projectIds = ["project_seed", "task_seed", "task_see
     workspaceRepository: createMemoryWorkspaceRepository({
       now: () => "2026-07-21T10:00:00.000Z",
     }),
-    plannerEngine: demoPlanner,
+    plannerEngine: mockPlanner,
     compressImageFile: async (file: File) => file,
     createObjectURL: () => "blob:seed",
     revokeObjectURL: () => undefined,

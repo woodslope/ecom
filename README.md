@@ -1,6 +1,6 @@
 # Ecom
 
-浏览器本地优先的电商 AI 图片生产工作台。当前支持 Amazon Listing / A+ 和淘宝 / 天猫商品生产包，可使用本地 Demo 引擎，也可在浏览器中配置兼容 Provider。
+浏览器本地优先的电商 AI 图片生产工作台。当前支持 Amazon Listing / A+ 和淘宝 / 天猫商品生产包，唯一生产运行时是浏览器中配置的兼容 API Provider。
 
 ## 本地运行
 
@@ -46,5 +46,13 @@ VITE_BASE_PATH=/ecom/ pnpm build
 4. 打开工作流输出的 Pages 地址。
 
 应用不依赖必需后端。商品资料、图片、Session、ProductionRun、本地任务和 API 配置保存在当前浏览器；API Key 不会写入仓库或静态构建。外部 Provider 必须支持 HTTPS 和浏览器 CORS。当前浏览器治理使用仓库锁定的 Playwright Chromium；Safari/Firefox 与真实外部 Provider 不在本地自动验收范围内。
+
+## AI 配置与提示词架构
+
+AI 链路分为三层：`src/domain/prompting/` 维护业务规则、输出协议和 Prompt 版本；`src/services/ai/transport/` 负责 Chat Completions、Responses、SSE、超时和图片响应；`src/services/ai/runtime-factory.ts` 按命名服务组装 Store 使用的 Runtime。修改提示词不需要改页面或请求协议，修改 Provider 也不需要复制业务规则。
+
+设置保存为 `ecom-workbench.runtime-settings.api.v1`，用 `text` 和 `image` 两个命名服务分别配置根地址、Key、模型和协议。旧 v1/v2 开发设置不会读取或迁移。本地业务备份会排除运行设置和 API Key。ProductionRun 仅记录 API 生产尝试，并保存 Prompt 版本、模板/Profile 摘要及 Provider/模型/协议摘要。
+
+产品流程只有一条 API 生产路径：结构化任务设置统一进入 `taskSettings`，Prompt 只通过 `src/domain/prompting/builders.ts` 生成。历史区的“流程示例”是只读演示种子，不是 `ProductionRun`，回填也不会自动调用 API。
 
 更多架构和验收信息见 [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)、[PRODUCT_SPEC.md](PRODUCT_SPEC.md) 和 [核心功能对齐验收记录](docs/acceptance/2026-07-21-core-alignment.md)。

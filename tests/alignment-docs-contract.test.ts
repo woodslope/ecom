@@ -47,7 +47,6 @@ describe("AIS alignment documentation contract", () => {
 
     for (const path of [
       "docs/adr/0001-product-session-run-boundaries.md",
-      "tests/workspace-v2.test.ts",
       "tests/production-history.test.ts",
       "tests/run-export.test.ts",
       "tests/browser-smoke.mjs",

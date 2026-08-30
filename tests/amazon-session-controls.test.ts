@@ -28,7 +28,7 @@ describe("AmazonSessionControls", () => {
 
     const legacyPlan = {
       platformId: "amazon",
-      source: "demo",
+      source: "api",
       slots: [],
       amazonSession: {
         marketplaceId: "us",

@@ -26,6 +26,7 @@ import {
   unwrapStructuredJson,
 } from "./ai/transport";
 import type { TextServiceProtocol } from "../domain/settings/types";
+import { createPlannerTaskSettings, type PlannerTaskSettings } from "../domain/prompting";
 
 export interface OpenAIPlannerOptions {
   endpoint: string;
@@ -70,62 +71,6 @@ function safePlannerError(error: OpenAIPlannerError, apiKey: string): OpenAIPlan
     redactSecret(error.userMessage, apiKey),
     error.status,
   );
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-  }
-  return btoa(binary);
-}
-
-async function planningUserContent(
-  project: PlanningProjectFacts,
-  rulePack: PlatformRulePack,
-  referenceImages: readonly PlanningReferenceImage[],
-  signal: AbortSignal,
-  apiKey: string,
-  allowReferenceImages = true,
-  inputAssessment?: PlanningInputAssessment,
-  industryTemplate?: IndustryTemplateSnapshot,
-): Promise<unknown> {
-  const images = (allowReferenceImages ? referenceImages : []).filter(
-    (image) => image.blob.size > 0 && image.mimeType.startsWith("image/"),
-  );
-  const text = JSON.stringify({
-    project,
-    ...(rulePack.platformId === "amazon" && project.listingText?.trim()
-      ? {
-          originalListingText: project.listingText,
-          originalListingTextRule: "Use this pasted Listing as the primary source; do not discard title or bullet wording when planning slots.",
-        }
-      : {}),
-    rulePack,
-    ...(inputAssessment ? { inputAssessment } : {}),
-    ...(industryTemplate
-      ? {
-          industryTemplate: {
-            id: industryTemplate.id,
-            name: industryTemplate.name,
-            version: industryTemplate.version,
-            brief: industryTemplate.brief,
-            slots: industryTemplate.slots,
-          },
-        }
-      : {}),
-    referenceImages: images.map(({ name, mimeType }) => ({ name, mimeType })),
-    ...(!allowReferenceImages && referenceImages.length > 0
-      ? { referenceImagesSkipped: "The configured planner provider accepts text only; reference images were intentionally omitted." }
-      : {}),
-  });
-  // Image bytes are appended by the shared text transport. The domain prompt
-  // remains a deterministic text payload and never owns network encoding.
-  void images;
-  void signal;
-  void apiKey;
-  return text;
 }
 
 function enforcePlatformCandidate(
@@ -227,6 +172,7 @@ export class OpenAIPlanner implements PlannerEngine {
     amazonOptions?: AmazonPlanningRequestOptions,
     inputAssessment?: PlanningInputAssessment,
     industryTemplate?: IndustryTemplateSnapshot,
+    taskSettings?: PlannerTaskSettings,
   ): Promise<PlatformPlan> {
     if (signal.aborted) {
       throwAbortReason(signal, this.options.apiKey);
@@ -255,7 +201,12 @@ export class OpenAIPlanner implements PlannerEngine {
     // Rebind local name used below
     rulePack = effectivePack;
     const promptProfile = resolvePromptProfile(amazonOptions?.stylePresetId);
-
+    const effectiveTaskSettings = taskSettings ?? createPlannerTaskSettings(
+      rulePack,
+      amazonOptions,
+      promptProfile.id,
+      referenceImages.map((image) => image.name),
+    );
     const requestController = new AbortController();
     let removeAbortListener: () => void = () => undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -280,26 +231,17 @@ export class OpenAIPlanner implements PlannerEngine {
         }, this.options.timeoutMs ?? DEFAULT_PLANNER_REQUEST_TIMEOUT_MS);
       });
       const request = async () => {
-        const userContent = await planningUserContent(
-          project,
-          rulePack,
-          referenceImages,
-          requestController.signal,
-          this.options.apiKey,
-          this.options.plannerReferenceImages !== false,
-          inputAssessment,
-          industryTemplate,
-        );
-        if (requestController.signal.aborted) {
-          throwAbortReason(requestController.signal, this.options.apiKey);
-        }
         const prompt = buildPlannerPrompt({
           project,
           rulePack,
+          taskSettings: effectiveTaskSettings,
           referenceImages,
           inputAssessment,
           industryTemplate,
           strategySnippet: promptProfile ? buildPlanningStrategySnippet(promptProfile) : undefined,
+          ...(this.options.plannerReferenceImages === false && referenceImages.length > 0
+            ? { referenceImagesSkipped: "The configured planner provider accepts text only; reference images were intentionally omitted." }
+            : {}),
         });
         const transport = new OpenAICompatibleTextTransport({
           endpoint: this.options.endpoint,
@@ -312,7 +254,7 @@ export class OpenAIPlanner implements PlannerEngine {
         const result = await transport.request({
           service: "planner",
           model: this.options.model,
-          prompt: { ...prompt, user: String(userContent) },
+          prompt,
           referenceImages: this.options.plannerReferenceImages === false ? [] : referenceImages,
           maxOutputTokens: 12_000,
           signal: requestController.signal,

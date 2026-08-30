@@ -4,7 +4,7 @@ import type {
 } from "../workspace/project-workspace";
 import type { PlatformId } from "../platforms/types";
 
-export const DEFAULT_RUN_DATABASE_NAME = "ecom-workbench-runs-v1";
+export const DEFAULT_RUN_DATABASE_NAME = "ecom-workbench-runs-api-v1";
 export const DEFAULT_RUN_QUERY_LIMIT = 50;
 
 const RUN_DATABASE_VERSION = 1;
@@ -15,7 +15,6 @@ export interface ProductionRunFilters {
   projectId?: string;
   platformId?: PlatformId;
   workflowId?: PlatformWorkflowId;
-  source?: ProductionRun["source"];
   status?: ProductionRun["status"];
   updatedFrom?: string;
   updatedTo?: string;
@@ -106,7 +105,6 @@ function matchesFilters(run: ProductionRun, filters: ProductionRunFilters): bool
   return (!filters.projectId || run.projectId === filters.projectId) &&
     (!filters.platformId || run.platformId === filters.platformId) &&
     (!filters.workflowId || run.workflowId === filters.workflowId) &&
-    (!filters.source || run.source === filters.source) &&
     (!filters.status || run.status === filters.status) &&
     (!filters.updatedFrom || run.updatedAt >= filters.updatedFrom) &&
     (!filters.updatedTo || run.updatedAt <= filters.updatedTo);

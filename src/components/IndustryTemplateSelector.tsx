@@ -189,7 +189,7 @@ export function IndustryTemplateSelector({
       setSelectedId(saved.id);
       setSelectedVersion(snapshot.version);
       onChange(snapshot);
-      setMessage(`已保存“${saved.name}”v${snapshot.version}，并应用到当前任务。`);
+      setMessage(`已保存“${saved.name}”v${snapshot.version}，并设为当前任务的行业指导。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "行业模板保存失败");
     }
@@ -197,7 +197,7 @@ export function IndustryTemplateSelector({
 
   const applySelected = () => {
     onChange(selectedSnapshot);
-    setMessage(`已将“${selectedSnapshot.name}”v${selectedSnapshot.version}应用到当前任务。`);
+    setMessage(`已将“${selectedSnapshot.name}”v${selectedSnapshot.version}设为当前任务的行业指导。`);
   };
 
   const markDefault = () => {
@@ -290,7 +290,7 @@ export function IndustryTemplateSelector({
         }}
         footer={
           <div className="industry-template-dialog__footer">
-            <span>模板修改不会反向改变已有任务快照。</span>
+            <span>应用模板会替换当前任务的通用行业指导；平台尺寸、槽位和合规规则仍保留。历史任务快照不会被修改。</span>
             <Button disabled={transforming} onClick={() => setDialogOpen(false)}>完成</Button>
           </div>
         }
@@ -387,7 +387,7 @@ export function IndustryTemplateSelector({
 
             <div className="industry-template-library__apply">
               <Button type="button" variant="secondary" disabled={transforming} onClick={applySelected}>
-                应用模板
+                应用为当前行业指导
               </Button>
               <Button
                 type="button"

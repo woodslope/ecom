@@ -10,7 +10,6 @@ export interface ProductionRunFilters {
   projectId?: string;
   platformId?: PlatformId;
   workflowId?: PlatformWorkflowId;
-  source?: ProductionRun["source"];
   status?: ProductionRun["status"];
   shape?: ProductionShape;
 }
@@ -42,7 +41,6 @@ export function queryProductionRuns(
       if (filters.projectId && run.projectId !== filters.projectId) return false;
       if (filters.platformId && run.platformId !== filters.platformId) return false;
       if (filters.workflowId && run.workflowId !== filters.workflowId) return false;
-      if (filters.source && run.source !== filters.source) return false;
       if (filters.status && run.status !== filters.status) return false;
       if (filters.shape && !runShapes(run).has(filters.shape)) return false;
       if (search) {

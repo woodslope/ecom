@@ -19,7 +19,7 @@ export interface AmazonMarketplaceConfig {
   readonly localGuidance: readonly string[];
   readonly compliancePolicy: readonly string[];
   readonly forbiddenVisibleCopyTerms: readonly string[];
-  readonly demoCopy: Readonly<{
+  readonly sampleCopy: Readonly<{
     listing: readonly string[];
     aPlus: readonly string[];
     aPlusBody: string;
@@ -51,7 +51,7 @@ export const AMAZON_MARKETPLACES: readonly AmazonMarketplaceConfig[] = Object.fr
       "coupon",
       "free gift",
     ]),
-    demoCopy: Object.freeze({
+    sampleCopy: Object.freeze({
       listing: Object.freeze(["Core benefit", "Feature proof", "Lifestyle", "Size and fit", "Detail and material", "Package and trust"]),
       aPlus: Object.freeze(["Brand story", "Value story", "Feature system", "Usage story", "Verified benefit"]),
       aPlusBody: "A verified product benefit, presented clearly for quick comparison.",
@@ -74,7 +74,7 @@ export const AMAZON_MARKETPLACES: readonly AmazonMarketplaceConfig[] = Object.fr
       "日本站可见文案应使用自然日语，发布前需按 Amazon.co.jp 当前类目规则人工复核。",
     ]),
     forbiddenVisibleCopyTerms: Object.freeze(["セール", "割引", "クーポン", "無料ギフト"]),
-    demoCopy: Object.freeze({
+    sampleCopy: Object.freeze({
       listing: Object.freeze(["主な特長", "機能の根拠", "利用シーン", "サイズと適合", "素材とディテール", "セット内容"]),
       aPlus: Object.freeze(["ブランドストーリー", "価値の提案", "主な機能", "利用シーン", "確認済みの利点"]),
       aPlusBody: "確認済みの商品メリットを、比較しやすく分かりやすく説明します。",
@@ -97,7 +97,7 @@ export const AMAZON_MARKETPLACES: readonly AmazonMarketplaceConfig[] = Object.fr
       "德国站可见文案应使用自然德语，发布前需按 Amazon.de 当前类目规则人工复核。",
     ]),
     forbiddenVisibleCopyTerms: Object.freeze(["rabatt", "gutschein", "gratisgeschenk", "sonderangebot"]),
-    demoCopy: Object.freeze({
+    sampleCopy: Object.freeze({
       listing: Object.freeze(["Hauptvorteil", "Funktionsnachweis", "Anwendungsszene", "Größe und Passform", "Material und Details", "Lieferumfang"]),
       aPlus: Object.freeze(["Markengeschichte", "Wertversprechen", "Hauptfunktionen", "Anwendungsszene", "Bestätigter Vorteil"]),
       aPlusBody: "Ein bestätigter Produktvorteil, klar und leicht vergleichbar erklärt.",
@@ -120,7 +120,7 @@ export const AMAZON_MARKETPLACES: readonly AmazonMarketplaceConfig[] = Object.fr
       "法国站可见文案应使用自然法语，发布前需按 Amazon.fr 当前类目规则人工复核。",
     ]),
     forbiddenVisibleCopyTerms: Object.freeze(["réduction", "remise", "coupon", "cadeau gratuit"]),
-    demoCopy: Object.freeze({
+    sampleCopy: Object.freeze({
       listing: Object.freeze(["Avantage principal", "Preuve fonctionnelle", "Mise en situation", "Taille et compatibilité", "Matière et détails", "Contenu de la boîte"]),
       aPlus: Object.freeze(["Histoire de la marque", "Proposition de valeur", "Fonctions principales", "Mise en situation", "Avantage vérifié"]),
       aPlusBody: "Un avantage produit vérifié, présenté clairement pour faciliter la comparaison.",
@@ -143,7 +143,7 @@ export const AMAZON_MARKETPLACES: readonly AmazonMarketplaceConfig[] = Object.fr
       "意大利站可见文案应使用自然意大利语，发布前需按 Amazon.it 当前类目规则人工复核。",
     ]),
     forbiddenVisibleCopyTerms: Object.freeze(["sconto", "promozione", "coupon", "omaggio"]),
-    demoCopy: Object.freeze({
+    sampleCopy: Object.freeze({
       listing: Object.freeze(["Vantaggio principale", "Prova funzionale", "Scenario d'uso", "Dimensioni e compatibilità", "Materiali e dettagli", "Contenuto della confezione"]),
       aPlus: Object.freeze(["Storia del marchio", "Proposta di valore", "Funzioni principali", "Scenario d'uso", "Vantaggio verificato"]),
       aPlusBody: "Un vantaggio verificato del prodotto, spiegato in modo chiaro e confrontabile.",
@@ -166,7 +166,7 @@ export const AMAZON_MARKETPLACES: readonly AmazonMarketplaceConfig[] = Object.fr
       "西班牙站可见文案应使用自然西班牙语，发布前需按 Amazon.es 当前类目规则人工复核。",
     ]),
     forbiddenVisibleCopyTerms: Object.freeze(["descuento", "oferta", "cupón", "regalo gratis"]),
-    demoCopy: Object.freeze({
+    sampleCopy: Object.freeze({
       listing: Object.freeze(["Ventaja principal", "Prueba funcional", "Escena de uso", "Tamaño y compatibilidad", "Materiales y detalles", "Contenido de la caja"]),
       aPlus: Object.freeze(["Historia de la marca", "Propuesta de valor", "Funciones principales", "Escena de uso", "Ventaja verificada"]),
       aPlusBody: "Una ventaja verificada del producto, explicada de forma clara y fácil de comparar.",

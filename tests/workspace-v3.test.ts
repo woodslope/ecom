@@ -15,7 +15,7 @@ function createStorage() {
 }
 
 describe("workspace v3", () => {
-  it("stores only current sessions and migration metadata", async () => {
+  it("stores only current sessions under the API workspace key", async () => {
     const repository = createMemoryWorkspaceV3Repository({
       now: () => "2026-07-21T01:00:00.000Z",
     });
@@ -26,7 +26,6 @@ describe("workspace v3", () => {
       version: 3,
       projectId: "project_01",
       currentSessions: [],
-      migration: { sourceVersion: 2, status: "pending" },
       updatedAt: "2026-07-21T01:00:00.000Z",
     });
     expect(document).not.toHaveProperty("runs");
@@ -41,22 +40,15 @@ describe("workspace v3", () => {
     const repository = createLocalStorageWorkspaceV3Repository({ storage });
     const document = await repository.load("project_01");
 
-    await repository.save({
-      ...document,
-      migration: {
-        sourceVersion: 2,
-        status: "completed",
-        completedAt: "2026-07-21T02:00:00.000Z",
-      },
-    });
+    await repository.save(document);
 
     await expect(createLocalStorageWorkspaceV3Repository({ storage }).load("project_01"))
       .resolves.toMatchObject({
         version: 3,
         projectId: "project_01",
-        migration: { status: "completed" },
+        currentSessions: [],
       });
-    expect(JSON.parse(storage.getItem("ecom-workbench.workspace.v3.project_01")!))
+    expect(JSON.parse(storage.getItem("ecom-workbench.workspace.api.v1.project_01")!))
       .not.toHaveProperty("runs");
   });
 });

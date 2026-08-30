@@ -1,7 +1,7 @@
 import type { SizeTier } from "../platforms/amazon-catalog";
 import type { PlatformId, SlotDimensions } from "../platforms/types";
 
-export type GenerationSource = "demo" | "api";
+export type GenerationSource = "api";
 
 export interface GenerationReferenceImage {
   name: string;

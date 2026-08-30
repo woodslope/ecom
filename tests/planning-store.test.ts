@@ -13,7 +13,7 @@ import {
   createMemoryWorkspaceRepository,
   type PlatformSession,
 } from "../src/domain/workspace/project-workspace";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 const productFacts: ProductFacts = {
@@ -29,7 +29,7 @@ const productFacts: ProductFacts = {
   specifications: { 材质: "记忆棉" },
 };
 
-function createDependencies(plannerEngine: PlannerEngine = demoPlanner) {
+function createDependencies(plannerEngine: PlannerEngine = mockPlanner) {
   return {
     projectRepository: createMemoryProjectRepository({
       createId: () => "project_01",
@@ -53,7 +53,7 @@ describe("workbench planning state", () => {
     const dependencies = createDependencies({
       async plan(...args) {
         plannerCalls += 1;
-        return demoPlanner.plan(...args);
+        return mockPlanner.plan(...args);
       },
     });
     const project = await dependencies.projectRepository.create({
@@ -187,7 +187,7 @@ describe("workbench planning state", () => {
     const planner: PlannerEngine = {
       async plan(project, rulePack, signal, referenceImages) {
         receivedReferenceImages = referenceImages;
-        return demoPlanner.plan(project, rulePack, signal);
+        return mockPlanner.plan(project, rulePack, signal);
       },
     };
     const store = createWorkbenchStore(createDependencies(planner));
@@ -211,7 +211,7 @@ describe("workbench planning state", () => {
     const planner: PlannerEngine = {
       async plan(...args) {
         receivedReferenceImages = args[3];
-        return demoPlanner.plan(...args);
+        return mockPlanner.plan(...args);
       },
     };
     const store = createWorkbenchStore(createDependencies(planner));
@@ -327,7 +327,7 @@ describe("workbench planning state", () => {
     const planner: PlannerEngine = {
       async plan(project, rulePack, signal) {
         callCount += 1;
-        if (callCount === 1) return demoPlanner.plan(project, rulePack, signal);
+        if (callCount === 1) return mockPlanner.plan(project, rulePack, signal);
         return pendingReplan;
       },
     };
@@ -344,7 +344,7 @@ describe("workbench planning state", () => {
     expect(saved).toBe(false);
     expect(store.getState().plans.amazon).toEqual(previousPlan);
 
-    const nextPlan = await demoPlanner.plan(
+    const nextPlan = await mockPlanner.plan(
       { ...productFacts, sellingPoints: ["新的策划证据"] },
       (await import("../src/domain/platforms/amazon")).amazonRulePack,
       new AbortController().signal,
@@ -385,7 +385,7 @@ describe("workbench planning state", () => {
       planningError: "已取消本次策划，商品资料和已有结果未受影响。",
     });
 
-    release(await demoPlanner.plan(productFacts, (await import("../src/domain/platforms/amazon")).amazonRulePack, new AbortController().signal));
+    release(await mockPlanner.plan(productFacts, (await import("../src/domain/platforms/amazon")).amazonRulePack, new AbortController().signal));
     await request;
 
     expect(store.getState().plans.amazon).toBeUndefined();
@@ -416,7 +416,7 @@ describe("workbench planning state", () => {
     const planner: PlannerEngine = {
       async plan(project, rulePack, signal) {
         planningCallCount += 1;
-        const plan = await demoPlanner.plan(project, rulePack, signal);
+        const plan = await mockPlanner.plan(project, rulePack, signal);
         return planningCallCount === 1
           ? plan
           : {
@@ -489,7 +489,7 @@ describe("workbench planning state", () => {
     const planner: PlannerEngine = {
       async plan(project, rulePack, signal) {
         planningSignal = signal;
-        return demoPlanner.plan(project, rulePack, signal);
+        return mockPlanner.plan(project, rulePack, signal);
       },
     };
     const store = createWorkbenchStore({
@@ -546,7 +546,7 @@ describe("workbench planning state", () => {
     const planner: PlannerEngine = {
       async plan(project, rulePack, signal) {
         planningCallCount += 1;
-        const plan = await demoPlanner.plan(project, rulePack, signal);
+        const plan = await mockPlanner.plan(project, rulePack, signal);
         return planningCallCount === 1
           ? plan
           : {
@@ -588,12 +588,12 @@ describe("workbench planning state", () => {
   it("blocks a second platform plan while another platform plan is in flight", async () => {
     const amazonRulePack = (await import("../src/domain/platforms/amazon")).amazonRulePack;
     const taobaoRulePack = (await import("../src/domain/platforms/taobao")).taobaoRulePack;
-    const amazonPlan = await demoPlanner.plan(
+    const amazonPlan = await mockPlanner.plan(
       productFacts,
       amazonRulePack,
       new AbortController().signal,
     );
-    const taobaoPlan = await demoPlanner.plan(
+    const taobaoPlan = await mockPlanner.plan(
       productFacts,
       taobaoRulePack,
       new AbortController().signal,
@@ -661,7 +661,7 @@ describe("workbench planning state", () => {
     expect(store.getState().error).toContain("策划");
 
     release(
-      await demoPlanner.plan(
+      await mockPlanner.plan(
         productFacts,
         (await import("../src/domain/platforms/amazon")).amazonRulePack,
         new AbortController().signal,
@@ -675,7 +675,7 @@ describe("workbench planning state", () => {
     const planner: PlannerEngine = {
       async plan(project, rulePack, signal) {
         if (fail) throw new Error("模型服务暂时不可用");
-        return demoPlanner.plan(project, rulePack, signal);
+        return mockPlanner.plan(project, rulePack, signal);
       },
     };
     const store = createWorkbenchStore(createDependencies(planner));

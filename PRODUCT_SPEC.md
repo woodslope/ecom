@@ -16,14 +16,11 @@ The primary user is an independent shop operator without a dedicated ecommerce d
 
 The product helps with facts, planning, generation, limited editing, compliance review, history recovery, and delivery preparation. It does not promise automatic marketplace approval, factual correctness without review, or guaranteed model output quality.
 
-## 3. Product Truth And Runtime Modes
+## 3. Product Truth And Runtime
 
-The interface always identifies the runtime mode:
+API is the only production runtime. Settings contain independent text and image API roots, keys, models, and connection tests; the interface never offers a Demo/API switch. Missing API configuration does not block opening the app, editing product facts, or saving settings, but each capability reports its own missing text or image requirement.
 
-- **Demo**: deterministic local planning, mock images, and no external model call.
-- **API**: user-provided text and image services, with provider/model status visible but keys never shown in feedback or screenshots.
-
-The compact left rail always shows `Demo` or `API` and opens settings. The product has one declared light theme; operating-system dark preference does not switch to a separate palette.
+The compact left rail opens settings. The product has one declared light theme; operating-system dark preference does not switch to a separate palette.
 
 Settings support dual configuration for text planning and image generation, or single connection when the provider supports both. OpenRouter and DeepSeek capability differences are checked before requests; unsupported image editing never silently falls back to ordinary generation.
 
@@ -33,7 +30,7 @@ Settings support dual configuration for text planning and image generation, or s
 
 - `淘宝 / 天猫`: product intake, fixed gallery/detail planning, production, preview, export, and platform-scoped history.
 - `Amazon`: Listing/A+ intake, planning, production, export, and platform-scoped history.
-- `设置`: runtime mode, provider connection, connection tests, and local backup.
+- `设置`: text/image provider connection, connection tests, and local backup.
 
 Shared ProductProject facts and reference assets are selected or created inside the active platform task. ProductionRun records and local batch jobs open from that platform's history drawer; there is no standalone library, overview, or global-history navigation destination.
 
@@ -144,7 +141,7 @@ Both platforms expose one stable primary action, `生成图片策划`, and the s
 1. Start a new platform task, or resume/fork an existing task from that platform's history drawer.
 2. Provide product facts, selected product-reference images, or both; an empty input cannot continue.
 3. Adjust optional platform parameters or style only when needed.
-4. Run Demo or API planning through `生成图片策划`.
+4. Run API planning through `生成图片策划`.
 5. Review the plan, choose a slot, and inspect Chinese strategy/evidence beside the English model prompt.
 6. Edit and save visible copy or prompt, then generate one slot at a time.
 7. Optionally batch-generate the remaining slots for the current platform workflow, then monitor or cancel it from the platform history drawer.
@@ -164,19 +161,20 @@ Style presets and project style references apply to attached/A+ work where suppo
 
 ## 9. Persistence And Export
 
-Projects and assets remain in v2 business storage. Editable sessions and immutable history are now persisted separately:
+Projects and assets use the API-only business namespace. Editable sessions and immutable history are persisted separately:
 
-- Projects: `ecom-workbench.projects.v2`
+- Projects: `ecom-workbench.projects.v3`
 - Assets: `ecom-workbench-assets-v2`
-- Legacy migration source: `ecom-workbench.workspace.v2.{projectId}`
-- Current sessions: `ecom-workbench.workspace.v3.{projectId}`
-- Production runs: IndexedDB `ecom-workbench-runs-v1`
+- Current sessions: `ecom-workbench.workspace.api.v1.{projectId}`
+- Production runs: IndexedDB `ecom-workbench-runs-api-v1`
 
-Workspace V3 contains current sessions and migration metadata only. It does not contain runs, TaskRecord history, top-level plan/version mirrors, or Amazon workspace mirrors. The v2 source remains intact; migration is idempotent and is marked complete only after every valid run is stored and verified. New operations write ProductionRun events and no longer append TaskRecord entries.
+Workspace V3 contains current sessions only. It does not contain runs, TaskRecord history, top-level plan/version mirrors, or Amazon workspace mirrors. Old workspace data is intentionally discarded during this development reset and is not read or migrated. New operations write API-only ProductionRun events and no longer append TaskRecord entries.
 
 New sessions and runs persist the optional `planningInput` snapshot. Readers normalize old records that do not contain it, so this addition requires no destructive migration. Failed planning preserves the draft project, entered text, uploaded images, and selected references for retry.
 
-Runtime settings retain `ecom-workbench.runtime-settings.v1` for compatibility and normalize legacy credentials. Removing a project removes that project's runs, assets, V3/v2 workspace, and project metadata in a retryable order; it does not clear unrelated browser storage or runtime settings.
+Runtime settings use `ecom-workbench.runtime-settings.api.v1`; old v1/v2 keys are not read or migrated. Removing a project removes that project's runs, assets, API workspace, and project metadata in a retryable order; it does not clear unrelated browser storage or runtime settings.
+
+The product runtime is API-only. The history “流程示例” is a static, read-only `ExampleTaskSeed`, never a `ProductionRun`; copying it creates a `task-draft` without calling an API. Structured task options enter through `taskSettings`; `src/domain/prompting/builders.ts` is the sole Prompt construction entry point.
 
 Current export is a platform ZIP with manifest, Prompt snapshot, active version files, and missing-slot information. Partial export is allowed when explicitly labeled; historical re-export reads the independent RunRepository snapshot and does not change the current session.
 
@@ -204,7 +202,7 @@ External provider availability, CORS, quotas, model quality, generated-image fac
 
 ### Product experience
 
-- A solo operator can complete Listing default 7 and A+ default `standard-large` paths in Demo mode.
+- A solo operator can complete Listing default 7 and A+ default `standard-large` paths with configured API services.
 - Six Amazon marketplaces, Listing 7–12, A+ types/modules, Listing parsing, slot editing, version recovery, production history, export, and mask editing are reachable where listed above.
 - A solo operator can analyze a Taobao product, create the fixed 5+7 plan, generate/edit/version individual slots, preview the phone product page, and export partial/full or historical results.
 - Browser evidence covers the supported desktop matrix, the `899px` gate, system preference/accessibility conditions, empty/loading/success/failure/recovery, paged history, modal isolation, settings modes, production filters, and mask states under a timestamped `artifacts/cross-platform-ais/runs/` batch with a manifest.

@@ -7,7 +7,7 @@ import { ProductionRunCard } from "../src/components/ProductionRunCard";
 import { createAmazonPreviewModel } from "../src/domain/platforms/amazon-preview";
 import { resolvePlanningRulePack } from "../src/domain/planning/resolve-planning-pack";
 import type { ProductionRunRecord } from "../src/domain/tasks";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 
 const facts = {
   productName: "Northwind Travel Pillow",
@@ -31,7 +31,7 @@ async function createAmazonPlan(mode: "listing" | "aplus", aPlusType?: "standard
     ? { plannerMode: "listing" as const, marketplaceId: "us" as const, listingImageCount: 7 }
     : { plannerMode: "aplus" as const, marketplaceId: "us" as const, aPlusType };
   const { rulePack } = resolvePlanningRulePack("amazon", options);
-  return demoPlanner.plan(
+  return mockPlanner.plan(
     facts,
     rulePack,
     new AbortController().signal,
@@ -57,7 +57,7 @@ describe("Amazon mobile content preview", () => {
             slotKey: first.slotKey,
             assetId: "asset_main",
             createdAt: "2026-07-22T09:00:00.000Z",
-            source: "demo",
+            source: "api",
             promptSnapshot: first.prompt,
             visibleCopySnapshot: first.visibleCopy,
             planningInputSignature: "signature_listing",
@@ -156,7 +156,7 @@ describe("Amazon mobile content preview", () => {
         sessionId: "session_amazon_preview",
         platformId: "amazon",
         workflowId: "amazon-listing",
-        source: "demo",
+        source: "api",
         status: "planned",
         contextSnapshot: {
           sourceInput: { listingText: "" },
@@ -187,6 +187,15 @@ describe("Amazon mobile content preview", () => {
     }));
 
     expect(compactMarkup).toContain("手机预览");
+    const fullMarkup = renderToStaticMarkup(createElement(ProductionRunCard, {
+      record,
+      compact: false,
+      current: false,
+      assetUrls: {},
+      onResume: () => undefined,
+      onFork: () => undefined,
+    }));
+    expect(fullMarkup).toContain(">API<");
     expect(compactMarkup).toContain('aria-label="MAIN 尚未生成"');
     expect(compactMarkup).not.toContain("尚无生成结果");
     expect(compactMarkup).not.toContain("回看阶段");

@@ -18,7 +18,7 @@ function run(id: string, workflowId: ProductionRun["workflowId"]): ProductionRun
     sessionId: "session_01",
     platformId,
     workflowId,
-    source: "demo",
+    source: "api",
     status: "planned",
     contextSnapshot: {
       sourceInput: { listingText: "" },
@@ -29,7 +29,7 @@ function run(id: string, workflowId: ProductionRun["workflowId"]): ProductionRun
     },
     planSnapshot: {
       platformId,
-      source: "demo",
+      source: "api",
       slots: [{ slotKey: platformId === "taobao" ? "TB-HERO-01" : "MAIN", visibleCopy: "", strategy: "s", evidence: [], prompt: "p", negativePrompt: "n" }],
     },
     events: [],

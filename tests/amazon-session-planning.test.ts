@@ -8,7 +8,7 @@ import {
   calculateGenerationSize,
 } from "../src/domain/platforms/generation-size";
 import { resolveRulePackForPlan } from "../src/domain/platforms/resolve-rule-pack";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { amazonRulePack } from "../src/domain/platforms/amazon";
 
 const facts = {
@@ -21,8 +21,8 @@ const facts = {
 };
 
 describe("Batch 1 session-aware planning", () => {
-  it("demo planner stamps legacy-combined amazonSession when no options", async () => {
-    const plan = await demoPlanner.plan(facts, amazonRulePack, new AbortController().signal);
+  it("mock planner stamps the legacy-combined Amazon session when no options", async () => {
+    const plan = await mockPlanner.plan(facts, amazonRulePack, new AbortController().signal);
     expect(plan.slots).toHaveLength(15);
     expect(plan.amazonSession?.plannerMode).toBe("legacy-combined");
     expect(plan.amazonSession?.slotKeys).toHaveLength(15);
@@ -31,8 +31,8 @@ describe("Batch 1 session-aware planning", () => {
     );
   });
 
-  it("demo planner can produce AIS listing-only and default A+ sessions", async () => {
-    const listing = await demoPlanner.plan(
+  it("mock planner can produce AIS listing-only and default A+ sessions", async () => {
+    const listing = await mockPlanner.plan(
       facts,
       amazonRulePack,
       new AbortController().signal,
@@ -51,7 +51,7 @@ describe("Batch 1 session-aware planning", () => {
     expect(listing.amazonSession?.plannerMode).toBe("listing");
     expect(listing.amazonSession?.marketplaceId).toBe("us");
 
-    const aplus = await demoPlanner.plan(
+    const aplus = await mockPlanner.plan(
       facts,
       amazonRulePack,
       new AbortController().signal,
@@ -70,7 +70,7 @@ describe("Batch 1 session-aware planning", () => {
     });
     const candidate: PlatformPlanCandidate = {
       platformId: "amazon",
-      source: "demo",
+      source: "api",
       amazonSession,
       slots: rulePack.slots.map((slot) => ({
         slotKey: slot.key,

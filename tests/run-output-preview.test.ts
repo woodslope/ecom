@@ -10,7 +10,7 @@ function buildRun(): ProductionRun {
     sessionId: "session_preview",
     platformId: "amazon",
     workflowId: "amazon-listing",
-    source: "demo",
+    source: "api",
     status: "ready",
     contextSnapshot: {
       sourceInput: { listingText: "" },
@@ -25,7 +25,7 @@ function buildRun(): ProductionRun {
     },
     planSnapshot: {
       platformId: "amazon",
-      source: "demo",
+      source: "api",
       slots: ["MAIN", "PT01", "PT02"].map((slotKey) => ({
         slotKey,
         visibleCopy: "",

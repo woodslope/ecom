@@ -20,7 +20,6 @@ import { getPlatformRulePack } from "../domain/platforms/registry";
 import { resolveRulePackForPlan } from "../domain/platforms/resolve-rule-pack";
 import type { PlatformId } from "../domain/platforms/types";
 import type { ProductProject, UpdateProductProjectInput } from "../domain/projects/types";
-import type { RuntimeMode } from "../domain/settings";
 import type { PlatformSession } from "../domain/workspace/project-workspace";
 import { resolveSessionEffectiveProject } from "../domain/workspace/effective-facts";
 import {
@@ -65,7 +64,6 @@ export function PlatformWorkspace({
   platform,
   activeProject,
   assets,
-  runtimeMode = "api",
   amazonPlannerMode = "listing",
   loading,
   plan,
@@ -106,7 +104,6 @@ export function PlatformWorkspace({
   platform: PlatformId;
   activeProject: ProductProject | null;
   assets: WorkbenchAsset[];
-  runtimeMode?: RuntimeMode;
   amazonPlannerMode?: "listing" | "aplus";
   loading: boolean;
   plan?: PlatformPlan;
@@ -577,7 +574,6 @@ export function PlatformWorkspace({
               saving={planning || loading}
               versionState={slotVersionStates?.[selectedSlot.slotKey]}
               assets={assets}
-              runtimeMode={runtimeMode}
               generating={selectedSlotIsGenerating}
               planNeedsRefresh={planNeedsRefresh}
               planningInputSignature={currentPlanInputSignature}

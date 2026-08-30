@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { normalizePlatformPlan } from "../src/domain/planning/normalizer";
 import { resolvePlanningRulePack } from "../src/domain/planning/resolve-planning-pack";
 import { amazonRulePack } from "../src/domain/platforms/amazon";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { OpenAIPlanner } from "../src/services/openai-planner";
 import { buildExportPackage } from "../src/domain/export/build-export-package";
 import { strFromU8, unzipSync } from "fflate";
@@ -137,8 +137,8 @@ describe("Amazon A+ workflow", () => {
     expect(tile.prompt).not.toContain("Verified supporting copy 1.");
   });
 
-  it("creates external title and body for every standard A+ tile in Demo mode", async () => {
-    const plan = await demoPlanner.plan(
+  it("creates external title and body for every standard A+ tile in the mock runtime", async () => {
+    const plan = await mockPlanner.plan(
       facts,
       amazonRulePack,
       new AbortController().signal,
@@ -212,7 +212,7 @@ describe("Amazon A+ workflow", () => {
   });
 
   it("exports A+ external copy independently from image prompts", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       facts,
       amazonRulePack,
       new AbortController().signal,
@@ -263,7 +263,7 @@ describe("Amazon A+ workflow", () => {
   });
 
   it("renders external A+ copy as separate editable and copyable fields", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       facts,
       amazonRulePack,
       new AbortController().signal,
@@ -289,7 +289,7 @@ describe("Amazon A+ workflow", () => {
   });
 
   it("marks an existing plan stale when its A+ module arrangement changes", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       facts,
       amazonRulePack,
       new AbortController().signal,
@@ -308,7 +308,7 @@ describe("Amazon A+ workflow", () => {
   });
 
   it("keeps one compact A+ module owner before and after planning", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       facts,
       amazonRulePack,
       new AbortController().signal,

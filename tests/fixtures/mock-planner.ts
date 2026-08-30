@@ -1,5 +1,5 @@
-import { normalizePlatformPlan } from "../domain/planning/normalizer";
-import { resolvePlanningRulePack } from "../domain/planning/resolve-planning-pack";
+import { normalizePlatformPlan } from "../../src/domain/planning/normalizer";
+import { resolvePlanningRulePack } from "../../src/domain/planning/resolve-planning-pack";
 import type {
   AmazonPlanningRequestOptions,
   PlannerEngine,
@@ -7,13 +7,13 @@ import type {
   PlanningReferenceImage,
   PlatformPlan,
   PlatformPlanCandidate,
-} from "../domain/planning/types";
-import type { PlatformRulePack, PlatformSlotRule } from "../domain/platforms/types";
-import type { PlanningInputAssessment } from "../domain/planning/input-assessment";
-import { getAmazonMarketplaceByLocale } from "../domain/platforms/amazon-marketplaces";
-import { isAPlusExternalTextSlotRule } from "../domain/platforms/amazon-catalog";
-import { resolvePromptProfile } from "../domain/prompt-profiles/prompt-profiles";
-import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
+} from "../../src/domain/planning/types";
+import type { PlatformRulePack, PlatformSlotRule } from "../../src/domain/platforms/types";
+import type { PlanningInputAssessment } from "../../src/domain/planning/input-assessment";
+import { getAmazonMarketplaceByLocale } from "../../src/domain/platforms/amazon-marketplaces";
+import { isAPlusExternalTextSlotRule } from "../../src/domain/platforms/amazon-catalog";
+import { resolvePromptProfile } from "../../src/domain/prompt-profiles/prompt-profiles";
+import type { IndustryTemplateSnapshot } from "../../src/domain/prompt-templates/industry-template-packs";
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
@@ -225,8 +225,8 @@ function visibleCopyFor(
   }
   if (rulePack.platformId === "amazon") {
     if (isAPlusExternalTextSlotRule(rule)) return "";
-    const demoCopy = getAmazonMarketplaceByLocale(rulePack.locale).demoCopy;
-    const samples = rule.group === "a-plus" ? demoCopy.aPlus : demoCopy.listing;
+    const sampleCopy = getAmazonMarketplaceByLocale(rulePack.locale).sampleCopy;
+    const samples = rule.group === "a-plus" ? sampleCopy.aPlus : sampleCopy.listing;
     const sampleIndex = rule.group === "a-plus" ? rule.order - 1 : rule.order - 2;
     return samples[Math.max(0, sampleIndex) % samples.length] ?? rule.label;
   }
@@ -477,7 +477,7 @@ function promptFor(
     `商品：${project.productName}。`,
     text(project.category) ? `类目：${text(project.category)}。` : "",
     `槽位任务：${rule.purpose}`,
-    `画面要求：${rule.planningHints.join("；")}。`,
+    `画面要求：${templateGuidance ? templateGuidance : rule.planningHints.join("；")}。`,
     `事实依据：${evidence.join("；")}。`,
     missingInstruction,
     copyInstruction,
@@ -564,7 +564,7 @@ async function waitForDelay(delayMs: number, signal: AbortSignal): Promise<void>
   });
 }
 
-export class DemoPlanner implements PlannerEngine {
+export class MockPlanner implements PlannerEngine {
   constructor(private readonly delayMs = 0) {}
 
   async plan(
@@ -575,6 +575,7 @@ export class DemoPlanner implements PlannerEngine {
     amazonOptions?: AmazonPlanningRequestOptions,
     _inputAssessment?: PlanningInputAssessment,
     industryTemplate?: IndustryTemplateSnapshot,
+    _taskSettings?: import("../../src/domain/prompting/types").PlannerTaskSettings,
   ): Promise<PlatformPlan> {
     throwIfAborted(signal);
     await waitForDelay(this.delayMs, signal);
@@ -603,14 +604,14 @@ export class DemoPlanner implements PlannerEngine {
     const evidenceGroups = classifyProjectEvidence(project);
     const candidate: PlatformPlanCandidate = {
       platformId: effectivePack.platformId,
-      source: "demo",
+      source: "api",
       slots: effectivePack.slots.map((rule) => {
         const industrySlot = industryTemplate?.slots.find((slot) => slot.slotKey === rule.key);
         const slotEvidence = evidenceForRule(project, rule, evidenceGroups);
         const visibleCopy = visibleCopyFor(project, effectivePack, rule, slotEvidence[0]);
         const externalText = effectivePack.platformId === "amazon" && isAPlusExternalTextSlotRule(rule)
           ? (() => {
-              const copy = getAmazonMarketplaceByLocale(effectivePack.locale).demoCopy;
+              const copy = getAmazonMarketplaceByLocale(effectivePack.locale).sampleCopy;
               const tileIndex = Math.max(1, rule.order - 4);
               return {
                 title: `${copy.aPlus[4] ?? "Verified benefit"} ${tileIndex}`,
@@ -657,5 +658,5 @@ export class DemoPlanner implements PlannerEngine {
   }
 }
 
-export const demoPlanner = new DemoPlanner();
-export const slowInteractiveDemoPlanner = new DemoPlanner(3_000);
+export const mockPlanner = new MockPlanner();
+export const slowInteractiveMockPlanner = new MockPlanner(3_000);

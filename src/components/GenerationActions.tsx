@@ -12,7 +12,6 @@ import { useId } from "react";
 
 import { getPlatformRulePack } from "../domain/platforms/registry";
 import type { PlatformId } from "../domain/platforms/types";
-import type { RuntimeMode } from "../domain/settings";
 import { Button, IconButton, StatusMessage } from "./ui";
 
 export interface GenerationTarget {
@@ -124,7 +123,6 @@ export function GenerationActions({
 }: {
   hasVersion: boolean;
   generating: boolean;
-  runtimeMode?: RuntimeMode;
   disabled?: boolean;
   disabledReason?: string;
   errorMessage?: string;

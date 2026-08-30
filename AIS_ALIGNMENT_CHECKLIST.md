@@ -1,6 +1,6 @@
 # AIS ↔ Ecom 能力对照清单
 
-> Status: aligned baseline · reviewed 2026-07-21
+> Status: aligned baseline · reviewed 2026-08-30
 > 真相源：Ali-Aria/amazon-image-studio @ `bca89d728e415c453db363dcba30ac8ea243edaf`
 > 实现方式：A. 行为对齐；保留 Ecom 自有代码壳，不复制 AIS 源码。
 > 浏览器证据：`artifacts/cross-platform-ais/`
@@ -90,7 +90,7 @@ Ecom 提供三套项目级文本风格预设，也允许项目范围的 style as
 | 遮罩默认、绘制、错误、保存版本、900px | `artifacts/cross-platform-ais/task11-mask-*.png` |
 | 桌面门禁与滚动/溢出 | `desktop-gate-899.png`、`amazon-compact-900.png`、浏览器烟测几何断言 |
 
-Amazon 对齐相关的最新工程证据：`pnpm check:ui`、`pnpm typecheck`、`pnpm test`（74 个文件、387/387）、`pnpm build`、`VITE_BASE_PATH=/ecom/ pnpm build`、`pnpm test:browser` 均通过。浏览器仍有一个被过滤的既有 404 资源提示；没有未解释的 page error 或流程错误。淘宝任务 17–21、跨平台治理任务 22 和最终收口任务 23 的完整证据记录在 `TAOBAO_MXPAGE_IMPLEMENTATION_PLAN.md`。
+Amazon 对齐相关的最新工程证据：`pnpm check:ui`、`pnpm typecheck`、`pnpm test`（92 个文件、491/491）、`pnpm build`、`VITE_BASE_PATH=/ecom/ pnpm build`、`pnpm test:browser`、`pnpm test:browser:governance` 和 `pnpm test:ui:acceptance` 均通过。浏览器没有未解释的 page error 或流程错误；完整运行的截图和 manifest 保存在 `artifacts/cross-platform-ais/runs/<时间戳>/`。
 
 ## 7. 对齐完成定义
 

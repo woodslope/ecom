@@ -47,7 +47,7 @@ describe("shared workbench primitives", () => {
         null,
         createElement(Button, { loading: true, loadingLabel: "保存中" }, "保存"),
         createElement(Button, { size: "compact", disabled: true }, "禁用"),
-        createElement(StatusChip, { tone: "mode" }, "Demo"),
+        createElement(StatusChip, { tone: "mode" }, "API"),
         createElement(StatusChip, { tone: "info" }, "已选择"),
         createElement(SegmentedControl, {
           ariaLabel: "图片类型",
@@ -121,7 +121,7 @@ describe("shared workbench primitives", () => {
       ),
     );
     const status = renderToStaticMarkup(
-      createElement(StatusMessage, { tone: "warning" }, "当前为演示引擎"),
+      createElement(StatusMessage, { tone: "warning" }, "当前未配置文本 API"),
     );
     const liveStatus = renderToStaticMarkup(
       createElement(StatusMessage, { tone: "success", live: "polite" }, "保存完成"),
@@ -137,8 +137,8 @@ describe("shared workbench primitives", () => {
         createElement(IconButton, { label: "设置", disabled: true, children: "S" }),
         createElement(
           Select,
-          { "aria-label": "运行模式", disabled: true, value: "demo", onChange: () => undefined },
-          createElement("option", { value: "demo" }, "演示模式"),
+          { "aria-label": "运行时", disabled: true, value: "api", onChange: () => undefined },
+          createElement("option", { value: "api" }, "API"),
         ),
       ),
     );

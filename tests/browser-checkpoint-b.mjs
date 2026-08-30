@@ -6,8 +6,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
+import { installApiRuntimeSettings, startMockAiServer } from "./fixtures/mock-ai-server.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const mockServer = await startMockAiServer();
 const evidenceDir = resolve(
   process.env.ECOM_EVIDENCE_DIR ?? resolve(projectRoot, "artifacts/cross-platform-ais"),
 );
@@ -50,14 +52,19 @@ async function openAmazonPage(browser, baseUrl) {
     viewport: { width: 1280, height: 800 },
     permissions: ["clipboard-read", "clipboard-write"],
   });
+  await installApiRuntimeSettings(context, mockServer);
   const page = await context.newPage();
   const errors = [];
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(`console: ${message.text()}`);
+    if (message.type() === "error" && !message.text().includes("status of 503")) {
+      errors.push(`console: ${message.text()}`);
+    }
   });
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
   page.on("response", (response) => {
-    if (response.status() >= 400) errors.push(`HTTP ${response.status()}: ${response.url()}`);
+    if (response.status() >= 400 && !(response.status() === 503 && response.url().includes("/fail-once/"))) {
+      errors.push(`HTTP ${response.status()}: ${response.url()}`);
+    }
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByTestId("app-frame").waitFor({ state: "visible" });
@@ -503,7 +510,16 @@ async function verifyTask6Workflow(browser, baseUrl) {
     "切换后 V1 未成为活动版本",
   );
 
-  await page.goto(`${baseUrl}?fixture=image-fail-once`, { waitUntil: "networkidle" });
+  await page.evaluate((imageBaseUrl) => {
+    const key = "ecom-workbench.runtime-settings.api.v1";
+    const raw = localStorage.getItem(key);
+    const settings = raw ? JSON.parse(raw) : null;
+    if (settings?.image) {
+      settings.image.baseUrl = `${imageBaseUrl}/fail-once/v1`;
+      localStorage.setItem(key, JSON.stringify(settings));
+    }
+  }, mockServer.baseUrl);
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.getByTestId("app-frame").waitFor({ state: "visible" });
   await page.getByRole("heading", { name: "Amazon", exact: true }).waitFor({ state: "visible" });
   await resumeCurrentTask(page);
@@ -598,6 +614,7 @@ try {
 } finally {
   await browser?.close();
   if (!viteProcess.killed) viteProcess.kill("SIGTERM");
+  await mockServer.close();
   await Promise.race([
     once(viteProcess, "exit"),
     new Promise((resolveWait) => setTimeout(resolveWait, 2_000)),

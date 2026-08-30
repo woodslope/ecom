@@ -14,7 +14,7 @@ function createRun(id: string, updatedAt: string): ProductionRun {
     sessionId: "deleted_session",
     platformId: "amazon",
     workflowId: "amazon-listing",
-    source: "demo",
+    source: "api",
     status: "planned",
     contextSnapshot: {
       sourceInput: { listingText: "Title: Travel Pillow" },
@@ -29,7 +29,7 @@ function createRun(id: string, updatedAt: string): ProductionRun {
     },
     planSnapshot: {
       platformId: "amazon",
-      source: "demo",
+      source: "api",
       slots: [
         {
           slotKey: "MAIN",
@@ -103,7 +103,7 @@ describe("ProductionRunRepository", () => {
       },
       planSnapshot: {
         platformId: "taobao",
-        source: "demo",
+        source: "api",
         slots: [],
       },
     };

@@ -452,7 +452,7 @@ export function SettingsDialog({
             </div>
             <div className="privacy-info-card">
               <strong>API 请求</strong>
-              <span>仅在你使用 API 模式时，策划 Prompt 和参考图会发送到你配置的 AI 服务地址。Key 不会写入仓库或静态构建。</span>
+              <span>仅在你主动执行策划或生成时，Prompt 和参考图会发送到你配置的 AI 服务地址。Key 不会写入仓库或静态构建。</span>
             </div>
             <div className="privacy-info-card">
               <strong>本地备份</strong>

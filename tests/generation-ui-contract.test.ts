@@ -24,26 +24,26 @@ const versionState: SlotVersionState = {
       slotKey: "PT01",
       assetId: "asset_01",
       createdAt: "2026-07-17T08:00:00.000Z",
-      source: "demo",
+      source: "api",
       promptSnapshot: "First prompt",
       visibleCopySnapshot: "First copy",
       width: 2000,
       height: 2000,
       mimeType: "image/svg+xml",
-      parameters: { engine: "demo-svg-v1" },
+      parameters: { engine: "mock-svg-v1" },
     },
     {
       id: "version_02",
       slotKey: "PT01",
       assetId: "asset_02",
       createdAt: "2026-07-17T09:00:00.000Z",
-      source: "demo",
+      source: "api",
       promptSnapshot: "Second prompt",
       visibleCopySnapshot: "Second copy",
       width: 2000,
       height: 2000,
       mimeType: "image/svg+xml",
-      parameters: { engine: "demo-svg-v1" },
+      parameters: { engine: "mock-svg-v1" },
     },
   ],
 };
@@ -101,7 +101,6 @@ describe("generation UI contract", () => {
       createElement(GenerationActions, {
         hasVersion: false,
         generating: false,
-        runtimeMode: "api",
         onGenerate: () => undefined,
       }),
     );
@@ -129,7 +128,7 @@ describe("generation UI contract", () => {
     );
 
     expect(firstMarkup).toContain("生成图片");
-    expect(apiMarkup).not.toContain("本地 Demo mock");
+    expect(apiMarkup).not.toContain("本地 mock");
     expect(pendingMarkup).toContain("正在生成");
     expect(pendingMarkup).not.toContain("取消生成");
     expect(taskMarkup).toContain("Amazon · PT01 正在生成");

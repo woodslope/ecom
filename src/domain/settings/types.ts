@@ -1,10 +1,10 @@
-export type RuntimeMode = "demo" | "api";
+export type RuntimeMode = "api";
 export type ImageGenerationMode = "sync" | "async";
 export type ConnectionMode = "dual" | "single";
 export type TextServiceProtocol = "chat-completions" | "responses";
 export type ImageServiceProtocol = "images-api" | "chat-completions";
 
-/** A named, service-specific connection profile used by runtime settings v2. */
+/** A named, service-specific connection profile used by API-only runtime settings. */
 export interface NamedServiceConfig {
   name: string;
   baseUrl: string;
@@ -41,7 +41,7 @@ export interface RuntimeServiceSummary {
   protocol?: TextServiceProtocol | ImageServiceProtocol;
 }
 
-/** Versioned shape persisted under the v2 runtime settings key. */
+/** Current API-only shape persisted under the API runtime settings key. */
 export interface RuntimeSettingsV2 {
   version: 2;
   /** Preferred explicit schema marker; `version` remains for older callers. */
@@ -53,9 +53,8 @@ export interface RuntimeSettingsV2 {
 }
 
 export interface RuntimeSettings {
-  /** Legacy shared key retained for existing browser settings and adapters. */
+  /** Flattened settings used by the Store and settings UI. */
   mode: RuntimeMode;
-  /** Missing in legacy v1 payloads; normalization always resolves it to dual. */
   connectionMode?: ConnectionMode;
   apiKey: string;
   planningEndpoint: string;

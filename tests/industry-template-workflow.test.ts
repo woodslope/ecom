@@ -6,7 +6,7 @@ import { getPlatformRulePack } from "../src/domain/platforms/registry";
 import { createGeneralIndustryTemplateSnapshot } from "../src/domain/prompt-templates/industry-template-packs";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 describe("industry template workflow", () => {
@@ -15,7 +15,7 @@ describe("industry template workflow", () => {
     const planner: PlannerEngine = {
       async plan(...args) {
         receivedTemplate = args[6];
-        return demoPlanner.plan(...args);
+        return mockPlanner.plan(...args);
       },
     };
     const workspaceRepository = createMemoryWorkspaceRepository();

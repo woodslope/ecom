@@ -4,8 +4,8 @@ import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import type { ProductFacts } from "../src/domain/projects/types";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { demoImageGenerator } from "../src/services/demo-image-generator";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockImageGenerator } from "./fixtures/mock-ai";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 const productFacts: ProductFacts = {
@@ -36,8 +36,8 @@ function createDependencies() {
     workspaceRepository: createMemoryWorkspaceRepository({
       now: () => "2026-07-17T09:00:00.000Z",
     }),
-    plannerEngine: demoPlanner,
-    imageGenerator: demoImageGenerator,
+    plannerEngine: mockPlanner,
+    imageGenerator: mockImageGenerator,
     createVersionId: () => "version_main",
     createTaskId: () => taskIds.shift()!,
     now: () => "2026-07-17T10:00:00.000Z",

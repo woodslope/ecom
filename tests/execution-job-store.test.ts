@@ -10,8 +10,8 @@ import {
 } from "../src/domain/jobs/state";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { demoImageGenerator } from "../src/services/demo-image-generator";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockImageGenerator } from "./fixtures/mock-ai";
+import { mockPlanner } from "./fixtures/mock-planner";
 import {
   createWorkbenchStore,
   type WorkbenchStoreDependencies,
@@ -36,8 +36,8 @@ function dependencies(): WorkbenchStoreDependencies {
     assetRepository: createMemoryAssetRepository(),
     workspaceRepository: createMemoryWorkspaceRepository(),
     executionJobRepository: createMemoryExecutionJobRepository(),
-    plannerEngine: demoPlanner,
-    imageGenerator: demoImageGenerator,
+    plannerEngine: mockPlanner,
+    imageGenerator: mockImageGenerator,
     compressImageFile: async (file: File) => file,
     createObjectURL: () => "blob:job",
     revokeObjectURL: () => undefined,
@@ -120,7 +120,7 @@ describe("workbench execution jobs", () => {
           await generationGate;
           firstSignalAborted = signal.aborted;
         }
-        return demoImageGenerator.generate(request, signal);
+        return mockImageGenerator.generate(request, signal);
       },
     };
     const store = createWorkbenchStore(deps);
@@ -211,7 +211,7 @@ describe("workbench execution jobs", () => {
             await generationGate;
             firstSignalAborted = signal.aborted;
           }
-          return demoImageGenerator.generate(request, signal);
+          return mockImageGenerator.generate(request, signal);
         },
       },
     });
@@ -221,7 +221,7 @@ describe("workbench execution jobs", () => {
       imageGenerator: {
         async generate(request, signal) {
           secondGenerationCalls += 1;
-          return demoImageGenerator.generate(request, signal);
+          return mockImageGenerator.generate(request, signal);
         },
       },
     });
@@ -337,7 +337,7 @@ describe("workbench execution jobs", () => {
     deps.imageGenerator = {
       async generate(request, signal) {
         generationCalls += 1;
-        return demoImageGenerator.generate(request, signal);
+        return mockImageGenerator.generate(request, signal);
       },
     };
     const store = createWorkbenchStore(deps);

@@ -14,7 +14,7 @@ import {
 import { createPlanningInputSignature } from "../src/domain/planning/input-signature";
 import type { ProductProject } from "../src/domain/projects/types";
 import { amazonRulePack } from "../src/domain/platforms/amazon";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 import type { PlatformSession } from "../src/domain/workspace/project-workspace";
 
 const project: ProductProject = {
@@ -51,7 +51,7 @@ describe("platform workspace contract", () => {
   });
 
   it("restores an existing Taobao session without overwriting its selected analysis inputs", () => {
-    expect(appSource).not.toContain("startTaobaoSession");
+    expect(appSource).toContain("startTaobaoSession");
     expect(appSource).toContain("productionSession={currentTaobaoSession}");
     expect(appSource).not.toContain("setProductPickerPlatform");
     expect(appSource).toContain("platform-page-layout");
@@ -163,8 +163,8 @@ describe("platform workspace contract", () => {
     expect(workspaceDraftReason(false, false)).toBeNull();
   });
 
-  it("renders a persisted complete plan with a local editor and honest demo source", async () => {
-    const plan = await demoPlanner.plan(project.facts, amazonRulePack, new AbortController().signal);
+  it("renders a persisted complete plan with a local editor and api source", async () => {
+    const plan = await mockPlanner.plan(project.facts, amazonRulePack, new AbortController().signal);
     const markup = renderToStaticMarkup(
       createElement(PlatformWorkspace, {
         platform: "amazon",
@@ -215,7 +215,7 @@ describe("platform workspace contract", () => {
   });
 
   it("shows review stage with one image-generation primary action at 0/7", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       project.facts,
       amazonRulePack,
       new AbortController().signal,
@@ -283,7 +283,7 @@ describe("platform workspace contract", () => {
   });
 
   it("keeps an old plan visible but blocks downstream work until it is replanned", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       project.facts,
       amazonRulePack,
       new AbortController().signal,
@@ -340,7 +340,7 @@ describe("platform workspace contract", () => {
   });
 
   it("locks another selected slot while the app-level task banner owns cancel", async () => {
-    const plan = await demoPlanner.plan(project.facts, amazonRulePack, new AbortController().signal);
+    const plan = await mockPlanner.plan(project.facts, amazonRulePack, new AbortController().signal);
     const markup = renderToStaticMarkup(
       createElement(PlatformWorkspace, {
         platform: "amazon",
@@ -371,7 +371,7 @@ describe("platform workspace contract", () => {
   });
 
   it("keeps generation disabled until an inconsistent workspace is restored", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       project.facts,
       amazonRulePack,
       new AbortController().signal,
@@ -454,7 +454,7 @@ describe("platform workspace contract", () => {
   });
 
   it("keeps planning, generation, and export controls locked while loading", async () => {
-    const plan = await demoPlanner.plan(project.facts, amazonRulePack, new AbortController().signal);
+    const plan = await mockPlanner.plan(project.facts, amazonRulePack, new AbortController().signal);
     const markup = renderToStaticMarkup(
       createElement(PlatformWorkspace, {
         platform: "amazon",
@@ -481,7 +481,7 @@ describe("platform workspace contract", () => {
   });
 
   it("does not count a generated image from an older slot draft as completed", async () => {
-    const plan = await demoPlanner.plan(project.facts, amazonRulePack, new AbortController().signal);
+    const plan = await mockPlanner.plan(project.facts, amazonRulePack, new AbortController().signal);
     const markup = renderToStaticMarkup(
       createElement(PlatformWorkspace, {
         platform: "amazon",
@@ -517,13 +517,13 @@ describe("platform workspace contract", () => {
                 slotKey: "MAIN",
                 assetId: "asset_main",
                 createdAt: project.createdAt,
-                source: "demo",
+                source: "api",
                 promptSnapshot: "Older prompt",
                 visibleCopySnapshot: "",
                 width: 2000,
                 height: 2000,
                 mimeType: "image/svg+xml",
-                parameters: { engine: "demo" },
+                parameters: { engine: "mock-svg-v1" },
               },
             ],
           },
@@ -545,7 +545,7 @@ describe("platform workspace contract", () => {
   });
 
   it("shows produce-stage continuation with one primary action after 1/7 outputs", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       project.facts,
       amazonRulePack,
       new AbortController().signal,
@@ -558,7 +558,7 @@ describe("platform workspace contract", () => {
       slotKey: "MAIN",
       assetId: "asset_main",
       createdAt: project.createdAt,
-      source: "demo" as const,
+      source: "api" as const,
       promptSnapshot: plan.slots[0].prompt,
       visibleCopySnapshot: plan.slots[0].visibleCopy,
       planningInputSignature: signature,

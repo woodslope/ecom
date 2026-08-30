@@ -8,7 +8,7 @@ import {
 } from "../src/domain/workspace/platform-stage";
 import type { PlatformSession } from "../src/domain/workspace/project-workspace";
 import { taobaoRulePack } from "../src/domain/platforms/taobao";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 
 const facts = {
   productName: "云感旅行颈枕",
@@ -18,7 +18,7 @@ const facts = {
 };
 
 async function taobaoPlan() {
-  return demoPlanner.plan(
+  return mockPlanner.plan(
     facts,
     taobaoRulePack,
     new AbortController().signal,
@@ -66,7 +66,7 @@ describe("shared platform stage", () => {
                 slotKey: first.slotKey,
                 assetId: "a1",
                 createdAt: "2026-07-21T00:00:00.000Z",
-                source: "demo",
+                source: "api",
                 promptSnapshot: first.prompt,
                 visibleCopySnapshot: first.visibleCopy,
                 planningInputSignature: "sig",

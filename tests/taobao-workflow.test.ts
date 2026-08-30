@@ -4,7 +4,8 @@ import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
 import { analyzeTaobaoProduct } from "../src/domain/platforms/taobao-analysis";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
+import { mockImageGenerator } from "./fixtures/mock-ai";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 const facts = {
@@ -30,6 +31,8 @@ function dependencies() {
     workspaceRepository: createMemoryWorkspaceRepository({
       now: () => "2026-07-21T08:00:00.000Z",
     }),
+    plannerEngine: mockPlanner,
+    imageGenerator: mockImageGenerator,
     compressImageFile: async (file: File) => file,
     createObjectURL: () => "blob:test/reference",
     revokeObjectURL: () => undefined,
@@ -181,7 +184,7 @@ describe("Taobao product workflow", () => {
       plannerEngine: {
         async plan(...args) {
           plannerCalls += 1;
-          return demoPlanner.plan(...args);
+          return mockPlanner.plan(...args);
         },
       },
     });
@@ -215,7 +218,7 @@ describe("Taobao product workflow", () => {
 
   it("starts from only a product image without inventing hidden product facts", async () => {
     const deps = dependencies();
-    const store = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
+    const store = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
     await store.getState().initialize();
 
     const session = await store.getState().analyzeTaobaoProduct({

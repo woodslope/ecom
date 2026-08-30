@@ -11,6 +11,7 @@ import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project
 import { extractSharedFactsFromRun } from "../src/domain/projects/deposition";
 import { OpenAIProductLocalizer } from "../src/services/openai-product-localizer";
 import { createWorkbenchStore } from "../src/store/workbench-store";
+import { mockPlanner } from "./fixtures/mock-planner";
 
 const facts: ProductFacts = {
   productName: "Northwind 500 ml 旅行杯",
@@ -36,6 +37,7 @@ function dependencies() {
     workspaceRepository: createMemoryWorkspaceRepository({
       now: () => "2026-07-23T08:00:00.000Z",
     }),
+    plannerEngine: mockPlanner,
     compressImageFile: async (file: File) => file,
     createObjectURL: () => "blob:test",
     revokeObjectURL: () => undefined,

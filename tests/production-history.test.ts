@@ -7,8 +7,8 @@ import type { ProductionRun } from "../src/domain/workspace/project-workspace";
 import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { demoPlanner } from "../src/services/demo-planner";
-import { demoImageGenerator } from "../src/services/demo-image-generator";
+import { mockPlanner } from "./fixtures/mock-planner";
+import { mockImageGenerator } from "./fixtures/mock-ai";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 const project = (id: string, name: string): ProductProject => ({
@@ -22,7 +22,7 @@ function run(overrides: Partial<ProductionRun> & Pick<ProductionRun, "id" | "pro
   const { id, projectId, workflowId, ...rest } = overrides;
   return {
     id, projectId, sessionId: `session_${id}`,
-    platformId, workflowId, source: "demo", status: "planned",
+    platformId, workflowId, source: "api", status: "planned",
     contextSnapshot: {
       sourceInput: { listingText: "Title: Product" },
       options: platformId === "amazon"
@@ -31,7 +31,7 @@ function run(overrides: Partial<ProductionRun> & Pick<ProductionRun, "id" | "pro
       selectedReferenceAssetIds: [],
     },
     planSnapshot: {
-      platformId, source: "demo",
+      platformId, source: "api",
       ...(platformId === "amazon" ? { amazonSession: {
         marketplaceId: "us" as const,
         plannerMode: workflowId === "amazon-aplus" ? "aplus" as const : "listing" as const,
@@ -77,7 +77,7 @@ describe("production history query", () => {
     const before = JSON.stringify(records);
 
     const result = queryProductionRuns(records, {
-      search: "pillow", platformId: "amazon", workflowId: "amazon-aplus", source: "api", status: "partial", shape: "landscape",
+      search: "pillow", platformId: "amazon", workflowId: "amazon-aplus", status: "partial", shape: "landscape",
     });
 
     expect(result.map(({ run }) => run.id)).toEqual(["r3"]);
@@ -91,8 +91,8 @@ describe("production history query", () => {
       projectRepository: createMemoryProjectRepository({ createId: () => "p1", now: () => "2026-07-20T01:00:00.000Z" }),
       assetRepository: createMemoryAssetRepository({ createId: () => `asset_${++id}`, now: () => `2026-07-20T0${Math.min(id + 1, 9)}:00:00.000Z` }),
       workspaceRepository: createMemoryWorkspaceRepository({ now: () => "2026-07-20T01:00:00.000Z" }),
-      plannerEngine: demoPlanner,
-      imageGenerator: demoImageGenerator,
+      plannerEngine: mockPlanner,
+      imageGenerator: mockImageGenerator,
       createVersionId: () => `version_${++id}`,
       createTaskId: () => `event_${++id}`,
       now: () => `2026-07-20T${String(Math.min(++id, 23)).padStart(2, "0")}:00:00.000Z`,
@@ -148,7 +148,7 @@ describe("production history query", () => {
       projectRepository: createMemoryProjectRepository({ createId: () => "p1" }),
       assetRepository: createMemoryAssetRepository(),
       workspaceRepository: createMemoryWorkspaceRepository(),
-      plannerEngine: demoPlanner,
+      plannerEngine: mockPlanner,
       imageGenerator: { async generate() { throw new Error("provider unavailable"); } },
       compressImageFile: async (file: File) => file,
       createObjectURL: () => "blob:unused",

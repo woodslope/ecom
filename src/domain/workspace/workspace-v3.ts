@@ -1,18 +1,11 @@
 import type { PlatformSession } from "./project-workspace";
 
-export const PROJECT_WORKSPACE_V3_STORAGE_PREFIX = "ecom-workbench.workspace.v3.";
-
-export interface WorkspaceMigrationState {
-  sourceVersion: 2;
-  status: "pending" | "completed";
-  completedAt?: string;
-}
+export const PROJECT_WORKSPACE_V3_STORAGE_PREFIX = "ecom-workbench.workspace.api.v1.";
 
 export interface ProjectWorkspaceV3Document {
   version: 3;
   projectId: string;
   currentSessions: PlatformSession[];
-  migration: WorkspaceMigrationState;
   updatedAt: string;
 }
 
@@ -44,7 +37,6 @@ function emptyDocument(
     version: 3,
     projectId,
     currentSessions: [],
-    migration: { sourceVersion: 2, status: "pending" },
     updatedAt: now(),
   };
 }
@@ -70,31 +62,12 @@ function normalizeStoredDocument(
     return emptyDocument(projectId, now);
   }
   const record = value as Record<string, unknown>;
-  const migration = record.migration;
-  if (
-    typeof migration !== "object" ||
-    migration === null ||
-    Array.isArray(migration) ||
-    (migration as { sourceVersion?: unknown }).sourceVersion !== 2 ||
-    ((migration as { status?: unknown }).status !== "pending" &&
-      (migration as { status?: unknown }).status !== "completed")
-  ) {
-    return emptyDocument(projectId, now);
-  }
-  const migrationRecord = migration as Record<string, unknown>;
   return {
     version: 3,
     projectId,
     currentSessions: Array.isArray(record.currentSessions)
       ? structuredClone(record.currentSessions) as PlatformSession[]
       : [],
-    migration: {
-      sourceVersion: 2,
-      status: migrationRecord.status as WorkspaceMigrationState["status"],
-      ...(typeof migrationRecord.completedAt === "string"
-        ? { completedAt: migrationRecord.completedAt }
-        : {}),
-    },
     updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : now(),
   };
 }

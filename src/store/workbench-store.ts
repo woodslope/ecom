@@ -137,7 +137,6 @@ import { extractSharedFactsFromRun, mergeProductFacts } from "../domain/projects
 import {
   DEFAULT_LOCALIZATION_RULES,
   cloneProductFacts,
-  demoProductLocalizer,
   enforceLocalizationRules,
   productFactsEqual,
   type PlatformFactsDraft,
@@ -155,6 +154,7 @@ import {
   defaultRuntimeSettings,
   normalizeRuntimeSettings,
   runtimeImageServiceSummary,
+  runtimeImageApiKey,
   runtimeTextApiKey,
   runtimeTextServiceSummary,
   runtimeSupportsImageEditing,
@@ -170,8 +170,8 @@ import type { AiRuntimeFactory } from "../services/ai/runtime-factory";
 import { createAiRuntimeFactory } from "../services/ai/runtime-factory";
 import type { TaskRecord } from "../domain/tasks";
 import { PROMPT_BUNDLE_VERSION, PROMPT_CONTRACT_VERSION } from "../domain/prompting";
+import { createPlannerTaskSettings } from "../domain/prompting/planner-settings";
 import {
-  createLocalStorageWorkspaceRepository,
   createMemoryWorkspaceRepository,
   type AmazonModeWorkspaceSnapshot,
   type AmazonWorkspaceMode,
@@ -188,18 +188,6 @@ import {
   createMemoryWorkspaceV3Repository,
   type ProjectWorkspaceV3Repository,
 } from "../domain/workspace/workspace-v3";
-import { demoPlanner, slowInteractiveDemoPlanner } from "../services/demo-planner";
-import {
-  demoCopilot,
-  interactiveDemoCopilot,
-  slowInteractiveDemoCopilot,
-} from "../services/demo-copilot";
-import { demoIndustryTemplateTransformer } from "../services/demo-industry-template-transformer";
-import {
-  createFailOnceImageGenerator,
-  demoImageGenerator,
-  interactiveDemoImageGenerator,
-} from "../services/demo-image-generator";
 
 export interface WorkbenchAsset {
   metadata: AssetMetadata;
@@ -217,6 +205,7 @@ export interface StartAmazonSessionInput {
   selectedStyleReferenceId?: string | null;
   industryTemplate?: IndustryTemplateSnapshot;
   options: AmazonPlanningRequestOptions;
+  autoPlan?: boolean;
 }
 
 export interface StartTaobaoSessionInput {
@@ -261,7 +250,7 @@ export interface WorkbenchStoreDependencies {
   executionJobCoordinator?: ExecutionJobCoordinator;
   historyQueryService?: HistoryQueryService;
   settingsRepository?: SettingsRepository;
-  /** Preferred runtime boundary; legacy engine factories remain supported during migration. */
+  /** Preferred runtime boundary; test engines may be injected explicitly. */
   aiRuntimeFactory?: AiRuntimeFactory;
   plannerEngine?: PlannerEngine;
   createPlannerEngine?: (settings: RuntimeSettings) => PlannerEngine;
@@ -692,29 +681,36 @@ export function createWorkbenchStore(
         })
       : null
   );
-  const plannerEngine = dependencies.plannerEngine ?? demoPlanner;
-  const productLocalizer = dependencies.productLocalizer ?? demoProductLocalizer;
+  const plannerEngine = dependencies.plannerEngine;
+  const productLocalizer = dependencies.productLocalizer;
   // Keep the operation guard slightly longer than the API planner's own request timeout.
   const planningTimeoutMs = dependencies.planningTimeoutMs ?? 135_000;
-  const imageGenerator = dependencies.imageGenerator ?? demoImageGenerator;
-  const copilotEngine = dependencies.copilotEngine ?? demoCopilot;
-  const industryTemplateTransformer =
-    dependencies.industryTemplateTransformer ?? demoIndustryTemplateTransformer;
+  const imageGenerator = dependencies.imageGenerator;
+  const copilotEngine = dependencies.copilotEngine;
+  const industryTemplateTransformer = dependencies.industryTemplateTransformer;
   const aiRuntimeFactory = dependencies.aiRuntimeFactory;
   const resolveAiRuntime = (settings: RuntimeSettings) => {
-    // Keep the browser's unconfigured API state on the local demo engines. The
-    // runtime factory is still available for configured API settings, while a
-    // fresh install remains offline and deterministic until credentials/models
-    // are supplied.
-    const configured = Boolean(
-      runtimeTextApiKey(settings) ||
-        settings.imageApiKey?.trim() ||
-        settings.planningModel.trim() ||
-        settings.imageModel.trim(),
-    );
-    return settings.mode === "api" && configured && aiRuntimeFactory
+    return settings.mode === "api" && aiRuntimeFactory
       ? aiRuntimeFactory.resolve(settings)
       : null;
+  };
+  const requireTextRuntime = (settings: RuntimeSettings): string | null => {
+    const hasInjectedTextEngine = Boolean(aiRuntimeFactory === undefined && (dependencies.createPlannerEngine || plannerEngine));
+    if (!hasInjectedTextEngine && !runtimeTextApiKey(settings)) return "未配置文本 API Key，请先在设置中填写文本 API。";
+    if (!hasInjectedTextEngine && !settings.planningModel.trim()) return "未配置文本模型，请先在设置中填写文本模型。";
+    if (!aiRuntimeFactory && !dependencies.createPlannerEngine && !plannerEngine) {
+      return "文本 API 运行时不可用，请检查运行设置。";
+    }
+    return null;
+  };
+  const requireImageRuntime = (settings: RuntimeSettings): string | null => {
+    const hasInjectedImageEngine = Boolean(aiRuntimeFactory === undefined && (dependencies.createImageGenerator || imageGenerator));
+    if (!hasInjectedImageEngine && !runtimeImageApiKey(settings)) return "未配置图片 API Key，请先在设置中填写图片 API。";
+    if (!hasInjectedImageEngine && settings.connectionMode !== "single" && !settings.imageModel.trim()) return "未配置图片模型，请先在设置中填写图片模型。";
+    if (!aiRuntimeFactory && !dependencies.createImageGenerator && !imageGenerator) {
+      return "图片 API 运行时不可用，请检查运行设置。";
+    }
+    return null;
   };
   const generationTimeoutMs = dependencies.generationTimeoutMs ?? 60_000;
   const createVersionId = dependencies.createVersionId ?? (() => createStableId("version"));
@@ -1446,7 +1442,9 @@ export function createWorkbenchStore(
           amazonPlannerMode: plannerMode,
           planningError: null,
         }));
-        await get().planPlatform("amazon", planningOptions);
+        if (input.autoPlan !== false) {
+          await get().planPlatform("amazon", planningOptions);
+        }
         return get().sessions.find((session) => session.id === draftSession.id) ?? draftSession;
       } catch (error) {
         set({ planningPlatformId: null, planningError: planningErrorMessage(error) });
@@ -2762,7 +2760,7 @@ export function createWorkbenchStore(
         set({ planningError: "当前有 Copilot 请求正在处理，请完成或取消后再重新策划。" });
         return null;
       }
-      const runtimeValidationError = validateRuntimeSettings(get().runtimeSettings);
+      const runtimeValidationError = requireTextRuntime(get().runtimeSettings);
       if (runtimeValidationError) {
         set({ planningError: `API 设置不可用：${runtimeValidationError}` });
         return null;
@@ -2967,11 +2965,11 @@ export function createWorkbenchStore(
           if (targetLocale !== "zh-CN") {
             try {
               const runtime = resolveAiRuntime(get().runtimeSettings);
-              const activeLocalizer = runtime?.productLocalizer ?? (
-                get().runtimeSettings.mode === "api" && dependencies.createProductLocalizer
+              const activeLocalizer = runtime?.productLocalizer ??
+                (dependencies.createProductLocalizer
                   ? dependencies.createProductLocalizer(get().runtimeSettings)
-                  : productLocalizer
-              );
+                  : productLocalizer);
+              if (!activeLocalizer) throw new Error("文本 API 运行时不可用。");
               localizedFacts = await activeLocalizer.localize(
                 sourcePlanningFacts,
                 targetLocale,
@@ -3007,7 +3005,7 @@ export function createWorkbenchStore(
               ...(platformId === "amazon" && effectiveAmazonOptions
                 ? { options: optionsForPlan("amazon", {
                     platformId: "amazon",
-                    source: "demo",
+                    source: "api",
                     slots: [],
                     amazonSession: resolvePlanningRulePack("amazon", effectiveAmazonOptions).amazonSession,
                   }) }
@@ -3053,17 +3051,20 @@ export function createWorkbenchStore(
           selectedReferenceAssetIds,
         );
         const runtime = resolveAiRuntime(get().runtimeSettings);
-        const activePlannerEngine = runtime?.planner ?? (
-          get().runtimeSettings.mode === "api" && dependencies.createPlannerEngine
+        const activePlannerEngine = runtime?.planner ??
+          (dependencies.createPlannerEngine
             ? dependencies.createPlannerEngine(get().runtimeSettings)
-            : plannerEngine
-        );
+            : plannerEngine);
+        if (!activePlannerEngine) throw new Error("文本 API 运行时不可用。");
         const plannerFacts = platformId === "amazon"
           ? {
               ...planningFacts,
               listingText: planningSession?.sourceInput.listingText ?? "",
             }
           : planningFacts;
+        const taskStylePresetId = platformId === "amazon" && effectiveAmazonOptions && "stylePresetId" in effectiveAmazonOptions
+          ? effectiveAmazonOptions.stylePresetId
+          : taobaoProfileId;
         const rawPlan = await activePlannerEngine.plan(
           plannerFacts,
           baseRulePack,
@@ -3072,9 +3073,15 @@ export function createWorkbenchStore(
           effectiveAmazonOptions ?? (taobaoProfileId ? { stylePresetId: taobaoProfileId } as AmazonPlanningRequestOptions : undefined),
           inputAssessment,
           planningSession?.industryTemplate,
+          createPlannerTaskSettings(
+            baseRulePack,
+            effectiveAmazonOptions ?? (taobaoProfileId ? { stylePresetId: taobaoProfileId } : undefined),
+            taskStylePresetId ?? DEFAULT_PROMPT_PROFILE_ID,
+            selectedReferenceAssetIds,
+          ),
         );
         ensureCurrentPlanning();
-        const plan = normalizePlatformPlan(rawPlan, baseRulePack);
+        const plan = normalizePlatformPlan({ ...rawPlan, source: "api" }, baseRulePack);
         ensureCurrentPlanning();
 
         const { selectedSlotKey, taskHistory, sessions, runs } = await enqueueWorkspaceMutation(async () => {
@@ -3093,27 +3100,24 @@ export function createWorkbenchStore(
           const completedAt = now();
           const workflowId = workflowForPlan(platformId, plan);
           const runtimeSettings = get().runtimeSettings;
-          const apiRun = runtimeSettings.mode === "api" && plan.source === "api";
-          const plannerTrace = apiRun
-            ? {
+          const plannerTrace = {
                 promptId: `ecom.planner`,
                 promptVersion: PROMPT_BUNDLE_VERSION,
                 contractVersion: PROMPT_CONTRACT_VERSION,
                 profileId: platformId === "amazon"
                   ? (effectiveAmazonOptions && "stylePresetId" in effectiveAmazonOptions
-                    ? effectiveAmazonOptions.stylePresetId ?? null
-                    : null)
-                  : (taobaoProfileId ?? null),
+                    ? effectiveAmazonOptions.stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID
+                    : DEFAULT_PROMPT_PROFILE_ID)
+                  : (taobaoProfileId ?? DEFAULT_PROMPT_PROFILE_ID),
                 ...(planningSession?.industryTemplate
                   ? {
                       industryTemplateId: planningSession.industryTemplate.id,
                       industryTemplateVersion: planningSession.industryTemplate.version,
                     }
                   : {}),
-              }
-            : undefined;
-          const textSummary = apiRun ? runtimeTextServiceSummary(runtimeSettings) : undefined;
-          const imageSummary = apiRun ? runtimeImageServiceSummary(runtimeSettings) : undefined;
+              };
+          const textSummary = runtimeTextServiceSummary(runtimeSettings);
+          const imageSummary = runtimeImageServiceSummary(runtimeSettings);
           const existingSession = [...workspace.sessions]
             .filter((session) => session.workflowId === workflowId)
             .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
@@ -3598,7 +3602,7 @@ export function createWorkbenchStore(
         });
         return null;
       }
-      const runtimeValidationError = validateRuntimeSettings(get().runtimeSettings);
+      const runtimeValidationError = requireImageRuntime(get().runtimeSettings);
       if (runtimeValidationError) {
         set({
           generationError: `API 设置不可用：${runtimeValidationError}`,
@@ -3714,11 +3718,11 @@ export function createWorkbenchStore(
         ensureCurrentGeneration();
 
         const runtime = resolveAiRuntime(get().runtimeSettings);
-        const activeImageGenerator = runtime?.imageGenerator ?? (
-          get().runtimeSettings.mode === "api" && dependencies.createImageGenerator
+        const activeImageGenerator = runtime?.imageGenerator ??
+          (dependencies.createImageGenerator
             ? dependencies.createImageGenerator(get().runtimeSettings)
-            : imageGenerator
-        );
+            : imageGenerator);
+        if (!activeImageGenerator) throw new Error("图片 API 运行时不可用。");
         const stylePresetId =
           platformId === "amazon" ? plan?.amazonSession?.stylePresetId : undefined;
         const selectedStyle = applyStyleReference && activeSession?.selectedStyleReferenceId
@@ -3778,7 +3782,7 @@ export function createWorkbenchStore(
           slotKey,
           assetId: stored.metadata.id,
           createdAt: now(),
-          source: generated.source,
+          source: "api",
           promptSnapshot: slot.prompt,
           visibleCopySnapshot: slot.visibleCopy,
           planningInputSignature,
@@ -4070,7 +4074,7 @@ export function createWorkbenchStore(
         });
         return null;
       }
-      const runtimeValidationError = validateRuntimeSettings(get().runtimeSettings);
+      const runtimeValidationError = requireImageRuntime(get().runtimeSettings);
       if (runtimeValidationError) {
         set({
           generationError: `API 设置不可用：${runtimeValidationError}`,
@@ -4178,11 +4182,11 @@ export function createWorkbenchStore(
         ensureCurrentEdit();
 
         const runtime = resolveAiRuntime(get().runtimeSettings);
-        const activeImageGenerator = runtime?.imageGenerator ?? (
-          get().runtimeSettings.mode === "api" && dependencies.createImageGenerator
+        const activeImageGenerator = runtime?.imageGenerator ??
+          (dependencies.createImageGenerator
             ? dependencies.createImageGenerator(get().runtimeSettings)
-            : imageGenerator
-        );
+            : imageGenerator);
+        if (!activeImageGenerator) throw new Error("图片 API 运行时不可用。");
         const sizeTier = session.options.platformId === "amazon" ? session.options.sizeTier : undefined;
         const dimensions = platformId === "amazon"
           ? generationDimensionsForUpload(rule.dimensions, sizeTier ?? "2K")
@@ -4241,7 +4245,7 @@ export function createWorkbenchStore(
           slotKey,
           assetId: stored.metadata.id,
           createdAt: now(),
-          source: generated.source,
+          source: "api",
           promptSnapshot: slot.prompt,
           visibleCopySnapshot: slot.visibleCopy,
           planningInputSignature: session.planInputSignature,
@@ -4766,13 +4770,18 @@ export function createWorkbenchStore(
         ...Object.keys(candidate.specifications),
       ].join(" ");
       if (/[\u3400-\u9fff]/u.test(candidateText)) return candidate;
+      const textRuntimeError = requireTextRuntime(get().runtimeSettings);
+      if (textRuntimeError) {
+        set({ error: `API 设置不可用：${textRuntimeError}` });
+        return null;
+      }
       try {
         const runtime = resolveAiRuntime(get().runtimeSettings);
-        const activeLocalizer = runtime?.productLocalizer ?? (
-          get().runtimeSettings.mode === "api" && dependencies.createProductLocalizer
+        const activeLocalizer = runtime?.productLocalizer ??
+          (dependencies.createProductLocalizer
             ? dependencies.createProductLocalizer(get().runtimeSettings)
-            : productLocalizer
-        );
+            : productLocalizer);
+        if (!activeLocalizer) throw new Error("文本 API 运行时不可用。");
         return await activeLocalizer.localize(
           candidate,
           "zh-CN",
@@ -5075,6 +5084,11 @@ export function createWorkbenchStore(
         set({ error: "请先选择商品并完成当前平台策划，再创建批量生成任务。" });
         return null;
       }
+      const imageRuntimeError = requireImageRuntime(get().runtimeSettings);
+      if (imageRuntimeError) {
+        set({ error: `API 设置不可用：${imageRuntimeError}` });
+        return null;
+      }
       if (
         activeExecutionJobId ||
         get().loading ||
@@ -5326,15 +5340,10 @@ export function createWorkbenchStore(
         return null;
       }
       const settings = get().runtimeSettings;
-      if (settings.mode === "api") {
-        if (!runtimeTextApiKey(settings)) {
-          set({ industryTemplateTransformError: "请先在设置中填写文本策划 API Key。" });
-          return null;
-        }
-        if (!settings.planningModel.trim()) {
-          set({ industryTemplateTransformError: "请先在设置中填写文本策划模型。" });
-          return null;
-        }
+      const textRuntimeError = requireTextRuntime(settings);
+      if (textRuntimeError) {
+        set({ industryTemplateTransformError: textRuntimeError });
+        return null;
       }
 
       const operationLifecycle = lifecycleVersion;
@@ -5344,11 +5353,11 @@ export function createWorkbenchStore(
       set({ industryTemplateTransforming: true, industryTemplateTransformError: null });
       try {
         const runtime = resolveAiRuntime(settings);
-        const transformer = runtime?.industryTemplateTransformer ?? (
-          settings.mode === "api" && dependencies.createIndustryTemplateTransformer
+        const transformer = runtime?.industryTemplateTransformer ??
+          (dependencies.createIndustryTemplateTransformer
             ? dependencies.createIndustryTemplateTransformer(settings)
-            : industryTemplateTransformer
-        );
+            : industryTemplateTransformer);
+        if (!transformer) throw new Error("文本 API 运行时不可用。");
         const result = await transformer.transform(request, controller.signal);
         if (
           controller.signal.aborted ||
@@ -5424,7 +5433,7 @@ export function createWorkbenchStore(
         });
         return false;
       }
-      const runtimeValidationError = validateRuntimeSettings(get().runtimeSettings);
+      const runtimeValidationError = requireTextRuntime(get().runtimeSettings);
       if (runtimeValidationError) {
         set({
           copilotFeedbackTarget: { platformId, slotKey },
@@ -5461,11 +5470,11 @@ export function createWorkbenchStore(
 
       try {
         const runtime = resolveAiRuntime(get().runtimeSettings);
-        const activeCopilot = runtime?.copilot ?? (
-          get().runtimeSettings.mode === "api" && dependencies.createCopilotEngine
+        const activeCopilot = runtime?.copilot ??
+          (dependencies.createCopilotEngine
             ? dependencies.createCopilotEngine(get().runtimeSettings)
-            : copilotEngine
-        );
+            : copilotEngine);
+        if (!activeCopilot) throw new Error("文本 API 运行时不可用。");
         const copilotSession = [...get().sessions]
           .filter((session) => session.platformId === platformId)
           .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
@@ -5704,65 +5713,30 @@ export function createWorkbenchStore(
   });
 }
 
-function withFailOnceHistoryQuery(
-  repository: RunRepository,
-  failure: "initial" | "older-page",
-): RunRepository {
-  // React development StrictMode intentionally runs the initial mount effect twice.
-  const initialFailureCount = failure === "initial" ? 2 : 1;
-  let remainingFailures = initialFailureCount;
-  return {
-    ...repository,
-    async query(filters, cursor, limit) {
-      const matchesFailure = failure === "initial" ? !cursor : Boolean(cursor);
-      if (remainingFailures > 0 && filters?.platformId && matchesFailure) {
-        remainingFailures -= 1;
-        throw new Error(failure === "initial" ? "模拟历史读取失败" : "模拟加载更早记录失败");
-      }
-      return repository.query(filters, cursor, limit);
-    },
-  };
-}
-
 export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies {
   const warnings: string[] = [];
   let projectRepository: ProjectRepository;
   let assetRepository: AssetRepository;
   let workspaceRepository: ProjectWorkspaceRepository;
-  let legacyWorkspaceRepository: ProjectWorkspaceRepository;
   let workspaceV3Repository: ProjectWorkspaceV3Repository;
   let runRepository: RunRepository;
   let executionJobRepository: ExecutionJobRepository;
   let executionJobCoordinator: ExecutionJobCoordinator = createMemoryExecutionJobCoordinator();
   let settingsRepository: SettingsRepository;
-  let defaultPlannerEngine: PlannerEngine = demoPlanner;
-  let defaultImageGenerator: ImageGenerator = demoImageGenerator;
-  let defaultCopilotEngine: CopilotEngine = demoCopilot;
 
   if (typeof window === "undefined") {
     projectRepository = createMemoryProjectRepository();
     assetRepository = createMemoryAssetRepository();
-    legacyWorkspaceRepository = createMemoryWorkspaceRepository();
     workspaceV3Repository = createMemoryWorkspaceV3Repository();
     runRepository = createMemoryRunRepository();
     executionJobRepository = createMemoryExecutionJobRepository();
     workspaceRepository = createV3WorkspacePersistence({
-      legacyRepository: legacyWorkspaceRepository,
       v3Repository: workspaceV3Repository,
       runRepository,
     });
     settingsRepository = createMemorySettingsRepository();
     warnings.push("当前为非浏览器环境，项目与素材仅保存在内存中。");
   } else {
-    const fixture = new URLSearchParams(window.location.search).get("fixture");
-    defaultPlannerEngine =
-      fixture === "planning-slow" ? slowInteractiveDemoPlanner : demoPlanner;
-    defaultImageGenerator =
-      fixture === "image-fail-once"
-        ? createFailOnceImageGenerator(interactiveDemoImageGenerator)
-        : interactiveDemoImageGenerator;
-    defaultCopilotEngine =
-      fixture === "copilot-slow" ? slowInteractiveDemoCopilot : interactiveDemoCopilot;
     try {
       projectRepository = createLocalStorageProjectRepository({ storage: window.localStorage });
     } catch {
@@ -5778,25 +5752,16 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
     }
 
     try {
-      legacyWorkspaceRepository = createLocalStorageWorkspaceRepository({
-        storage: window.localStorage,
-      });
       workspaceV3Repository = createLocalStorageWorkspaceV3Repository({
         storage: window.localStorage,
       });
     } catch {
-      legacyWorkspaceRepository = createMemoryWorkspaceRepository();
       workspaceV3Repository = createMemoryWorkspaceV3Repository();
       warnings.push("localStorage 不可用，平台会话仅在当前会话保存在内存中。");
     }
 
     try {
-      const persistentRunRepository = createIndexedDbRunRepository({ indexedDB: window.indexedDB });
-      runRepository = fixture === "history-fail-once"
-        ? withFailOnceHistoryQuery(persistentRunRepository, "initial")
-        : fixture === "history-page-fail-once"
-          ? withFailOnceHistoryQuery(persistentRunRepository, "older-page")
-          : persistentRunRepository;
+      runRepository = createIndexedDbRunRepository({ indexedDB: window.indexedDB });
     } catch {
       runRepository = createMemoryRunRepository();
       warnings.push("IndexedDB 不可用，生产记录仅在当前会话保存在内存中。");
@@ -5813,7 +5778,6 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
       warnings.push("当前浏览器不支持跨标签页任务锁，请勿在多个标签页同时生成图片。");
     }
     workspaceRepository = createV3WorkspacePersistence({
-      legacyRepository: legacyWorkspaceRepository,
       v3Repository: workspaceV3Repository,
       runRepository,
     });
@@ -5836,10 +5800,6 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
     executionJobCoordinator,
     settingsRepository,
     aiRuntimeFactory: defaultAiRuntimeFactory,
-    plannerEngine: defaultPlannerEngine,
-    imageGenerator: defaultImageGenerator,
-    copilotEngine: defaultCopilotEngine,
-    industryTemplateTransformer: demoIndustryTemplateTransformer,
     testTextConnection(settings) {
       return defaultAiRuntimeFactory.testTextConnection(settings);
     },

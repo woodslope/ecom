@@ -10,7 +10,7 @@ import type { ProductFacts } from "../src/domain/projects/types";
 import { getAPlusModuleSpecs } from "../src/domain/platforms/amazon-catalog";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
 import type { PlatformSession } from "../src/domain/workspace/project-workspace";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 const sharedFacts: ProductFacts = {
@@ -103,7 +103,7 @@ describe("Amazon direct intake", () => {
 
   it("starts from only a product image and creates a restorable local draft", async () => {
     const deps = dependencies();
-    const store = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
+    const store = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
     await store.getState().initialize();
 
     const session = await store.getState().startAmazonSession({
@@ -138,7 +138,7 @@ describe("Amazon direct intake", () => {
       plannedSession.planningInput,
     );
 
-    const restored = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
+    const restored = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
     await restored.getState().initialize();
     expect(restored.getState().sessions[0]?.planningInput?.quality).toBe("image-only");
     expect(restored.getState().sessions[0]?.selectedReferenceAssetIds).toEqual(["asset_01"]);
@@ -152,7 +152,7 @@ describe("Amazon direct intake", () => {
       plannerEngine: {
         async plan(facts, ...args) {
           plannerProductName = facts.productName;
-          return demoPlanner.plan(facts, ...args);
+          return mockPlanner.plan(facts, ...args);
         },
       },
     });
@@ -194,7 +194,7 @@ describe("Amazon direct intake", () => {
       plannerEngine: {
         async plan(facts, rulePack, signal, images, options) {
           plannerFacts = facts;
-          return demoPlanner.plan(facts, rulePack, signal, images, options);
+          return mockPlanner.plan(facts, rulePack, signal, images, options);
         },
       },
     });
@@ -244,7 +244,7 @@ describe("Amazon direct intake", () => {
     });
     expect((await deps.projectRepository.get(project.id))?.facts).toEqual(sharedFacts);
 
-    const restored = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
+    const restored = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
     await restored.getState().initialize();
     expect(restored.getState().sessions).toHaveLength(1);
     expect(restored.getState().sessions[0]).toMatchObject({
@@ -309,7 +309,7 @@ describe("Amazon direct intake", () => {
       plannerEngine: {
         async plan(...args) {
           plannerCalls += 1;
-          return demoPlanner.plan(...args);
+          return mockPlanner.plan(...args);
         },
       },
     });
@@ -494,7 +494,7 @@ describe("Amazon direct intake", () => {
       ...defaults[index % defaults.length],
       slot: `A+P${String(index + 1).padStart(2, "0")}`,
     }));
-    const store = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
+    const store = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
     await store.getState().initialize();
 
     const session = await store.getState().startAmazonSession({
@@ -524,7 +524,7 @@ describe("Amazon direct intake", () => {
     ).toHaveLength(12);
     expect(store.getState().amazonPlannerMode).toBe("aplus");
 
-    const restored = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
+    const restored = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
     await restored.getState().initialize();
     const restoredSession = restored.getState().sessions[0];
     expect(restoredSession).toMatchObject({
@@ -547,7 +547,7 @@ describe("Amazon direct intake", () => {
       blob: new Blob(["reference"], { type: "image/png" }),
       metadata: { name: "front-reference.png", kind: "reference" },
     });
-    const store = createWorkbenchStore({ ...deps, plannerEngine: demoPlanner });
+    const store = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
     await store.getState().initialize();
     const session = await store.getState().startAmazonSession({
       projectId: project.id,

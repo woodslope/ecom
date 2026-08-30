@@ -37,7 +37,7 @@ interface ProjectStateStore {
   write(state: ProjectRepositoryState): void;
 }
 
-export const DEFAULT_PROJECT_STORAGE_KEY = "ecom-workbench.projects.v2";
+export const DEFAULT_PROJECT_STORAGE_KEY = "ecom-workbench.projects.v3";
 
 function emptyState(): ProjectRepositoryState {
   return { version: 2, projects: [], activeProjectId: null };

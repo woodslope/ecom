@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 describe("TaskRecord retirement", () => {
@@ -13,7 +13,7 @@ describe("TaskRecord retirement", () => {
       projectRepository: createMemoryProjectRepository({ createId: () => "project_01" }),
       assetRepository: createMemoryAssetRepository(),
       workspaceRepository,
-      plannerEngine: demoPlanner,
+      plannerEngine: mockPlanner,
       compressImageFile: async (file) => file,
       createObjectURL: () => "blob:asset",
       revokeObjectURL: () => undefined,

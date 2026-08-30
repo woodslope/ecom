@@ -5,8 +5,8 @@ import { createMemoryProjectRepository } from "../src/domain/projects/repository
 import type { ProductFacts } from "../src/domain/projects/types";
 import { createMemorySettingsRepository } from "../src/domain/settings";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { demoImageGenerator } from "../src/services/demo-image-generator";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockImageGenerator } from "./fixtures/mock-ai";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 const productFacts: ProductFacts = {
@@ -31,15 +31,15 @@ describe("workbench runtime settings", () => {
       assetRepository: createMemoryAssetRepository({ createId: () => "asset_01" }),
       workspaceRepository: createMemoryWorkspaceRepository(),
       settingsRepository,
-      plannerEngine: demoPlanner,
-      imageGenerator: demoImageGenerator,
+      plannerEngine: mockPlanner,
+      imageGenerator: mockImageGenerator,
       createPlannerEngine(settings: { mode: string }) {
         adapterModes.push(`plan:${settings.mode}`);
-        return demoPlanner;
+        return mockPlanner;
       },
       createImageGenerator(settings: { mode: string }) {
         adapterModes.push(`image:${settings.mode}`);
-        return demoImageGenerator;
+        return mockImageGenerator;
       },
       compressImageFile: async (file: File) => file,
       createObjectURL: () => "blob:generated/1",
@@ -140,7 +140,7 @@ describe("workbench runtime settings", () => {
       projectRepository: createMemoryProjectRepository({ createId: () => "project_01" }),
       assetRepository: createMemoryAssetRepository(),
       workspaceRepository: createMemoryWorkspaceRepository(),
-      plannerEngine: demoPlanner,
+      plannerEngine: mockPlanner,
       imageGenerator: {
         generate(_input, signal) {
           markGenerationStarted();

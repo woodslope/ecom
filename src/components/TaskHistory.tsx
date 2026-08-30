@@ -24,6 +24,11 @@ import {
 import { Button, ConfirmDialog, EmptyState, StatusChip } from "./ui";
 import { ProductionHistoryFilters } from "./ProductionHistoryFilters";
 import { ProductionRunCard } from "./ProductionRunCard";
+import { HistoryExampleCard } from "./HistoryExampleCard";
+import {
+  getHistoryProcessExamples,
+  type HistoryExampleRefillPayload,
+} from "../domain/history/examples";
 
 const taskLabels = {
   plan: "AI 策划",
@@ -91,6 +96,7 @@ export function TaskHistoryArchive({
   onForkRun,
   onExportRun,
   onDeleteRun,
+  onRefillExample,
   historyQueryService,
   platformId,
   compact = false,
@@ -107,6 +113,7 @@ export function TaskHistoryArchive({
   onForkRun?: (record: ProductionRunRecord) => void;
   onExportRun?: (record: ProductionRunRecord) => void;
   onDeleteRun?: (record: ProductionRunRecord) => Promise<boolean> | void;
+  onRefillExample?: (payload: HistoryExampleRefillPayload) => void;
   historyQueryService?: HistoryQueryService | null;
   platformId?: PlatformId;
   compact?: boolean;
@@ -297,17 +304,29 @@ export function TaskHistoryArchive({
 
   if (records.length === 0 && !hasActiveFilters) {
     return (
-      <EmptyState
-        variant="dependency"
-        icon={<Archive size={24} />}
-        title="还没有任务记录"
-        description={`在${platformId ? getPlatformRulePack(platformId).label : "当前平台"}完成策划后，记录会自动保存在这里。`}
-      />
+      <div className={`production-history${compact ? " production-history--compact" : ""}`}>
+        <div className="history-examples" aria-label="流程示例">
+          {getHistoryProcessExamples(platformId).map((example) => (
+            <HistoryExampleCard key={example.id} example={example} onRefill={onRefillExample} />
+          ))}
+        </div>
+        <EmptyState
+          variant="dependency"
+          icon={<Archive size={24} />}
+          title="还没有任务记录"
+          description={`在${platformId ? getPlatformRulePack(platformId).label : "当前平台"}完成策划后，记录会自动保存在这里。`}
+        />
+      </div>
     );
   }
 
   return (
     <div className={`production-history${compact ? " production-history--compact" : ""}`}>
+      <div className="history-examples" aria-label="流程示例">
+        {getHistoryProcessExamples(platformId).map((example) => (
+          <HistoryExampleCard key={example.id} example={example} onRefill={onRefillExample} />
+        ))}
+      </div>
       <ProductionHistoryFilters
         value={filters}
         onChange={setFilters}

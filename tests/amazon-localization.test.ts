@@ -9,8 +9,8 @@ import {
   AMAZON_MARKETPLACES,
   type AmazonMarketplaceId,
 } from "../src/domain/platforms/amazon-marketplaces";
-import { demoPlanner } from "../src/services/demo-planner";
-import { demoCopilot } from "../src/services/demo-copilot";
+import { mockPlanner } from "./fixtures/mock-planner";
+import { mockCopilot } from "./fixtures/mock-ai";
 import { OpenAIPlanner } from "../src/services/openai-planner";
 import { OpenAICopilot } from "../src/services/openai-copilot";
 
@@ -59,9 +59,9 @@ const localizedListingSamples: Record<AmazonMarketplaceId, string[]> = {
 };
 
 describe("Amazon marketplace localization", () => {
-  it("produces deterministic target-language Demo copy for all six marketplaces", async () => {
+  it("produces deterministic target-language mock copy for all six marketplaces", async () => {
     for (const marketplace of AMAZON_MARKETPLACES) {
-      const plan = await demoPlanner.plan(
+      const plan = await mockPlanner.plan(
         facts,
         amazonRulePack,
         new AbortController().signal,
@@ -144,14 +144,14 @@ describe("Amazon marketplace localization", () => {
     }
   });
 
-  it("adapts Demo Copilot copy to the active marketplace language", async () => {
+  it("adapts mock Copilot copy to the active marketplace language", async () => {
     for (const marketplace of AMAZON_MARKETPLACES) {
       const { rulePack } = resolvePlanningRulePack("amazon", {
         plannerMode: "listing",
         marketplaceId: marketplace.id,
         listingImageCount: 7,
       });
-      const result = await demoCopilot.adjust(
+      const result = await mockCopilot.adjust(
         {
           project,
           rulePack,
@@ -182,7 +182,7 @@ describe("Amazon marketplace localization", () => {
         marketplaceId: marketplace.id,
         listingImageCount: 7,
       });
-      const visibleCopy = marketplace.demoCopy.listing[0];
+      const visibleCopy = marketplace.sampleCopy.listing[0];
       let requestBody = "";
       const copilot = new OpenAICopilot({
         endpoint: "https://provider.example/v1/chat/completions",
@@ -263,7 +263,7 @@ describe("Amazon marketplace localization", () => {
 
   it("retains the marketplace language contract in export manifests", async () => {
     const marketplace = AMAZON_MARKETPLACES.find((item) => item.id === "jp")!;
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       facts,
       amazonRulePack,
       new AbortController().signal,

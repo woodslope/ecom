@@ -8,8 +8,9 @@ import type {
 import type { PlatformId, PlatformRulePack } from "../platforms/types";
 import type { PlanningInputAssessment } from "./input-assessment";
 import type { IndustryTemplateSnapshot } from "../prompt-templates/industry-template-packs";
+import type { PlannerTaskSettings } from "../prompting/types";
 
-export type PlanningSource = "demo" | "api";
+export type PlanningSource = "api";
 
 export interface PlanningProjectFacts {
   productName: string;
@@ -94,5 +95,6 @@ export interface PlannerEngine {
     amazonOptions?: AmazonPlanningRequestOptions,
     inputAssessment?: PlanningInputAssessment,
     industryTemplate?: IndustryTemplateSnapshot,
+    taskSettings?: PlannerTaskSettings,
   ): Promise<PlatformPlan>;
 }

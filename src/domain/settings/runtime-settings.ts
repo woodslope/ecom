@@ -10,10 +10,8 @@ import type {
 } from "./types";
 import { detectProviderCapabilities } from "./provider-capabilities";
 
-/** V1 is kept as a public compatibility alias for backups and old callers. */
-export const RUNTIME_SETTINGS_STORAGE_KEY = "ecom-workbench.runtime-settings.v1";
-export const RUNTIME_SETTINGS_STORAGE_KEY_V1 = RUNTIME_SETTINGS_STORAGE_KEY;
-export const RUNTIME_SETTINGS_STORAGE_KEY_V2 = "ecom-workbench.runtime-settings.v2";
+/** API-only runtime settings. Older development keys are intentionally expired. */
+export const RUNTIME_SETTINGS_STORAGE_KEY = "ecom-workbench.runtime-settings.api.v1";
 
 export const defaultRuntimeSettings: RuntimeSettings = {
   mode: "api",
@@ -88,8 +86,7 @@ export function normalizeRuntimeSettings(value: Partial<RuntimeSettings>): Runti
     true,
   );
   const normalized: RuntimeSettings = {
-    // Runtime mode is intentionally API-only. Keep accepting the legacy field
-    // so older stored payloads can be normalized without a migration step.
+    // Runtime mode is intentionally API-only.
     mode: "api",
     connectionMode: value.connectionMode === "single" ? "single" : "dual",
     apiKey: resolvedTextApiKey,
@@ -136,29 +133,27 @@ function normalizeImageProtocol(value: unknown, baseUrl: string): ImageServicePr
   return detectProviderCapabilities(baseUrl).imageTransport;
 }
 
-/** Convert either a legacy flat object or a v2 object to the persisted v2 shape. */
+/** Normalize the current API-only persisted settings document. */
 export function normalizeRuntimeSettingsV2(value: unknown): RuntimeSettingsV2 {
   const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
-  const flat = normalizeRuntimeSettings(input as Partial<RuntimeSettings>);
   const textInput = profileValue(input, "text", "textService", "textConfig");
   const imageInput = profileValue(input, "image", "imageService", "imageConfig");
   const textRecord = textInput && typeof textInput === "object" ? textInput as Record<string, unknown> : {};
   const imageRecord = imageInput && typeof imageInput === "object" ? imageInput as Record<string, unknown> : {};
   const textBaseUrl = normalizedTextBaseUrl(
-    profileValue(textRecord, "baseUrl", "url") ?? flat.textBaseUrl,
-    runtimeTextBaseUrl(flat),
+    profileValue(textRecord, "baseUrl", "url"),
+    defaultRuntimeSettingsV2.text.baseUrl,
   );
-  const textApiKey = stringValue(profileValue(textRecord, "apiKey", "key"), runtimeTextApiKey(flat));
-  const textModel = stringValue(profileValue(textRecord, "model"), flat.planningModel);
+  const textApiKey = stringValue(profileValue(textRecord, "apiKey", "key"));
+  const textModel = stringValue(profileValue(textRecord, "model"));
   const imageBaseUrl = normalizedUrl(
-    profileValue(imageRecord, "baseUrl", "url") ?? flat.imageBaseUrl,
-    flat.imageBaseUrl,
+    profileValue(imageRecord, "baseUrl", "url"),
+    defaultRuntimeSettingsV2.image.baseUrl,
     true,
   );
-  const imageApiKey = stringValue(profileValue(imageRecord, "apiKey", "key"), runtimeImageApiKey(flat));
-  const imageModel = stringValue(profileValue(imageRecord, "model"), flat.imageModel);
-  const rawTextEndpoint = profileValue(textRecord, "endpoint") ??
-    (typeof input.planningEndpoint === "string" ? input.planningEndpoint : undefined);
+  const imageApiKey = stringValue(profileValue(imageRecord, "apiKey", "key"));
+  const imageModel = stringValue(profileValue(imageRecord, "model"));
+  const rawTextEndpoint = profileValue(textRecord, "endpoint");
   const textProtocol = normalizeTextProtocol(profileValue(textRecord, "protocol"), String(rawTextEndpoint ?? ""));
   const text: TextServiceConfig = {
     name: stringValue(profileValue(textRecord, "name", "label", "displayName"), "文本策划"),
@@ -176,25 +171,17 @@ export function normalizeRuntimeSettingsV2(value: unknown): RuntimeSettingsV2 {
     baseUrl: imageBaseUrl,
     apiKey: imageApiKey,
     model: imageModel,
-    generationMode:
-      profileValue(imageRecord, "generationMode") === "async" || flat.imageGenerationMode === "async"
-        ? "async"
-        : "sync",
+    generationMode: profileValue(imageRecord, "generationMode") === "async" ? "async" : "sync",
     protocol: normalizeImageProtocol(profileValue(imageRecord, "protocol"), imageBaseUrl),
   };
   return {
     version: 2,
     schemaVersion: 2,
-    mode: input.mode === "demo" ? "demo" : "api",
-    connectionMode: input.connectionMode === "single" ? "single" : flat.connectionMode ?? "dual",
+    mode: "api",
+    connectionMode: input.connectionMode === "single" ? "single" : "dual",
     text,
     image,
   };
-}
-
-/** Explicit migration entry point for callers processing a known V1 payload. */
-export function migrateRuntimeSettingsV1(value: Partial<RuntimeSettings> | unknown): RuntimeSettingsV2 {
-  return normalizeRuntimeSettingsV2(value);
 }
 
 /** Flatten v2 settings for existing UI/store/service consumers. */
@@ -221,20 +208,43 @@ export function runtimeSettingsToV2(settings: RuntimeSettings): RuntimeSettingsV
 }
 
 function persistedRuntimeSettingsV2(settings: RuntimeSettings | RuntimeSettingsV2): RuntimeSettingsV2 {
-  const normalized = normalizeRuntimeSettingsV2(settings);
-  // Persist only named service roots. A complete endpoint is accepted as a
-  // migration input, then reconstructed from baseUrl + protocol on load.
+  const normalized = "text" in settings
+    ? normalizeRuntimeSettingsV2(settings)
+    : normalizeRuntimeSettingsV2({
+        version: 2,
+        schemaVersion: 2,
+        mode: "api",
+        connectionMode: settings.connectionMode ?? "dual",
+        text: {
+          name: "文本策划",
+          baseUrl: runtimeTextBaseUrl(settings),
+          apiKey: runtimeTextApiKey(settings),
+          model: settings.planningModel,
+          endpoint: settings.planningEndpoint,
+          protocol: settings.textProtocol ?? "chat-completions",
+        },
+        image: {
+          name: "图片生成",
+          baseUrl: runtimeImageBaseUrl(settings),
+          apiKey: runtimeImageApiKey(settings),
+          model: settings.imageModel,
+          generationMode: runtimeImageGenerationMode(settings),
+          protocol: settings.imageProtocol ?? "images-api",
+        },
+      });
   const { endpoint: _endpoint, ...text } = normalized.text;
   return { ...normalized, text };
 }
 
 export function runtimeTextService(settings: RuntimeSettings | RuntimeSettingsV2): TextServiceConfig {
   if ("text" in settings) return normalizeRuntimeSettingsV2(settings).text;
-  return normalizeRuntimeSettingsV2(settings).text;
+  return persistedRuntimeSettingsV2(settings).text;
 }
 
 export function runtimeImageService(settings: RuntimeSettings | RuntimeSettingsV2): ImageServiceConfig {
-  const normalized = normalizeRuntimeSettingsV2(settings);
+  const normalized = "text" in settings
+    ? normalizeRuntimeSettingsV2(settings)
+    : persistedRuntimeSettingsV2(settings);
   if (normalized.connectionMode === "single") {
     return {
       ...normalized.image,
@@ -295,23 +305,6 @@ export function runtimeSupportsImageEditing(settings: RuntimeSettings): boolean 
 }
 
 export function validateRuntimeSettings(settings: RuntimeSettings): string | null {
-  const singleConnection = settings.connectionMode === "single";
-  const unconfigured =
-    !runtimeTextApiKey(settings) &&
-    !runtimeImageApiKey(settings) &&
-    !settings.planningModel &&
-    !settings.imageModel;
-  if (unconfigured) return null;
-  if (!runtimeTextApiKey(settings)) return "请填写文本策划 API Key。";
-  if (!singleConnection && !runtimeImageApiKey(settings)) return "请填写图片生成 API Key。";
-  if (!settings.planningModel) return "请填写文本策划模型。";
-  if (!singleConnection && !settings.imageModel) return "请填写图片生成模型。";
-  if (
-    singleConnection &&
-    !detectProviderCapabilities(runtimeTextBaseUrl(settings)).imageGeneration
-  ) {
-    return "DeepSeek 官方连接仅支持文本策划；请切换为双配置并单独填写兼容的图片生成服务。";
-  }
   const planningUrlError = validateServiceUrl(
     runtimeTextBaseUrl(settings),
     settings.textBaseUrl !== undefined ? "文本 API 根地址" : "文本策划请求地址",
@@ -359,23 +352,19 @@ export function createLocalStorageSettingsRepository(
 ): SettingsRepository {
   return {
     async load() {
-      const candidates = [
-        storage.getItem(RUNTIME_SETTINGS_STORAGE_KEY_V2),
-        storage.getItem(RUNTIME_SETTINGS_STORAGE_KEY_V1),
-      ];
-      for (const raw of candidates) {
-        if (!raw) continue;
+      const raw = storage.getItem(RUNTIME_SETTINGS_STORAGE_KEY);
+      if (raw) {
         try {
           return runtimeSettingsFromV2(JSON.parse(raw) as unknown);
         } catch {
-          // Try the legacy key when a stale or partially-written v2 value exists.
+          // Malformed API settings fall back to defaults.
         }
       }
       return { ...defaultRuntimeSettings };
     },
     async save(settings) {
       storage.setItem(
-        RUNTIME_SETTINGS_STORAGE_KEY_V2,
+        RUNTIME_SETTINGS_STORAGE_KEY,
         JSON.stringify(persistedRuntimeSettingsV2(settings)),
       );
     },
@@ -393,18 +382,10 @@ export function createLocalStorageRuntimeSettingsV2Repository(
 ): RuntimeSettingsV2Repository {
   return {
     async load() {
-      const raw = storage.getItem(RUNTIME_SETTINGS_STORAGE_KEY_V2);
+      const raw = storage.getItem(RUNTIME_SETTINGS_STORAGE_KEY);
       if (raw) {
         try {
           return normalizeRuntimeSettingsV2(JSON.parse(raw) as unknown);
-        } catch {
-          // Fall through to the V1 migration path.
-        }
-      }
-      const legacy = storage.getItem(RUNTIME_SETTINGS_STORAGE_KEY_V1);
-      if (legacy) {
-        try {
-          return migrateRuntimeSettingsV1(JSON.parse(legacy) as unknown);
         } catch {
           // Return defaults for malformed browser storage.
         }
@@ -412,7 +393,7 @@ export function createLocalStorageRuntimeSettingsV2Repository(
       return normalizeRuntimeSettingsV2(defaultRuntimeSettingsV2);
     },
     async save(settings) {
-      storage.setItem(RUNTIME_SETTINGS_STORAGE_KEY_V2, JSON.stringify(persistedRuntimeSettingsV2(settings)));
+      storage.setItem(RUNTIME_SETTINGS_STORAGE_KEY, JSON.stringify(persistedRuntimeSettingsV2(settings)));
     },
   };
 }

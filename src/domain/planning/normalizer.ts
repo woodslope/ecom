@@ -153,8 +153,8 @@ function parseCandidate(candidate: unknown, rulePack: PlatformRulePack): Platfor
   if (candidate.platformId !== rulePack.platformId) {
     invalidPayload(`platformId 必须是 ${rulePack.platformId}`);
   }
-  if (candidate.source !== "demo" && candidate.source !== "api") {
-    invalidPayload("source 必须是 demo 或 api");
+  if (candidate.source !== "api") {
+    invalidPayload("source 必须是 api");
   }
   if (!Array.isArray(candidate.slots)) {
     invalidPayload("slots 必须是数组");

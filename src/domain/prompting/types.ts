@@ -2,7 +2,14 @@ import type { CopilotCommand, CopilotContext } from "../copilot/types";
 import type { IndustryTemplateBrief, IndustryTemplateSnapshot } from "../prompt-templates/industry-template-packs";
 import type { PlanningInputAssessment } from "../planning/input-assessment";
 import type { PlanningProjectFacts, PlanningReferenceImage } from "../planning/types";
-import type { PlatformRulePack } from "../platforms/types";
+import type { PlatformId, PlatformRulePack, PlatformWorkflowId } from "../platforms/types";
+import type {
+  APlusContentType,
+  AmazonAPlusModuleSpec,
+  AmazonPlannerMode,
+  SizeTier,
+} from "../platforms/amazon-catalog";
+import type { AmazonMarketplaceId } from "../platforms/amazon-marketplaces";
 import type { LocalizationRules } from "../localization/product-localizer";
 import type { ImageGenerationRequest } from "../generation/types";
 
@@ -90,10 +97,14 @@ export interface PromptBundle {
 export interface PlannerPromptInput {
   project: PlanningProjectFacts;
   rulePack: PlatformRulePack;
+  /** Explicit run settings selected in the task UI. Keep this separate from the resolved rule pack. */
+  taskSettings?: PlannerTaskSettings;
   referenceImages?: readonly PlanningReferenceImage[];
   inputAssessment?: PlanningInputAssessment;
   industryTemplate?: IndustryTemplateSnapshot;
   strategySnippet?: string;
+  /** Set when the configured planner cannot receive the selected product images. */
+  referenceImagesSkipped?: string;
   /** Optional, explicit slot-level assets. No asset is applied implicitly. */
   slotPromptAssets?: readonly {
     slotKey: string;
@@ -101,6 +112,21 @@ export interface PlannerPromptInput {
     version: number;
     prompt: string;
   }[];
+}
+
+/** JSON-safe task settings sent to the planner as authoritative run variables. */
+export interface PlannerTaskSettings {
+  platformId: PlatformId;
+  workflowId: PlatformWorkflowId;
+  locale: string;
+  marketplaceId?: AmazonMarketplaceId;
+  plannerMode?: AmazonPlannerMode;
+  listingImageCount?: number;
+  aPlusType?: APlusContentType;
+  aPlusModuleSpecs?: readonly AmazonAPlusModuleSpec[];
+  sizeTier?: SizeTier;
+  stylePresetId?: string | null;
+  selectedReferenceAssetIds: readonly string[];
 }
 
 export interface CopilotPromptInput {

@@ -16,7 +16,6 @@ export interface HistoryFilters {
   projectId?: string;
   platformId?: PlatformId;
   workflowId?: PlatformWorkflowId;
-  source?: ProductionRun["source"];
   status?: ProductionRun["status"];
   shape?: ProductionShape;
 }
@@ -66,7 +65,6 @@ function repositoryFilters(filters: HistoryFilters): RepositoryFilters {
   return {
     projectId: filters.projectId,
     platformId: filters.platformId,
-    source: filters.source,
     status: filters.status,
   };
 }

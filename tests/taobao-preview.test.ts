@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { TaobaoMobilePreview } from "../src/components/TaobaoMobilePreview";
 import { createTaobaoPreviewModel } from "../src/domain/platforms/taobao-preview";
 import { taobaoRulePack } from "../src/domain/platforms/taobao";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 
 const facts = {
   productName: "云感旅行颈枕",
@@ -17,7 +17,7 @@ const facts = {
 
 describe("Taobao mobile preview", () => {
   it("builds a fixed 5+7 preview from a session or run snapshot and reports missing slots", async () => {
-    const plan = await demoPlanner.plan(facts, taobaoRulePack, new AbortController().signal);
+    const plan = await mockPlanner.plan(facts, taobaoRulePack, new AbortController().signal);
     const first = plan.slots[0]!;
     const model = createTaobaoPreviewModel({
       source: "run",
@@ -32,7 +32,7 @@ describe("Taobao mobile preview", () => {
             slotKey: first.slotKey,
             assetId: "asset_hero",
             createdAt: "2026-07-21T09:00:00.000Z",
-            source: "demo",
+            source: "api",
             promptSnapshot: first.prompt,
             visibleCopySnapshot: first.visibleCopy,
             planningInputSignature: "signature_taobao",
@@ -64,7 +64,7 @@ describe("Taobao mobile preview", () => {
   });
 
   it("renders five gallery controls, seven stacked detail slots, compact status, and package export", async () => {
-    const plan = await demoPlanner.plan(facts, taobaoRulePack, new AbortController().signal);
+    const plan = await mockPlanner.plan(facts, taobaoRulePack, new AbortController().signal);
     const markup = renderToStaticMarkup(createElement(TaobaoMobilePreview, {
       open: true,
       title: facts.productName,

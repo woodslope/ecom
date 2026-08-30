@@ -1,4 +1,4 @@
-import type { PlatformRulePack, PlatformWorkflowId } from "../platforms/types";
+import { definePlatformRulePack, type PlatformRulePack, type PlatformWorkflowId } from "../platforms/types";
 import type { PlatformId } from "../platforms/types";
 
 export interface IndustryTemplateScope {
@@ -261,6 +261,81 @@ export function createGeneralIndustryTemplateSnapshot(
     })),
     createdAt: "system",
   };
+}
+
+export type ActiveIndustryTemplateGuidance = Pick<
+  IndustryTemplateSnapshot,
+  "id" | "name" | "source" | "version" | "brief" | "slots"
+>;
+
+/**
+ * Resolve one industry guidance source for planning. A custom snapshot replaces
+ * the general slot direction; platform-level constraints remain in the rule pack.
+ */
+export function resolveIndustryTemplateGuidance(
+  rulePack: PlatformRulePack,
+  template?: IndustryTemplateSnapshot,
+  workflowId?: PlatformWorkflowId,
+): ActiveIndustryTemplateGuidance {
+  const compatibleTemplate = template?.scope.platformId === rulePack.platformId &&
+    (!workflowId || template.scope.workflowId === workflowId)
+    ? template
+    : undefined;
+  const templateSlots = new Map(compatibleTemplate?.slots.map((slot) => [slot.slotKey, slot]));
+  return {
+    id: compatibleTemplate?.id ?? SYSTEM_GENERAL_TEMPLATE_ID,
+    name: compatibleTemplate?.name ?? "通用模板",
+    source: compatibleTemplate?.source ?? "system",
+    version: compatibleTemplate?.version ?? 1,
+    brief: compatibleTemplate ? { ...compatibleTemplate.brief } : { ...EMPTY_INDUSTRY_TEMPLATE_BRIEF },
+    slots: rulePack.slots.map((rule) => {
+      const selected = templateSlots.get(rule.key);
+      return selected
+        ? {
+            slotKey: rule.key,
+            label: rule.label,
+            guidance: selected.guidance,
+            negativeGuidance: selected.negativeGuidance,
+          }
+        : {
+            slotKey: rule.key,
+            label: rule.label,
+            guidance: [rule.purpose, ...rule.planningHints].join("；"),
+            negativeGuidance: "",
+          };
+    }),
+  };
+}
+
+/**
+ * Create a planning-only rule pack whose slot direction comes from the active
+ * industry template. Export and compliance callers should keep using the
+ * original platform rule pack.
+ */
+export function applyIndustryTemplateToRulePack(
+  rulePack: PlatformRulePack,
+  template?: IndustryTemplateSnapshot,
+  workflowId?: PlatformWorkflowId,
+): PlatformRulePack {
+  if (
+    !template ||
+    template.scope.platformId !== rulePack.platformId ||
+    (workflowId !== undefined && template.scope.workflowId !== workflowId)
+  ) return rulePack;
+  const guidance = resolveIndustryTemplateGuidance(rulePack, template, workflowId);
+  const guidanceByKey = new Map(guidance.slots.map((slot) => [slot.slotKey, slot]));
+  return definePlatformRulePack({
+    ...rulePack,
+    slots: rulePack.slots.map((rule) => {
+      const selected = guidanceByKey.get(rule.key);
+      if (!selected) return rule;
+      return {
+        ...rule,
+        purpose: selected.guidance,
+        planningHints: Object.freeze([]),
+      };
+    }),
+  });
 }
 
 export function listIndustryTemplatePacks(

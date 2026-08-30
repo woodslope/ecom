@@ -1,7 +1,7 @@
 # Ecom Project Context
 
 > 当前真相源：项目起源、开源参考、领域边界、关键取舍和后续协作门禁。
-> Updated: 2026-08-24
+> Updated: 2026-08-30
 
 ## 1. 项目目标
 
@@ -58,7 +58,7 @@ Amazon Listing、Amazon A+ 和淘宝商品生产包使用独立 session。切换
 
 `ProductionRun` 保存一次完整制作过程的快照：
 
-- session、platform、workflow 和 Demo/API 来源
+- session、platform、workflow 和固定为 `api` 的生产来源
 - 输入、选项、参考素材和风格上下文快照
 - 输入来源、质量、缺项、本次勾选商品图和来源项目版本快照
 - plan、输入签名和槽位版本快照
@@ -82,30 +82,40 @@ flowchart LR
 - Listing 默认 7 张，可选 7–12 张。
 - A+ 默认 `standard-large`，支持四类 A+ 和模块编排。
 - Listing 文本解析、共享事实显式同步和参考图选择。
-- Demo/API 策划、Prompt Preview、逐槽生成、失败重试和不可变版本。
+- API 策划、Prompt Preview、逐槽生成、失败重试和不可变版本。
 - 生成尺寸与平台上传建议尺寸分离。
 - 参考图 16 张、1024/768 压缩降级和 8 MiB 请求负载边界。
 - 项目风格预设、style asset、MAIN 排除和风格引用保护。
 - 槽位级合规提醒、站点语言约束和人工复核边界。
 - dual/single Provider、OpenRouter/DeepSeek 代表路径与能力门禁。
-- ProductionRun 筛选/恢复/fork/复用/历史重导出。
+- ProductionRun 筛选/恢复/fork/复用/历史重导出；生产来源固定为 API。历史区另有一条只读“流程示例”，不属于生产记录。
 - 遮罩局部编辑、图片工具、Provider mask、版本追加和失败回滚。
 
 完整状态、证据和限制见 `AIS_ALIGNMENT_CHECKLIST.md`。这里的“完成”指锁定 AIS commit 下的行为对齐基线，不包括像素级视觉复制、真实外部模型质量或 Seller Central 最终批准。
 
 ## 5. 持久化与迁移决策
 
-项目与素材继续使用 v2 业务存储：
+项目与素材使用 API-only 业务命名空间：
 
-- 项目：`ecom-workbench.projects.v2`
+- 项目：`ecom-workbench.projects.v3`
 - 素材数据库：`ecom-workbench-assets-v2`
-- 旧 workspace 迁移源：`ecom-workbench.workspace.v2.{projectId}`
 
-当前可编辑会话使用 `ecom-workbench.workspace.v3.{projectId}`。V3 只保存 `currentSessions`、迁移元数据和 `updatedAt`；ProductionRun 独立保存在 IndexedDB `ecom-workbench-runs-v1`，不再依赖当前 session 存在。v2 workspace 原文保留，不覆盖、不删除；首次历史查询或项目恢复会幂等迁移合法 runs，全部写入并回读成功后才标记完成。
+当前可编辑会话使用 `ecom-workbench.workspace.api.v1.{projectId}`。V3 只保存 `currentSessions` 和 `updatedAt`；ProductionRun 独立保存在 IndexedDB `ecom-workbench-runs-api-v1`，不再依赖当前 session 存在。旧 workspace 在本次开发重置中直接失效，不由产品路径读取或迁移。
 
-旧 v1 测试业务数据仍不迁移、不读取。运行设置继续使用 `ecom-workbench.runtime-settings.v1`，并通过归一化保留既有 API 凭据和 Demo/API 选择。删除项目按 runs、assets、V3/v2 workspace、项目元数据顺序清理，失败可重试；不调用 `localStorage.clear()`；详细取舍见 `docs/adr/0001-product-session-run-boundaries.md`。
+旧 v1 测试业务数据和旧运行设置均不迁移、不读取。运行设置以 API-only key `ecom-workbench.runtime-settings.api.v1` 保存；旧 v1/v2 key 过期。删除项目按 runs、assets、API workspace、项目元数据顺序清理，失败可重试；不调用 `localStorage.clear()`。
 
 设置页支持导出和恢复单个 JSON 本地备份。备份覆盖商品、v2/v3 workspace、素材 Blob、ProductionRun、本地任务和界面偏好；恢复会替换这些业务数据，并在写入失败时尝试回滚。运行设置、API Key 和 Provider 地址不进入备份，恢复后保持当前浏览器配置不变。
+
+## AI 链路三层边界
+
+AI 相关代码按“提示词层 → 请求/Provider 层 → 应用层”组织：
+
+- `src/domain/prompting/` 只维护源码提示词、输出契约、版本和来源，不访问网络。
+- `src/domain/prompting/builders.ts` 是唯一 Prompt 入口；结构化任务参数统一由 `taskSettings` 进入应用层。
+- `src/services/ai/transport/` 统一 endpoint、Chat/Responses、SSE、超时、取消、错误和图片响应；`adapters/` 只把领域请求转换为现有引擎接口。
+- `src/services/ai/runtime-factory.ts` 根据命名服务配置组装 Runtime；Store 只调用 Runtime，不判断 Provider 协议。
+
+每个新 ProductionRun 保存 Prompt 版本、行业模板/Profile 摘要和文本/图片 Provider 非敏感摘要；旧 Run 缺少这些字段时按历史记录正常恢复。核心系统提示词由源码维护，界面只展示版本和来源。
 
 ## 6. 产品与技术边界
 
@@ -114,7 +124,7 @@ flowchart LR
 - 本地多商品资料与参考素材。
 - Amazon 与淘宝均可从手动资料、纯商品图或两者组合开始；无档案提交时原子创建本地草稿，既有任务从平台历史恢复或派生。
 - Amazon Listing / A+ 主路径和已可独立运行的淘宝 / 天猫商品生产包（次级 rule pack）。
-- Demo 与 OpenAI-compatible API 运行模式；当前模式常驻左栏底部并可进入设置。
+- OpenAI-compatible API 是唯一生产运行时；产品不提供 Demo 运行模式。
 - 可解释策划、Prompt 编辑、Copilot、图片生成、局部编辑和 ZIP 交付。
 - 当前商品、当前平台工作流内的本地批量生成任务，支持进度、取消、失败重试和刷新后继续。
 - 业务数据的本地 JSON 备份与恢复，API Key 和 Provider 设置除外。
@@ -153,9 +163,8 @@ Amazon 对齐已从“实施阶段”切换为“维护基线”。后续改动�
 - `PRODUCT_SPEC.md`：当前可交付产品行为和数据合同。
 - `AIS_ALIGNMENT_CHECKLIST.md`：AIS 能力状态、证据和限制。
 - `UI_STYLE_GUIDE.md`：前端视觉、组件、响应式和治理合同。
-- `docs/adr/0001-product-session-run-boundaries.md`：三层领域与 v2 存储决策。
+- `docs/adr/0001-product-session-run-boundaries.md`：三层领域与 API-only 存储决策。
 - `docs/adr/0002-github-pages-local-first-runtime.md`：GitHub Pages、浏览器本地运行与 ExecutionJob 边界。
-- `CROSS_PLATFORM_AIS_IMPLEMENTATION_PLAN.md`：任务 1–13 的实施与验证记录。
-- `TAOBAO_MXPAGE_IMPLEMENTATION_PLAN.md`：任务 14–23 的架构解耦、淘宝 workflow 和一致性治理执行记录。
+- `docs/acceptance/`：已完成阶段的验收证据和可复核记录。
 
 当前目录包含 Git 元数据；改动审查以当前工作区 diff、验证命令和浏览器证据为准。本次收口未自动提交、推送或部署。

@@ -1,6 +1,6 @@
 export type {
   PromptBundle, PromptContentPart, PromptKind, PromptMessage, PromptPriority, PromptSource, PromptSourceRef, PromptTrace, PromptVersion,
-  PlannerPromptInput, CopilotPromptInput, LocalizationPromptInput, IndustryTemplatePromptInput, GenerationPromptInput,
+  PlannerPromptInput, PlannerTaskSettings, CopilotPromptInput, LocalizationPromptInput, IndustryTemplatePromptInput, GenerationPromptInput,
 } from "./types";
 export {
   PROMPT_BUNDLE_VERSION,
@@ -15,3 +15,4 @@ export {
   createIndustryTemplatePrompt, createGenerationPrompt,
 } from "./builders";
 export { traceForBundle } from "./trace";
+export { createPlannerTaskSettings } from "./planner-settings";

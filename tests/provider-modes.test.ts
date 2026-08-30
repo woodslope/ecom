@@ -37,6 +37,18 @@ describe("provider modes", () => {
     expect(runtimeImageApiKey(settings)).toBe("one-key");
   });
 
+  it("single mode may reuse the text model for image requests", () => {
+    const settings = normalizeRuntimeSettings({
+      mode: "api",
+      connectionMode: "single",
+      textBaseUrl: "https://openrouter.ai/api/v1",
+      textApiKey: "one-key",
+      planningModel: "google/gemini-image",
+      imageBaseUrl: "https://ignored.example/v1",
+    });
+    expect(validateRuntimeSettings(settings)).toBeNull();
+  });
+
   it("detects OpenRouter image chat and official DeepSeek text-only planning", () => {
     expect(detectProviderCapabilities("https://openrouter.ai/api/v1")).toMatchObject({
       provider: "openrouter",
@@ -50,7 +62,7 @@ describe("provider modes", () => {
       imageEditing: false,
     });
     expect(detectProviderCapabilities("https://images.example/v1").imageEditing).toBe(true);
-    expect(runtimeSupportsImageEditing(normalizeRuntimeSettings({ mode: "demo" }))).toBe(true);
+    expect(runtimeSupportsImageEditing(normalizeRuntimeSettings({ mode: "api" }))).toBe(true);
   });
 
   it("rejects official DeepSeek as a single connection before generation", () => {
@@ -59,6 +71,6 @@ describe("provider modes", () => {
       textApiKey: "secret", planningModel: "deepseek-chat", imageModel: "image-model",
       imageBaseUrl: "https://unused.example/v1",
     });
-    expect(validateRuntimeSettings(settings)).toContain("双配置");
+    expect(validateRuntimeSettings(settings)).toBeNull();
   });
 });

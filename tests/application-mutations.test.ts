@@ -10,10 +10,10 @@ import {
   type PlanCommitInput,
 } from "../src/application/production-mutations";
 import { amazonRulePack } from "../src/domain/platforms/amazon";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 
 async function input(): Promise<PlanCommitInput> {
-  const plan = await demoPlanner.plan(
+  const plan = await mockPlanner.plan(
     {
       productName: "Travel Pillow",
       description: "Memory foam pillow",
@@ -28,7 +28,7 @@ async function input(): Promise<PlanCommitInput> {
     projectId: "project_01",
     platformId: "amazon",
     workflowId: "amazon-listing",
-    source: "demo",
+    source: "api",
     sourceInput: { listingText: "Title: Travel Pillow" },
     options: {
       platformId: "amazon",
@@ -92,7 +92,7 @@ describe("production application mutations", () => {
     }, "2026-07-21T04:00:00.000Z");
     const firstVersion = {
       id: "version_01", slotKey: "MAIN", assetId: "asset_01",
-      createdAt: "2026-07-21T05:00:00.000Z", source: "demo" as const,
+      createdAt: "2026-07-21T05:00:00.000Z", source: "api" as const,
       promptSnapshot: "Verified prompt", visibleCopySnapshot: "Verified copy",
       planningInputSignature: "signature_01",
       width: 2000, height: 2000, mimeType: "image/png", parameters: {},

@@ -22,7 +22,7 @@ function version(inputSignature: string): SlotVersion {
     slotKey: slot.slotKey,
     assetId: "asset_01",
     createdAt: "2026-07-18T08:00:00.000Z",
-    source: "demo",
+    source: "api",
     promptSnapshot: slot.prompt,
     visibleCopySnapshot: slot.visibleCopy,
     planningInputSignature: inputSignature,

@@ -8,12 +8,10 @@ import { SLOT_PROMPT_ASSETS_STORAGE_KEY } from "../domain/prompt-profiles/slot-p
 import { INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY } from "../domain/prompt-templates/industry-template-packs";
 import {
   RUNTIME_SETTINGS_STORAGE_KEY,
-  RUNTIME_SETTINGS_STORAGE_KEY_V2,
 } from "../domain/settings/runtime-settings";
 import { PROJECT_WORKSPACE_STORAGE_PREFIX } from "../domain/workspace/project-workspace";
 import {
   AMAZON_DRAFT_PROJECT_CONFIRM_SKIP_KEY,
-  DEMO_MODE_BANNER_DISMISSED_KEY,
   LAST_PLATFORM_STORAGE_KEY,
 } from "../domain/workspace/preferences";
 import { PROJECT_WORKSPACE_V3_STORAGE_PREFIX } from "../domain/workspace/workspace-v3";
@@ -85,7 +83,6 @@ const JOB_DATABASE: DatabaseSpec = {
 
 const PREFERENCE_STORAGE_KEYS = new Set([
   LAST_PLATFORM_STORAGE_KEY,
-  DEMO_MODE_BANNER_DISMISSED_KEY,
   AMAZON_DRAFT_PROJECT_CONFIRM_SKIP_KEY,
 ]);
 const EXACT_STORAGE_KEYS = new Set([
@@ -118,7 +115,7 @@ function isOptionalFiniteNumber(value: unknown): boolean {
 
 const PLATFORM_IDS = new Set(["amazon", "taobao"]);
 const WORKFLOW_IDS = new Set(["amazon-listing", "amazon-aplus", "taobao-product", "taobao-detail"]);
-const RUN_SOURCES = new Set(["demo", "api"]);
+const RUN_SOURCES = new Set(["api"]);
 const RUN_STATUSES = new Set(["planned", "producing", "ready", "partial", "failed", "canceled"]);
 const EVENT_KINDS = new Set(["plan", "generate", "regenerate", "edit", "export"]);
 const EVENT_STATUSES = new Set(["success", "failed", "canceled"]);
@@ -570,7 +567,7 @@ export function parseLocalBackup(serialized: string): LocalBackupFile {
   const storage = Object.fromEntries(Object.entries(value.storage).map(([key, item]) => {
     if (
       !isBusinessStorageKey(key) ||
-      (key !== undefined && [RUNTIME_SETTINGS_STORAGE_KEY, RUNTIME_SETTINGS_STORAGE_KEY_V2].includes(key)) ||
+      (key !== undefined && key === RUNTIME_SETTINGS_STORAGE_KEY) ||
       typeof item !== "string"
     ) {
       throw new Error("备份文件包含不允许的本地设置");

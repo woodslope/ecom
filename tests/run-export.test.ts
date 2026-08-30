@@ -4,14 +4,14 @@ import { unzipSync, strFromU8 } from "fflate";
 import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { demoImageGenerator } from "../src/services/demo-image-generator";
+import { mockImageGenerator } from "./fixtures/mock-ai";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 import { buildRunExportPackage } from "../src/domain/export";
 import { createAmazonRulePackFromOptions } from "../src/domain/platforms/resolve-rule-pack";
 import { getPlatformRulePack } from "../src/domain/platforms/registry";
 import type { ProductProject } from "../src/domain/projects/types";
 import type { ProductionRun } from "../src/domain/workspace/project-workspace";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 
 const project: ProductProject = {
   id: "p1", name: "Cloud Pillow",
@@ -21,14 +21,14 @@ const project: ProductProject = {
 
 async function fixture() {
   const { rulePack } = createAmazonRulePackFromOptions({ plannerMode: "listing", marketplaceId: "us", listingImageCount: 7, sizeTier: "2K" });
-  const plan = await demoPlanner.plan(project.facts, rulePack, new AbortController().signal, [], { plannerMode: "listing", marketplaceId: "us", listingImageCount: 7, sizeTier: "2K" });
+  const plan = await mockPlanner.plan(project.facts, rulePack, new AbortController().signal, [], { plannerMode: "listing", marketplaceId: "us", listingImageCount: 7, sizeTier: "2K" });
   const assets = createMemoryAssetRepository({ createId: () => "asset_main" });
   await assets.put({ projectId: project.id, blob: new Blob(["main"], { type: "image/png" }), metadata: { name: "main.png", kind: "generated", role: "amazon:MAIN", width: 2000, height: 2000 } });
   const run: ProductionRun = {
-    id: "run_old", projectId: project.id, sessionId: "session_old", platformId: "amazon", workflowId: "amazon-listing", source: "demo", status: "producing",
+    id: "run_old", projectId: project.id, sessionId: "session_old", platformId: "amazon", workflowId: "amazon-listing", source: "api", status: "producing",
     contextSnapshot: { sourceInput: { listingText: "Title: Cloud Pillow" }, options: { platformId: "amazon", marketplaceId: "us", plannerMode: "listing", listingImageCount: 7, sizeTier: "2K", stylePresetId: "clean-retail" }, selectedReferenceAssetIds: [] },
     planSnapshot: plan, planningInputSignatureSnapshot: "sig-old",
-    slotVersionsSnapshot: { MAIN: { activeVersionId: "v1", versions: [{ id: "v1", slotKey: "MAIN", assetId: "asset_main", createdAt: "2026-07-20T01:00:00.000Z", source: "demo", promptSnapshot: plan.slots[0]!.prompt, visibleCopySnapshot: "", planningInputSignature: "sig-old", width: 2000, height: 2000, mimeType: "image/png", parameters: { engine: "demo" } }] } },
+    slotVersionsSnapshot: { MAIN: { activeVersionId: "v1", versions: [{ id: "v1", slotKey: "MAIN", assetId: "asset_main", createdAt: "2026-07-20T01:00:00.000Z", source: "api", promptSnapshot: plan.slots[0]!.prompt, visibleCopySnapshot: "", planningInputSignature: "sig-old", width: 2000, height: 2000, mimeType: "image/png", parameters: { engine: "mock-svg-v1" } }] } },
     events: [], createdAt: "2026-07-20T01:00:00.000Z", updatedAt: "2026-07-20T02:00:00.000Z",
   };
   return { assets, run };
@@ -41,7 +41,7 @@ describe("run export", () => {
 
     expect(exported.manifest).toMatchObject({
       ready: false,
-      run: { id: "run_old", workflowId: "amazon-listing", source: "demo" },
+      run: { id: "run_old", workflowId: "amazon-listing", source: "api" },
       options: { platformId: "amazon", marketplaceId: "us", plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
     });
     expect(exported.manifest.missingSlots).toHaveLength(6);
@@ -62,7 +62,7 @@ describe("run export", () => {
     for (const slot of run.planSnapshot.slots) {
       const stored = await assets.put({ projectId: project.id, blob: new Blob([slot.slotKey], { type: "image/png" }), metadata: { name: `${slot.slotKey}.png`, kind: "generated", role: `amazon:${slot.slotKey}`, width: 2000, height: 2000 } });
       const versionId = `v_${slot.slotKey}`;
-      states[slot.slotKey] = { activeVersionId: versionId, versions: [{ id: versionId, slotKey: slot.slotKey, assetId: stored.metadata.id, createdAt: "2026-07-20T01:00:00.000Z", source: "demo", promptSnapshot: slot.prompt, visibleCopySnapshot: slot.visibleCopy, planningInputSignature: "sig-old", width: 2000, height: 2000, mimeType: "image/png", parameters: { engine: "demo" } }] };
+      states[slot.slotKey] = { activeVersionId: versionId, versions: [{ id: versionId, slotKey: slot.slotKey, assetId: stored.metadata.id, createdAt: "2026-07-20T01:00:00.000Z", source: "api", promptSnapshot: slot.prompt, visibleCopySnapshot: slot.visibleCopy, planningInputSignature: "sig-old", width: 2000, height: 2000, mimeType: "image/png", parameters: { engine: "mock-svg-v1" } }] };
     }
     run.slotVersionsSnapshot = states;
     const exported = await buildRunExportPackage({ project, run, loadAsset: (id) => assets.get(id) });
@@ -78,8 +78,8 @@ describe("run export", () => {
       projectRepository: createMemoryProjectRepository({ createId: () => "p1" }),
       assetRepository,
       workspaceRepository: createMemoryWorkspaceRepository(),
-      plannerEngine: demoPlanner,
-      imageGenerator: demoImageGenerator,
+      plannerEngine: mockPlanner,
+      imageGenerator: mockImageGenerator,
       compressImageFile: async (file: File) => file,
       createObjectURL: () => `blob:${assetId}`,
       revokeObjectURL: () => undefined,
@@ -107,9 +107,9 @@ describe("run export", () => {
 
   it("uses A+ external copy and Taobao required slots from each run snapshot", async () => {
     const { rulePack: aPlusPack } = createAmazonRulePackFromOptions({ plannerMode: "aplus", marketplaceId: "jp", aPlusType: "standard", sizeTier: "2K" });
-    const aPlusPlan = await demoPlanner.plan(project.facts, aPlusPack, new AbortController().signal, [], { plannerMode: "aplus", marketplaceId: "jp", aPlusType: "standard", sizeTier: "2K" });
+    const aPlusPlan = await mockPlanner.plan(project.facts, aPlusPack, new AbortController().signal, [], { plannerMode: "aplus", marketplaceId: "jp", aPlusType: "standard", sizeTier: "2K" });
     const aPlusRun: ProductionRun = {
-      id: "run_aplus", projectId: project.id, sessionId: "session_aplus", platformId: "amazon", workflowId: "amazon-aplus", source: "demo", status: "planned",
+      id: "run_aplus", projectId: project.id, sessionId: "session_aplus", platformId: "amazon", workflowId: "amazon-aplus", source: "api", status: "planned",
       contextSnapshot: { sourceInput: { listingText: "Title: Cloud Pillow" }, options: { platformId: "amazon", marketplaceId: "jp", plannerMode: "aplus", aPlusType: "standard", sizeTier: "2K" }, selectedReferenceAssetIds: [] },
       planSnapshot: aPlusPlan, planningInputSignatureSnapshot: "sig-a", slotVersionsSnapshot: {}, events: [], createdAt: "2026-07-20T01:00:00.000Z", updatedAt: "2026-07-20T01:00:00.000Z",
     };
@@ -119,9 +119,9 @@ describe("run export", () => {
     expect(Object.keys(unzipSync(new Uint8Array(await aPlusExport.blob.arrayBuffer())))).toContain("external-copy.md");
 
     const taobaoPack = getPlatformRulePack("taobao");
-    const taobaoPlan = await demoPlanner.plan(project.facts, taobaoPack, new AbortController().signal);
+    const taobaoPlan = await mockPlanner.plan(project.facts, taobaoPack, new AbortController().signal);
     const taobaoRun: ProductionRun = {
-      id: "run_taobao", projectId: project.id, sessionId: "session_taobao", platformId: "taobao", workflowId: "taobao-detail", source: "demo", status: "planned",
+      id: "run_taobao", projectId: project.id, sessionId: "session_taobao", platformId: "taobao", workflowId: "taobao-detail", source: "api", status: "planned",
       contextSnapshot: { sourceInput: { listingText: "" }, options: { platformId: "taobao" }, selectedReferenceAssetIds: [] },
       planSnapshot: taobaoPlan, planningInputSignatureSnapshot: "sig-t", slotVersionsSnapshot: {}, events: [], createdAt: "2026-07-20T01:00:00.000Z", updatedAt: "2026-07-20T01:00:00.000Z",
     };

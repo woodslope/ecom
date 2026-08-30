@@ -4,10 +4,10 @@ import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import type { ProductFacts } from "../src/domain/projects/types";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { demoCopilot } from "../src/services/demo-copilot";
+import { mockCopilot } from "./fixtures/mock-ai";
 import type { CopilotEngine } from "../src/domain/copilot";
-import { demoImageGenerator } from "../src/services/demo-image-generator";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockImageGenerator } from "./fixtures/mock-ai";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 const productFacts: ProductFacts = {
@@ -23,13 +23,13 @@ const productFacts: ProductFacts = {
   specifications: { 材质: "记忆棉" },
 };
 
-function dependencies(copilotEngine: CopilotEngine = demoCopilot) {
+function dependencies(copilotEngine: CopilotEngine = mockCopilot) {
   return {
     projectRepository: createMemoryProjectRepository({ createId: () => "project_01" }),
     assetRepository: createMemoryAssetRepository(),
     workspaceRepository: createMemoryWorkspaceRepository(),
-    plannerEngine: demoPlanner,
-    imageGenerator: demoImageGenerator,
+    plannerEngine: mockPlanner,
+    imageGenerator: mockImageGenerator,
     copilotEngine,
     compressImageFile: async (file: File) => file,
     createObjectURL: () => "blob:asset",

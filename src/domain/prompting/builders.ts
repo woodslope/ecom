@@ -1,9 +1,10 @@
 import type { PromptBundle, PromptMessage, PromptSource, PromptSourceRef, PlannerPromptInput, CopilotPromptInput, LocalizationPromptInput, IndustryTemplatePromptInput, GenerationPromptInput } from "./types";
 import { getAmazonMarketplaceByLocale } from "../platforms/amazon-marketplaces";
+import { resolveIndustryTemplateGuidance } from "../prompt-templates/industry-template-packs";
 
-export const PROMPT_BUNDLE_VERSION = "1.0.0";
+export const PROMPT_BUNDLE_VERSION = "1.1.0";
 export const PROMPT_VERSION = PROMPT_BUNDLE_VERSION;
-export const PROMPT_CONTRACT_VERSION = "1.0.0";
+export const PROMPT_CONTRACT_VERSION = "1.1.0";
 
 function bundle(
   kind: PromptBundle["kind"],
@@ -36,8 +37,45 @@ function bundle(
   });
 }
 
+function plannerPlatformContract(rulePack: PlannerPromptInput["rulePack"]): Record<string, unknown> {
+  return {
+    platformId: rulePack.platformId,
+    label: rulePack.label,
+    locale: rulePack.locale,
+    promptLanguage: rulePack.promptLanguage,
+    slots: rulePack.slots.map((slot) => ({
+      key: slot.key,
+      label: slot.label,
+      ...(slot.uiLabel ? { uiLabel: slot.uiLabel } : {}),
+      group: slot.group,
+      order: slot.order,
+      required: slot.required,
+      dimensions: slot.dimensions,
+      complianceReminders: slot.complianceReminders,
+    })),
+    planningInstructions: rulePack.planningInstructions,
+    promptGuardrails: rulePack.promptGuardrails,
+    complianceReminders: rulePack.complianceReminders,
+  };
+}
+
 export function buildPlannerPrompt(input: PlannerPromptInput): PromptBundle {
-  const { project, rulePack, referenceImages = [], inputAssessment, industryTemplate, strategySnippet, slotPromptAssets = [] } = input;
+  const {
+    project: product,
+    rulePack,
+    taskSettings,
+    referenceImages = [],
+    inputAssessment,
+    industryTemplate,
+    strategySnippet,
+    referenceImagesSkipped,
+    slotPromptAssets = [],
+  } = input;
+  const activeIndustryGuidance = resolveIndustryTemplateGuidance(
+    rulePack,
+    industryTemplate,
+    taskSettings?.workflowId,
+  );
   const slotKeys = rulePack.slots.map((slot) => slot.key).join(", ");
   const system = [
     "Return JSON only, without commentary or Markdown.",
@@ -46,6 +84,10 @@ export function buildPlannerPrompt(input: PlannerPromptInput): PromptBundle {
     `slots must contain each of these keys exactly once: ${slotKeys}.`,
     "Every slot must contain these base fields: slotKey, visibleCopy, strategy, evidence, prompt, negativePrompt.",
     "evidence must be a non-empty string array; all other slot fields must be strings.",
+    "The user payload is divided into platformContract, activeIndustryGuidance, taskSettings, product facts, and evidence.",
+    "platformContract is immutable for this run: preserve its slot keys, dimensions, counts, marketplace rules, and compliance constraints.",
+    "activeIndustryGuidance is the only industry-level visual direction. It replaces the general industry direction for matching slots; do not merge the replaced general direction back into the plan.",
+    "Task settings are supplied in the user payload under taskSettings and are authoritative for this run. Do not infer or silently replace them with defaults.",
     ...(rulePack.slots.some((slot) => slot.group === "a-plus" && slot.dimensions.width === 220)
       ? [
           "Only A+ tile slots must also contain externalText with non-empty title and body.",
@@ -68,31 +110,38 @@ export function buildPlannerPrompt(input: PlannerPromptInput): PromptBundle {
       ? "Language contract: strategy and evidence are user-facing planning notes and must be written in Simplified Chinese. prompt and negativePrompt must use natural-English model instructions and evidence labels. Preserve brand names, model numbers, SKUs, proper nouns, dimensions, units, numeric values, and any fact value whose translation could alter evidence. Do not put Chinese planning explanations or labels such as 事实依据 inside prompt or negativePrompt."
       : "prompt and negativePrompt use the platform source language; strategy and evidence remain readable planning notes.",
     ...(rulePack.platformId === "amazon" ? [
-      "Amazon Listing source rule: when project.listingText is present, treat the original pasted Listing as the primary source for title, bullets, product facts, and buyer benefits; parsed project fields are supporting structure only.",
+      "Amazon Listing source rule: when product.listingText is present, treat the original pasted Listing as the primary source for title, bullets, product facts, and buyer benefits; parsed product fields are supporting structure only.",
     ] : []),
     ...rulePack.planningInstructions,
     ...rulePack.promptGuardrails,
     ...rulePack.complianceReminders,
     ...(strategySnippet ? [strategySnippet] : []),
-    ...(industryTemplate ? [
-      `Industry template: ${industryTemplate.name} v${industryTemplate.version}.`,
-      "Treat the industry template as reusable slot direction, not product evidence.",
-      "Current product facts, reference-image evidence, marketplace rules, and compliance override template guidance.",
-    ] : []),
+    `Active industry guidance: ${activeIndustryGuidance.name} v${activeIndustryGuidance.version}.`,
+    "Treat activeIndustryGuidance as reusable slot direction, not product evidence.",
+    "Current product facts, reference-image evidence, platformContract rules, and compliance constraints override any unsupported industry direction.",
     ...(slotPromptAssets.length > 0
       ? [
           "Explicit slot prompt assets are optional reusable direction only; they never override output fields, platform rules, or product evidence.",
           ...slotPromptAssets.map((asset) => `Slot asset ${asset.assetId} v${asset.version} applies only to ${asset.slotKey}.`),
         ]
       : []),
+    ...(referenceImagesSkipped ? [referenceImagesSkipped] : []),
   ].join("\n");
   const payload = JSON.stringify({
-    project,
-    rulePack,
+    product,
+    ...(rulePack.platformId === "amazon" && product.listingText?.trim()
+      ? {
+          originalListingText: product.listingText,
+          originalListingTextRule: "Use this pasted Listing as the primary source; do not discard title or bullet wording when planning slots.",
+        }
+      : {}),
+    platformContract: plannerPlatformContract(rulePack),
+    activeIndustryGuidance,
+    ...(taskSettings ? { taskSettings } : {}),
     ...(inputAssessment ? { inputAssessment } : {}),
-    ...(industryTemplate ? { industryTemplate } : {}),
     ...(slotPromptAssets.length > 0 ? { slotPromptAssets } : {}),
     referenceImages: referenceImages.map(({ name, mimeType }) => ({ name, mimeType })),
+    ...(referenceImagesSkipped ? { referenceImagesSkipped } : {}),
   });
   return bundle("planner", [{ role: "system", content: system }, { role: "user", content: payload }], "system", 10);
 }
@@ -151,7 +200,7 @@ export function buildIndustryTemplatePrompt(input: IndustryTemplatePromptInput):
   const keys = rulePack.slots.map((slot) => slot.key).join(", ");
   const system = [
     "Return JSON only with one field: slots.",
-    "Rewrite every supplied slot into reusable industry-level image planning guidance.",
+    "Rewrite every supplied slot into reusable industry-level image planning guidance. The generated slots become the active industry guidance and replace the supplied general slot direction.",
     "Do not include concrete SKU facts, exact dimensions, colors, package contents, certifications, or fixed scenes unless explicitly stated as a reusable industry constraint.",
     `Return these slot keys exactly once: ${keys}.`,
     "Write guidance in Simplified Chinese; final model prompt language is handled later by the product planner.",

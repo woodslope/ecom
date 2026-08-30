@@ -6,8 +6,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
+import { installApiRuntimeSettings, startMockAiServer } from "./fixtures/mock-ai-server.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const mockServer = await startMockAiServer();
 
 async function openPort() {
   const server = createServer();
@@ -95,14 +97,17 @@ const context = await browser.newContext({
   viewport: { width: 1280, height: 800 },
   deviceScaleFactor: 2,
 });
+await installApiRuntimeSettings(context, mockServer);
 const page = await context.newPage();
 const runtimeErrors = [];
 page.on("pageerror", (error) => runtimeErrors.push(error.message));
 page.on("console", (message) => {
-  if (message.type() === "error") runtimeErrors.push(message.text());
+  if (message.type() === "error" && !message.text().includes("status of 503")) runtimeErrors.push(message.text());
 });
 page.on("response", (response) => {
-  if (response.status() >= 400) runtimeErrors.push(`HTTP ${response.status()}: ${response.url()}`);
+  if (response.status() >= 400 && !(response.status() === 503 && response.url().includes("/fail-once/"))) {
+    runtimeErrors.push(`HTTP ${response.status()}: ${response.url()}`);
+  }
 });
 
 try {
@@ -126,15 +131,26 @@ try {
   assert(await maskDialog.getByRole("button", { name: "保存编辑", exact: true }).isDisabled(), "空遮罩仍可保存");
   await capture(page, "task11-mask-default-1280.png");
   await drawMask(page);
+  await maskDialog.getByLabel("局部编辑要求", { exact: true }).fill("保留商品主体，修正局部光线。");
   assert(!(await maskDialog.getByRole("button", { name: "保存编辑", exact: true }).isDisabled()), "绘制后仍不能保存");
   await capture(page, "task11-mask-drawn-1280.png");
 
-  await page.goto(`${baseUrl}?fixture=image-fail-once`, { waitUntil: "networkidle" });
+  await page.evaluate((imageBaseUrl) => {
+    const key = "ecom-workbench.runtime-settings.api.v1";
+    const raw = localStorage.getItem(key);
+    const settings = raw ? JSON.parse(raw) : null;
+    if (settings?.image) {
+      settings.image.baseUrl = `${imageBaseUrl}/fail-once/v1`;
+      localStorage.setItem(key, JSON.stringify(settings));
+    }
+  }, mockServer.baseUrl);
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
   await resumeAmazonTask(page);
   await page.locator(".slot-card").filter({ hasText: "PT01" }).click();
   await page.getByRole("button", { name: "版本", exact: true }).click();
   await page.getByRole("button", { name: "局部编辑", exact: true }).click();
   await drawMask(page);
+  await page.getByRole("dialog", { name: "局部编辑", exact: true }).getByLabel("局部编辑要求", { exact: true }).fill("保留商品主体，修正局部光线。");
   await page.getByRole("button", { name: "保存编辑", exact: true }).click();
   await page.getByText("局部编辑未保存，旧版本仍保持可用。", { exact: true }).waitFor();
   assert((await page.locator(".version-tile").count()) === 1, "编辑失败追加或覆盖了版本");
@@ -170,4 +186,5 @@ try {
   await context.close();
   await browser.close();
   vite?.kill("SIGTERM");
+  await mockServer.close();
 }

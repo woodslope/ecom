@@ -7,7 +7,7 @@ import {
   createMemoryWorkspaceRepository,
   type ProjectWorkspaceDocument,
 } from "../src/domain/workspace/project-workspace";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 
 const productFacts = {
   productName: "云感旅行颈枕",
@@ -35,11 +35,11 @@ function storageDouble(initial: Record<string, string> = {}) {
 }
 
 async function amazonPlan(): Promise<PlatformPlan> {
-  return demoPlanner.plan(productFacts, amazonRulePack, new AbortController().signal);
+  return mockPlanner.plan(productFacts, amazonRulePack, new AbortController().signal);
 }
 
 async function amazonModePlan(mode: "listing" | "aplus"): Promise<PlatformPlan> {
-  return demoPlanner.plan(
+  return mockPlanner.plan(
     productFacts,
     amazonRulePack,
     new AbortController().signal,
@@ -87,7 +87,7 @@ describe("project workspace document repository", () => {
         runs: [],
         plans: {
           amazon: plan,
-          taobao: { platformId: "taobao", source: "demo", slots: [] },
+          taobao: { platformId: "taobao", source: "api", slots: [] },
         },
         selectedSlotKeys: { amazon: "PT01", taobao: "UNKNOWN" },
         updatedAt: "2026-07-17T08:00:00.000Z",
@@ -207,7 +207,7 @@ describe("project workspace document repository", () => {
       sessionId: session.id,
       platformId: "amazon",
       workflowId: "amazon-listing",
-      source: "demo",
+      source: "api",
       status: "planned",
       contextSnapshot: {
         sourceInput: session.sourceInput,

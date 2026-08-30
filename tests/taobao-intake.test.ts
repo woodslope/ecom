@@ -320,7 +320,7 @@ describe("Taobao intake", () => {
     const effectiveFacts = applyTaobaoAnalysisToFacts(project.facts, analysis);
     const plan = {
       platformId: "taobao" as const,
-      source: "demo" as const,
+      source: "api" as const,
       slots: taobaoRulePack.slots.map((rule) => ({
         slotKey: rule.key,
         visibleCopy: rule.key === "TB-HERO-02" ? "治疗失眠" : "",

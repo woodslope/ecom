@@ -10,7 +10,6 @@ import type {
   ProjectWorkspaceV3Document,
   ProjectWorkspaceV3Repository,
 } from "../domain/workspace/workspace-v3";
-import { migrateWorkspaceV2ToV3 } from "../domain/runs/migration";
 import type { RunRepository } from "../domain/runs/repository";
 
 export class RepositoryRecoveryError extends Error {
@@ -27,7 +26,6 @@ export class RepositoryRecoveryError extends Error {
 }
 
 interface WorkspacePersistenceOptions {
-  legacyRepository: ProjectWorkspaceRepository;
   v3Repository: ProjectWorkspaceV3Repository;
   runRepository: RunRepository;
   now?: () => string;
@@ -55,10 +53,9 @@ function latestBy<T extends { updatedAt: string }>(items: T[]): T | undefined {
   return [...items].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
 }
 
-function materializeLegacyDocument(
+function materializeWorkspaceDocument(
   v3: ProjectWorkspaceV3Document,
   runs: ProductionRun[],
-  oldDocument: ProjectWorkspaceDocument,
 ): ProjectWorkspaceDocument {
   const plans: ProjectWorkspaceDocument["plans"] = {};
   const planInputSignatures: ProjectWorkspaceDocument["planInputSignatures"] = {};
@@ -108,7 +105,7 @@ function materializeLegacyDocument(
     amazonPlannerMode: latestAmazon?.workflowId === "amazon-aplus" ? "aplus" : "listing",
     amazonWorkspaces,
     slotVersions,
-    taskHistory: clone(oldDocument.taskHistory),
+    taskHistory: [],
     updatedAt: v3.updatedAt,
   };
 }
@@ -135,33 +132,21 @@ async function restoreRuns(
 
 export function createV3WorkspacePersistence(options: WorkspacePersistenceOptions): ProjectWorkspaceRepository {
   const now = options.now ?? (() => new Date().toISOString());
-  const ensureMigration = (projectId: string) => migrateWorkspaceV2ToV3({
-    projectId,
-    v2Repository: options.legacyRepository,
-    v3Repository: options.v3Repository,
-    runRepository: options.runRepository,
-    now,
-  });
-
   return {
     async load(projectId) {
-      await ensureMigration(projectId);
-      const [v3, runs, oldDocument] = await Promise.all([
+      const [v3, runs] = await Promise.all([
         options.v3Repository.load(projectId),
         readAllRuns(options.runRepository, projectId),
-        options.legacyRepository.load(projectId),
       ]);
-      return materializeLegacyDocument(v3, runs, oldDocument);
+      return materializeWorkspaceDocument(v3, runs);
     },
     async save(document) {
-      await ensureMigration(document.projectId);
       const beforeV3 = await options.v3Repository.load(document.projectId);
       const beforeRuns = await readAllRuns(options.runRepository, document.projectId);
       const nextV3: ProjectWorkspaceV3Document = {
         version: 3,
         projectId: document.projectId,
         currentSessions: clone(document.sessions),
-        migration: beforeV3.migration,
         updatedAt: document.updatedAt || now(),
       };
       try {
@@ -192,7 +177,6 @@ export function createV3WorkspacePersistence(options: WorkspacePersistenceOption
     async remove(projectId) {
       await options.runRepository.removeProject(projectId);
       await options.v3Repository.remove?.(projectId);
-      await options.legacyRepository.remove?.(projectId);
     },
   };
 }

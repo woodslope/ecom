@@ -112,10 +112,3 @@ export function enforceLocalizationRules(
 export function productFactsEqual(left: ProductFacts, right: ProductFacts): boolean {
   return JSON.stringify(cloneProductFacts(left)) === JSON.stringify(cloneProductFacts(right));
 }
-
-export const demoProductLocalizer: ProductLocalizer = {
-  async localize(facts, _targetLocale, _rules, signal) {
-    if (signal.aborted) throw signal.reason ?? new DOMException("本地化已取消", "AbortError");
-    return cloneProductFacts(facts);
-  },
-};

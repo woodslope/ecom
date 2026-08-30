@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
 describe("task draft identity and library deposition", () => {
@@ -14,7 +14,7 @@ describe("task draft identity and library deposition", () => {
       projectRepository: createMemoryProjectRepository({ createId: () => `project_${++projectId}` }),
       assetRepository: createMemoryAssetRepository({ createId: () => `asset_${++assetId}` }),
       workspaceRepository: createMemoryWorkspaceRepository(),
-      plannerEngine: demoPlanner,
+      plannerEngine: mockPlanner,
       compressImageFile: async (file: File) => file,
       createObjectURL: () => "blob:test",
       revokeObjectURL: () => undefined,

@@ -7,7 +7,7 @@ import {
   getAmazonStage,
 } from "../src/domain/workspace/amazon-stage";
 import { amazonRulePack } from "../src/domain/platforms/amazon";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 
 const facts = {
   productName: "Northwind Travel Pillow",
@@ -25,7 +25,7 @@ function versionFor(
     slotKey: slot.slotKey,
     assetId: `asset_${slot.slotKey}`,
     createdAt: "2026-07-20T00:00:00.000Z",
-    source: "demo",
+    source: "api",
     promptSnapshot: slot.prompt,
     visibleCopySnapshot: slot.visibleCopy,
     planningInputSignature: signature,
@@ -37,7 +37,7 @@ function versionFor(
 }
 
 async function listingSession(completedCount: number): Promise<PlatformSession> {
-  const plan = await demoPlanner.plan(
+  const plan = await mockPlanner.plan(
     facts,
     amazonRulePack,
     new AbortController().signal,

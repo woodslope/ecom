@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { SlotBoard } from "../src/components/SlotBoard";
 import { SlotInspector } from "../src/components/SlotInspector";
 import { amazonRulePack } from "../src/domain/platforms/amazon";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockPlanner } from "./fixtures/mock-planner";
 
 const productFacts = {
   productName: "云感旅行颈枕",
@@ -22,7 +22,7 @@ const productFacts = {
 
 describe("planning workspace UI contract", () => {
   it("renders every rule-backed slot and exposes a selected slot", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       productFacts,
       amazonRulePack,
       new AbortController().signal,
@@ -50,7 +50,7 @@ describe("planning workspace UI contract", () => {
   });
 
   it("renders the active generated asset as a scannable slot thumbnail", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       productFacts,
       amazonRulePack,
       new AbortController().signal,
@@ -87,7 +87,7 @@ describe("planning workspace UI contract", () => {
                 slotKey: "PT01",
                 assetId: "asset-old",
                 createdAt: "2026-08-09T00:00:00.000Z",
-                source: "demo" as const,
+                source: "api" as const,
                 promptSnapshot: slot.prompt,
                 visibleCopySnapshot: slot.visibleCopy,
                 planningInputSignature: "signature-01",
@@ -101,7 +101,7 @@ describe("planning workspace UI contract", () => {
                 slotKey: "PT01",
                 assetId: "asset-active",
                 createdAt: "2026-08-09T01:00:00.000Z",
-                source: "demo" as const,
+                source: "api" as const,
                 promptSnapshot: slot.prompt,
                 visibleCopySnapshot: slot.visibleCopy,
                 planningInputSignature: "signature-01",
@@ -123,7 +123,7 @@ describe("planning workspace UI contract", () => {
   });
 
   it("renders editable visible copy and prompt while keeping evidence visible", async () => {
-    const plan = await demoPlanner.plan(
+    const plan = await mockPlanner.plan(
       productFacts,
       amazonRulePack,
       new AbortController().signal,

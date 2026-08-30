@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   readAmazonDraftProjectConfirmSkip,
-  readDemoModeBannerDismissed,
   readLastPlatform,
   readLastPlatformOrDefault,
   writeAmazonDraftProjectConfirmSkip,
-  writeDemoModeBannerDismissed,
   writeLastPlatform,
 } from "../src/domain/workspace/preferences";
 
@@ -38,15 +36,6 @@ describe("workspace platform preference", () => {
 
     storage.setItem("ecom-workbench.last-platform.v1", "pinduoduo");
     expect(readLastPlatform(storage)).toBeNull();
-  });
-
-  it("persists demo mode banner dismissal", () => {
-    const storage = createStorage();
-    expect(readDemoModeBannerDismissed(storage)).toBe(false);
-    writeDemoModeBannerDismissed(storage, true);
-    expect(readDemoModeBannerDismissed(storage)).toBe(true);
-    writeDemoModeBannerDismissed(storage, false);
-    expect(readDemoModeBannerDismissed(storage)).toBe(false);
   });
 
   it("persists Amazon draft-project confirmation skip", () => {

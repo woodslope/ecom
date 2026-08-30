@@ -11,8 +11,8 @@ import {
   type PlatformSession,
   type ProjectWorkspaceRepository,
 } from "../src/domain/workspace/project-workspace";
-import { demoImageGenerator } from "../src/services/demo-image-generator";
-import { demoPlanner } from "../src/services/demo-planner";
+import { mockImageGenerator } from "./fixtures/mock-ai";
+import { mockPlanner } from "./fixtures/mock-planner";
 import {
   createWorkbenchStore,
   type WorkbenchStoreDependencies,
@@ -33,7 +33,7 @@ const productFacts: ProductFacts = {
 };
 
 function createDependencies(
-  imageGenerator: ImageGenerator = demoImageGenerator,
+  imageGenerator: ImageGenerator = mockImageGenerator,
 ): WorkbenchStoreDependencies & { workspaceRepository: ProjectWorkspaceRepository } {
   const versionIds = ["version_01", "version_02", "version_03"];
   let objectUrlSequence = 0;
@@ -52,7 +52,7 @@ function createDependencies(
     workspaceRepository: createMemoryWorkspaceRepository({
       now: () => "2026-07-17T09:00:00.000Z",
     }),
-    plannerEngine: demoPlanner,
+    plannerEngine: mockPlanner,
     imageGenerator,
     createVersionId: () => versionIds.shift()!,
     now: () => "2026-07-17T10:00:00.000Z",
@@ -83,7 +83,7 @@ describe("workbench generation versions", () => {
     const dependencies = createDependencies({
       async generate(request, signal) {
         generationCalls += 1;
-        return demoImageGenerator.generate(request, signal);
+        return mockImageGenerator.generate(request, signal);
       },
     });
     const coordinator = createMemoryExecutionJobCoordinator();
@@ -115,7 +115,7 @@ describe("workbench generation versions", () => {
     const generator: ImageGenerator = {
       async generate(request, signal) {
         requests.push(request);
-        return demoImageGenerator.generate(request, signal);
+        return mockImageGenerator.generate(request, signal);
       },
     };
     const dependencies = createDependencies(generator);
@@ -237,7 +237,7 @@ describe("workbench generation versions", () => {
       id: "version_01",
       slotKey: "PT01",
       assetId: "asset_01",
-      source: "demo",
+      source: "api",
       promptSnapshot: store.getState().plans.amazon?.slots[1].prompt,
       visibleCopySnapshot: store.getState().plans.amazon?.slots[1].visibleCopy,
       planningInputSignature: store.getState().planInputSignatures.amazon,
@@ -323,7 +323,7 @@ describe("workbench generation versions", () => {
     const generator: ImageGenerator = {
       async generate(request, signal): Promise<GeneratedImage> {
         if (fail) throw new Error("图片服务暂时不可用。");
-        return demoImageGenerator.generate(request, signal);
+        return mockImageGenerator.generate(request, signal);
       },
     };
     const dependencies = createDependencies(generator);
@@ -382,7 +382,7 @@ describe("workbench generation versions", () => {
     const firstSignalAbortedBeforeRelease = receivedSignals[0]?.aborted;
 
     release(
-      await demoImageGenerator.generate(
+      await mockImageGenerator.generate(
         {
           projectId: "project_01",
           productName: productFacts.productName,
@@ -697,7 +697,7 @@ describe("workbench generation versions", () => {
     expect(store.getState().plans.amazon).toEqual(originalPlan);
 
     release(
-      await demoImageGenerator.generate(
+      await mockImageGenerator.generate(
         {
           projectId: "project_01",
           productName: productFacts.productName,
@@ -721,7 +721,7 @@ describe("workbench generation versions", () => {
     const generator: ImageGenerator = {
       async generate(request, signal) {
         requests.push(request);
-        return demoImageGenerator.generate(request, signal);
+        return mockImageGenerator.generate(request, signal);
       },
     };
     const store = createWorkbenchStore(createDependencies(generator));
@@ -776,7 +776,7 @@ describe("workbench generation versions", () => {
     const generator: ImageGenerator = {
       async generate(request, signal) {
         if (request.edit) throw new Error("编辑服务不可用");
-        return demoImageGenerator.generate(request, signal);
+        return mockImageGenerator.generate(request, signal);
       },
     };
     const dependencies = createDependencies(generator);
@@ -843,7 +843,7 @@ describe("workbench generation versions", () => {
     const generator: ImageGenerator = {
       async generate(request, signal) {
         if (request.edit) editRequests += 1;
-        return demoImageGenerator.generate(request, signal);
+        return mockImageGenerator.generate(request, signal);
       },
     };
     const store = createWorkbenchStore(createDependencies(generator));

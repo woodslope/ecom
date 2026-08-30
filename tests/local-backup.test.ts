@@ -52,7 +52,7 @@ function createRun(): ProductionRun {
     sessionId: "session_01",
     platformId: "amazon",
     workflowId: "amazon-listing",
-    source: "demo",
+    source: "api",
     status: "planned",
     contextSnapshot: {
       sourceInput: { listingText: "Title: Travel Pillow" },
@@ -65,7 +65,7 @@ function createRun(): ProductionRun {
       },
       selectedReferenceAssetIds: ["asset_01"],
     },
-    planSnapshot: { platformId: "amazon", source: "demo", slots: [] },
+    planSnapshot: { platformId: "amazon", source: "api", slots: [] },
     events: [],
     createdAt: "2026-07-28T08:00:00.000Z",
     updatedAt: "2026-07-28T08:00:00.000Z",

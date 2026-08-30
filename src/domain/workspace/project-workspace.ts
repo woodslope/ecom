@@ -122,7 +122,7 @@ export interface ProductionRun {
   sessionId: string;
   platformId: PlatformId;
   workflowId: PlatformWorkflowId;
-  source: "demo" | "api";
+  source: "api";
   status: "planned" | "producing" | "ready" | "partial" | "failed" | "canceled";
   contextSnapshot: PlatformRunContext;
   planSnapshot: PlatformPlan;
@@ -213,7 +213,7 @@ function normalizeVersion(value: unknown, slotKey: string): SlotVersion | null {
     value.slotKey !== slotKey ||
     typeof value.assetId !== "string" ||
     typeof value.createdAt !== "string" ||
-    (value.source !== "demo" && value.source !== "api") ||
+    value.source !== "api" ||
     typeof value.promptSnapshot !== "string" ||
     typeof value.visibleCopySnapshot !== "string" ||
     typeof value.width !== "number" ||
@@ -678,7 +678,7 @@ function normalizeRun(value: unknown, projectId: string): ProductionRun | null {
     value.projectId !== projectId ||
     typeof value.sessionId !== "string" ||
     (value.platformId !== "amazon" && value.platformId !== "taobao") ||
-    (value.source !== "demo" && value.source !== "api") ||
+    value.source !== "api" ||
     !["planned", "producing", "ready", "partial", "failed", "canceled"].includes(
       String(value.status),
     ) ||

@@ -26,19 +26,14 @@ The navigation and UI follow the same ownership:
 
 ## Persistence
 
-Projects and assets remain at v2:
+The active API-only persistence model uses:
 
-- `ecom-workbench.projects.v2`
+- `ecom-workbench.projects.v3`
 - `ecom-workbench-assets-v2`
-- `ecom-workbench.workspace.v2.{projectId}` is retained as an immutable migration source.
+- `ecom-workbench.workspace.api.v1.{projectId}` for current sessions only
+- IndexedDB `ecom-workbench-runs-api-v1` for ProductionRun history
 
-The active persistence model was amended on 2026-07-21:
-
-- `ecom-workbench.workspace.v3.{projectId}` stores current sessions and migration metadata only.
-- IndexedDB `ecom-workbench-runs-v1` stores ProductionRun history independently.
-- Migration is idempotent and writes the completed marker only after every valid v2 run is stored and verified.
-- A ProductionRun remains queryable when its original PlatformSession no longer exists.
-- New writes use ProductionEvent only; legacy TaskRecord values remain readable but are not converted into runs.
+Old workspace, run, and TaskRecord data is intentionally expired development data. It is not read or migrated. New writes use ProductionEvent only.
 
 The planning-input model was amended on 2026-07-22:
 
@@ -53,7 +48,7 @@ The implementation amendment also fixes the application ownership boundary:
 - Application use cases and pure mutations coordinate session/run snapshots and cross-repository compensation.
 - Platform Registry owns workflow labels, capabilities, and legacy workflow normalization; history queries consume RunRepository pagination rather than scanning Workspace.
 
-Old v1 business fixtures are not read or migrated. Runtime settings remain at `ecom-workbench.runtime-settings.v1` and are normalized so existing credentials and Demo/API choice survive the business reset.
+Old v1 business fixtures and old runtime settings are not read or migrated. Runtime settings use the new API-only key `ecom-workbench.runtime-settings.api.v1`; there is no Demo/API choice.
 
 Project deletion removes only that project's runs, assets, V3/v2 workspace, and project metadata in that order. A failed step leaves the project visible and retryable; deletion must not call `localStorage.clear()` or remove unrelated settings.
 
@@ -77,11 +72,11 @@ Rejected. It couples shared facts to one platform mode, makes history mutable, a
 
 ### TaskRecord as the primary history model
 
-Rejected. A flat task log cannot represent one complete production attempt, its option/plan/version snapshots, or fork/re-export semantics. Legacy TaskRecord values remain readable in the retained v2 source for compatibility, but V3 and new writes do not create or mirror TaskRecord history.
+Rejected. A flat task log cannot represent one complete production attempt, its option/plan/version snapshots, or fork/re-export semantics. Legacy TaskRecord values are outside the API-only product boundary and are not read.
 
 ### Migrate all v1 business data
 
-Rejected. The v1 data was test-oriented and could be mistaken for real product history. A clean v2 business start is safer and simpler.
+Rejected. The old data was test-oriented and could be mistaken for real product history. A clean API-only business start is safer and simpler.
 
 ### Clear all browser storage during migration
 
@@ -93,7 +88,7 @@ Rejected for the current scope. It would add a second model call, extra waiting 
 
 ## Tradeoffs
 
-- Workspace V3 intentionally has no runs, TaskRecord history, top-level plans/versions mirrors, or Amazon workspace mirror; the retained v2 document is migration input only.
+- Workspace V3 intentionally has no runs, TaskRecord history, top-level plans/versions mirrors, or Amazon workspace mirror; old documents are discarded rather than migrated.
 - RunRepository query pagination and lazy asset URL ownership add a small operational layer, but keep history independent from the current session lifecycle.
 - v1 business data is intentionally unavailable in the current UI.
 - Local browser storage is not encrypted; API settings must continue to disclose that risk.
@@ -101,10 +96,8 @@ Rejected for the current scope. It would add a second model call, extra waiting 
 
 ## Verification
 
-- `tests/workspace-v2.test.ts`
 - `tests/workspace-v3.test.ts`
 - `tests/run-repository.test.ts`
-- `tests/run-migration.test.ts`
 - `tests/repository-compensation.test.ts`
 - `tests/production-history.test.ts`
 - `tests/run-export.test.ts`
