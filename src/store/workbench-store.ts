@@ -2956,13 +2956,17 @@ export function createWorkbenchStore(
         if (!canReuseLocalizedDraft && planningSession) {
           const timestamp = now();
           let localizedFacts = cloneProductFacts(sourcePlanningFacts);
+          const canLocalize = Boolean(
+            dependencies.aiRuntimeFactory ||
+              dependencies.createProductLocalizer ||
+              dependencies.productLocalizer,
+          );
           let status: PlatformFactsDraft["status"] = targetLocale === "zh-CN"
             ? "confirmed"
-            : !dependencies.aiRuntimeFactory && !dependencies.createProductLocalizer && !dependencies.productLocalizer
-              ? "pending"
-              : "generated";
-          let localizationFailure: unknown = null;
-          if (targetLocale !== "zh-CN") {
+            : canLocalize
+              ? "confirmed"
+              : "pending";
+          if (targetLocale !== "zh-CN" && canLocalize) {
             try {
               const runtime = resolveAiRuntime(get().runtimeSettings);
               const activeLocalizer = runtime?.productLocalizer ??
@@ -2976,9 +2980,10 @@ export function createWorkbenchStore(
                 DEFAULT_LOCALIZATION_RULES,
                 controller.signal,
               );
-            } catch (error) {
-              localizationFailure = error;
-              status = "pending";
+              status = "confirmed";
+            } catch {
+              localizedFacts = cloneProductFacts(sourcePlanningFacts);
+              status = "confirmed";
             }
           }
           localizedFactsDraft = {
@@ -3027,12 +3032,10 @@ export function createWorkbenchStore(
               session.id === updatedSession.id ? updatedSession : session,
             ),
           }));
-          if (targetLocale !== "zh-CN") {
+          if (targetLocale !== "zh-CN" && status !== "confirmed") {
             set({
               planningPlatformId: null,
-              planningError: localizationFailure
-                ? `站点语言草稿生成失败：${errorMessage(localizationFailure)}。可检查并手动补充后确认。`
-                : "站点语言草稿已生成，请检查并确认后再进行 AI 策划。",
+              planningError: "当前运行环境没有可用的本地化服务，请检查并确认站点语言草稿。",
             });
             return null;
           }

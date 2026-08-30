@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FileText, Images } from "lucide-react";
 
 import { planningInputQualityLabel } from "../domain/planning/input-assessment";
@@ -13,7 +13,6 @@ import type { StartAmazonSessionInput, WorkbenchAsset } from "../store/workbench
 import { AmazonIntake } from "./AmazonIntake";
 import { ProductContextBar } from "./ProductContextBar";
 import { LocalizedFactsReview } from "./LocalizedFactsReview";
-import { PlatformWorkflowShell } from "./PlatformWorkflowShell";
 import { Dialog, StatusMessage } from "./ui";
 
 function sessionModeLabel(session: PlatformSession): string {
@@ -132,6 +131,7 @@ export function AmazonWorkspace({
   children: ReactNode | ((contextBar: ReactNode) => ReactNode);
 }) {
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const resumedDraftRef = useRef<string | null>(null);
   const qualityLabel = session?.planningInput
     ? planningInputQualityLabel(session.planningInput.quality)
     : null;
@@ -139,18 +139,40 @@ export function AmazonWorkspace({
     ? `${qualityLabel ?? "图片策划"} · ${sessionModeLabel(session)}`
     : qualityLabel ?? "准备";
 
+  useEffect(() => {
+    const draft = session?.localizedFactsDraft;
+    if (
+      !session ||
+      session.plan ||
+      !draft ||
+      draft.status === "confirmed" ||
+      loading ||
+      planning
+    ) {
+      return;
+    }
+    const resumeKey = `${session.id}:${draft.updatedAt}`;
+    if (resumedDraftRef.current === resumeKey) return;
+    resumedDraftRef.current = resumeKey;
+    void Promise.resolve(onConfirmLocalizedFacts(session.id, draft.localizedFacts)).catch(
+      () => undefined,
+    );
+  }, [loading, onConfirmLocalizedFacts, planning, session]);
+
+  const showProductionWorkspace = Boolean(session?.plan || session?.localizedFactsDraft);
+
   return (
     <div className="amazon-workspace">
-      {session?.plan ? (
+      {showProductionWorkspace ? (
         typeof children === "function" ? children(
           <ProductContextBar
             platformLabel="Amazon"
             project={activeProject}
             statusLabel={statusLabel}
-            statusTone="success"
-            detailLabel="任务输入"
+            statusTone={session?.plan ? "success" : "warning"}
+            detailLabel={session?.plan ? "任务输入" : undefined}
             disabled={loading || planning}
-            onOpenDetails={() => setSummaryOpen(true)}
+            onOpenDetails={session?.plan ? () => setSummaryOpen(true) : undefined}
           />,
         ) : (
           <>
@@ -158,39 +180,14 @@ export function AmazonWorkspace({
               platformLabel="Amazon"
               project={activeProject}
               statusLabel={statusLabel}
-              statusTone="success"
-              detailLabel="任务输入"
+              statusTone={session?.plan ? "success" : "warning"}
+              detailLabel={session?.plan ? "任务输入" : undefined}
               disabled={loading || planning}
-              onOpenDetails={() => setSummaryOpen(true)}
+              onOpenDetails={session?.plan ? () => setSummaryOpen(true) : undefined}
             />
             {children}
           </>
         )
-      ) : session?.localizedFactsDraft ? (
-        <PlatformWorkflowShell
-          platform="amazon"
-          title="Amazon"
-          stage="review"
-          completedSlots={0}
-          totalSlots={0}
-          className="platform-workflow-shell--scroll-content"
-          contextBar={
-            <ProductContextBar
-              platformLabel="Amazon"
-              project={activeProject}
-              statusLabel="待确认"
-              statusTone="warning"
-              disabled={loading || planning}
-            />
-          }
-          historyAction={historyAction}
-        >
-          <LocalizedFactsReview
-            draft={session.localizedFactsDraft}
-            disabled={loading || planning}
-            onConfirm={(facts) => onConfirmLocalizedFacts(session.id, facts)}
-          />
-        </PlatformWorkflowShell>
       ) : (
         <AmazonIntake
           activeProject={activeProject}
