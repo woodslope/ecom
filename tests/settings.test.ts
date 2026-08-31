@@ -111,7 +111,7 @@ describe("runtime settings", () => {
     expect(validateRuntimeSettings(settings)).toBeNull();
   });
 
-  it("tests text and image services independently without generating an image", async () => {
+  it("tests text and image services independently, including a minimal image request", async () => {
     const fetchMock = async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).includes("chat/completions")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer text-key" });
@@ -119,9 +119,9 @@ describe("runtime settings", () => {
           status: 200,
         });
       }
-      expect(String(input)).toBe("https://image.example/v1/models");
+      expect(String(input)).toBe("https://image.example/v1/images/generations");
       expect(init?.headers).toMatchObject({ Authorization: "Bearer image-key" });
-      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      return new Response(JSON.stringify({ data: [{ b64_json: btoa("test-image") }] }), { status: 200 });
     };
     const settings = normalizeRuntimeSettings({
       mode: "api",
@@ -139,7 +139,7 @@ describe("runtime settings", () => {
     });
     await expect(testImageApiConnection(settings, { fetch: fetchMock })).resolves.toEqual({
       ok: true,
-      message: "图片生成 API 连接成功（仅验证连接与权限，未消耗生图额度）。",
+      message: "图片生成 API 测试成功，已收到可用图片（本次测试会消耗一次生图额度）。",
     });
   });
 });

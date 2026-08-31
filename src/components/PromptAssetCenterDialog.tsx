@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { Bot, Bookmark, BookmarkCheck, Library, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { browserStorage } from "../application/browser-storage";
 
 import {
   deleteSlotPromptAsset,
@@ -38,7 +39,7 @@ export function PromptAssetCenterDialog({
   onClose: () => void;
 }) {
   const aiRewriteReasonId = useId();
-  const storage = typeof window !== "undefined" ? window.localStorage : null;
+  const storage = typeof window !== "undefined" ? browserStorage : null;
   const [assets, setAssets] = useState<SlotPromptAsset[]>([]);
   const [defaultAssetId, setDefaultAssetId] = useState<string | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string>("baseline");

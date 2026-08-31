@@ -17,6 +17,7 @@ import {
   shouldApplyStyleToSlot,
   STYLE_REFERENCE_PROMPT_GUARD,
 } from "../platforms/amazon-style-presets";
+import { browserStorage } from "../../application/browser-storage";
 
 export {
   AMAZON_STYLE_PRESETS,
@@ -204,8 +205,8 @@ function saveCustomProfiles(
 export function allProfiles(): PromptProfile[] {
   const builtins = PROMPT_PROFILES as unknown as PromptProfile[];
   let customs: PromptProfile[] = [];
-  if (typeof window !== "undefined" && window.localStorage) {
-    customs = loadCustomProfiles(window.localStorage).map((r) => {
+  if (typeof window !== "undefined") {
+    customs = loadCustomProfiles(browserStorage).map((r) => {
       const sourcePreset = getAmazonStylePreset(r.sourcePresetId) ?? AMAZON_STYLE_PRESETS[0]!;
       return Object.freeze({
         id: r.id,

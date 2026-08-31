@@ -30,7 +30,7 @@ export {
   type RuntimeSettingsV2Repository,
 } from "./runtime-settings";
 export { detectProviderCapabilities, type ProviderCapabilities } from "./provider-capabilities";
-export { testApiConnection, testImageApiConnection, testTextApiConnection } from "./test-connection";
+export { readApiModels, testApiConnection, testImageApiConnection, testTextApiConnection, type ModelListResult } from "./test-connection";
 export type {
   ConnectionMode,
   ConnectionTestResult,

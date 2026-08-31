@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Trash2, Upload } from "lucide-react";
+import { browserStorage } from "../application/browser-storage";
 
 import {
   type PlanningStrategy,
@@ -62,7 +63,7 @@ export function PromptProfileDialog({
   const [importError, setImportError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
-  const storage = typeof window !== "undefined" ? window.localStorage : null;
+  const storage = typeof window !== "undefined" ? browserStorage : null;
 
   const reset = useCallback(() => {
     if (editProfile) {

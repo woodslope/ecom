@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Monitor } from "lucide-react";
 
 import type { NavigationItemId } from "../domain/platforms/types";
-import { defaultRuntimeSettings, type ConnectionTestResult, type RuntimeSettings } from "../domain/settings";
+import { defaultRuntimeSettings, type ConnectionTestResult, type ModelListResult, type RuntimeSettings } from "../domain/settings";
 import { PlatformRail } from "./PlatformRail";
 import { SettingsDialog } from "./SettingsDialog";
 import { syncModalEnvironment } from "./ui";
@@ -25,6 +25,7 @@ export function AppShell({
   onTestRuntimeConnection = async () => ({ ok: true, message: "连接成功" }),
   onTestTextConnection,
   onTestImageConnection,
+  onReadModels,
   onExportLocalBackup,
   onImportLocalBackup,
   children,
@@ -44,6 +45,7 @@ export function AppShell({
   onTestRuntimeConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onTestTextConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onTestImageConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
+  onReadModels?: (settings: RuntimeSettings, service: "text" | "image") => Promise<ModelListResult>;
   onExportLocalBackup?: () => Promise<string>;
   onImportLocalBackup?: (file: File) => Promise<string>;
   children: ReactNode;
@@ -160,6 +162,7 @@ export function AppShell({
         onTest={onTestRuntimeConnection}
         onTestText={onTestTextConnection ?? onTestRuntimeConnection}
         onTestImage={onTestImageConnection ?? onTestRuntimeConnection}
+        onReadModels={onReadModels}
         onExportLocalBackup={onExportLocalBackup}
         onImportLocalBackup={onImportLocalBackup}
       />

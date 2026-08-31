@@ -10,6 +10,7 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
+import { browserStorage } from "../application/browser-storage";
 
 import {
   createGeneralIndustryTemplateSnapshot,
@@ -69,7 +70,7 @@ export function IndustryTemplateSelector({
   disabled?: boolean;
   onChange: (template: IndustryTemplateSnapshot) => void;
 }) {
-  const storage = typeof window !== "undefined" ? window.localStorage : null;
+  const storage = typeof window !== "undefined" ? browserStorage : null;
   const generalTemplate = useMemo(
     () => createGeneralIndustryTemplateSnapshot(scope, rulePack),
     [rulePack, scope.platformId, scope.workflowId],

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Archive, CircleAlert } from "lucide-react";
+import { browserStorage } from "../application/browser-storage";
 
 import { getPlatformRulePack } from "../domain/platforms/registry";
 import type { PlatformId } from "../domain/platforms/types";
@@ -119,7 +120,7 @@ export function TaskHistoryArchive({
     const repository =
       workspaceRepository ??
       createLocalStorageWorkspaceRepository({
-        storage: window.localStorage,
+        storage: browserStorage,
       });
     const loaded = await Promise.all(
       (historyProjects ?? projects).map(async (project) => {

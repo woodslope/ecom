@@ -9,6 +9,7 @@ import { ConfirmLeaveDialog } from "./components/ConfirmLeaveDialog";
 import { PlatformWorkspace } from "./components/PlatformWorkspace";
 import { TaobaoWorkspace } from "./components/TaobaoWorkspace";
 import { Button, Dialog, StatusMessage, Toast, ToastRegion } from "./components/ui";
+import { browserStorage } from "./application/browser-storage";
 import type { NavigationItemId, PlatformId } from "./domain/platforms/types";
 import type { ExecutionJob } from "./domain/jobs/types";
 import type { HistoryQueryService } from "./domain/history/query";
@@ -30,7 +31,7 @@ const TaskHistoryArchive = lazy(async () => {
 
 function initialNavigationItem(): NavigationItemId {
   if (typeof window === "undefined") return "amazon";
-  return readLastPlatformOrDefault(window.localStorage);
+  return readLastPlatformOrDefault(browserStorage);
 }
 
 function PlatformHistoryPane({
@@ -280,7 +281,7 @@ export function App() {
     setActiveItem(pending.item);
     clearPlanningError();
     if (pending.item === "taobao" || pending.item === "amazon") {
-      writeLastPlatform(window.localStorage, pending.item);
+      writeLastPlatform(browserStorage, pending.item);
     }
   };
   const save = async (input: UpdateProductProjectInput) => Boolean(await updateActiveProject(input));
@@ -299,7 +300,7 @@ export function App() {
       summarizeLocalBackup,
     } = await import("./application/local-backup");
     const backup = await createLocalBackup({
-      storage: window.localStorage,
+      storage: browserStorage,
       indexedDB: window.indexedDB,
     });
     const blob = new Blob([JSON.stringify(backup)], { type: "application/json" });
@@ -322,7 +323,7 @@ export function App() {
     } = await import("./application/local-backup");
     const backup = parseLocalBackup(await file.text());
     const summary = await restoreLocalBackup(backup, {
-      storage: window.localStorage,
+      storage: browserStorage,
       indexedDB: window.indexedDB,
     });
     window.setTimeout(() => window.location.reload(), 600);
@@ -337,7 +338,7 @@ export function App() {
     setNewTaskTokens((current) => ({ ...current, [platform]: current[platform] + 1 }));
     setActiveItem(platform);
     clearPlanningError();
-    writeLastPlatform(window.localStorage, platform);
+    writeLastPlatform(browserStorage, platform);
   };
   const clearNewTask = (platform: "taobao" | "amazon") => {
     setNewTaskTokens((current) => ({ ...current, [platform]: 0 }));
@@ -347,7 +348,7 @@ export function App() {
     setActiveItem(item);
     clearPlanningError();
     if (item === "taobao" || item === "amazon") {
-      writeLastPlatform(window.localStorage, item);
+      writeLastPlatform(browserStorage, item);
     }
   };
   const downloadExport = (exported: NonNullable<Awaited<ReturnType<typeof exportPlatform>>>) => {

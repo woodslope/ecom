@@ -85,8 +85,72 @@ interface ChatImageResponse {
   choices?: Array<{ message?: { images?: Array<{ image_url?: { url?: unknown } }>; content?: unknown } }>;
 }
 
-function endpoint(baseUrl: string, path: string): string {
-  return `${baseUrl.replace(/\/+$/, "")}/${path}`;
+function endpoint(baseUrl: string, path: "images/generations" | "images/edits" | "chat/completions"): string {
+  const raw = baseUrl.trim();
+  try {
+    const url = new URL(raw);
+    const pathname = url.pathname.replace(/\/+$/, "");
+    const imageSuffix = /\/images\/(?:generations|edits)$/i;
+    if (path === "chat/completions") {
+      if (/\/chat\/completions$/i.test(pathname)) return raw;
+      if (imageSuffix.test(pathname)) {
+        url.pathname = `${pathname.replace(imageSuffix, "")}/chat/completions`;
+        return url.toString();
+      }
+    } else {
+      if (pathname.toLowerCase().endsWith(`/${path}`.toLowerCase())) return raw;
+      if (imageSuffix.test(pathname)) {
+        url.pathname = `${pathname.replace(imageSuffix, "")}/${path}`;
+        return url.toString();
+      }
+    }
+  } catch {
+    // The settings validator provides the user-facing URL error.
+  }
+  return `${raw.replace(/\/+$/, "")}/${path}`;
+}
+
+const isGptImageModel = (model: string): boolean => /^gpt-image(?:-|$)/i.test(model.trim());
+const isGptImage2Model = (model: string): boolean => /^gpt-image-2(?:-|$)/i.test(model.trim());
+
+function imageSizeForRatio(ratio: string): string {
+  const sizes: Record<string, string> = {
+    "1:1": "1024x1024",
+    "16:9": "1792x1024",
+    "9:16": "1024x1792",
+    "4:3": "1024x768",
+    "3:4": "768x1024",
+    "3:2": "1536x1024",
+    "2:3": "1024x1536",
+    "21:9": "1344x576",
+  };
+  return sizes[ratio] ?? sizes["1:1"];
+}
+
+function buildImagesApiBody(model: string, prompt: string, dimensions: { width: number; height: number }): Record<string, unknown> {
+  const ratio = closestAspectRatio(dimensions.width, dimensions.height);
+  if (isGptImage2Model(model)) {
+    return {
+      model,
+      prompt,
+      n: 1,
+      aspect_ratio: ratio,
+      size: imageSizeForRatio(ratio),
+      quality: "standard",
+      response_format: "url",
+      watermark: false,
+    };
+  }
+  if (isGptImageModel(model)) {
+    return { model, prompt, n: 1, size: imageSizeForRatio(ratio) };
+  }
+  return {
+    model,
+    prompt,
+    n: 1,
+    size: `${dimensions.width}x${dimensions.height}`,
+    response_format: "b64_json",
+  };
 }
 
 function decodeBase64(value: string): ArrayBuffer {
@@ -373,7 +437,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
       form.append("prompt", prompt);
       form.append("n", "1");
       form.append("size", size);
-      form.append("response_format", "b64_json");
+      if (!isGptImageModel(this.options.model)) form.append("response_format", "b64_json");
       if (request.edit) {
         const target = request.edit.target.blob.type === request.edit.target.mimeType
           ? request.edit.target.blob
@@ -398,13 +462,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
       body = form;
       headers = { Authorization: `Bearer ${this.options.apiKey}` };
     } else {
-      body = JSON.stringify({
-        model: this.options.model,
-        prompt,
-        n: 1,
-        size,
-        response_format: "b64_json",
-      });
+      body = JSON.stringify(buildImagesApiBody(this.options.model, prompt, request.dimensions));
       headers = {
         Authorization: `Bearer ${this.options.apiKey}`,
         "Content-Type": "application/json",

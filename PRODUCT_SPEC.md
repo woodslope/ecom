@@ -161,18 +161,20 @@ Style presets and project style references apply to attached/A+ work where suppo
 
 ## 9. Persistence And Export
 
-Projects and assets use the API-only business namespace. Editable sessions and immutable history are persisted separately:
+Projects and assets use the API-only business namespace. Browser business state is now stored in IndexedDB, with a KV database for small JSON records and dedicated IndexedDB databases for binary/history records:
 
-- Projects: `ecom-workbench.projects.v3`
+- Browser KV: `ecom-workbench-browser-v1` / `kv` (projects, settings, workspaces, Prompt profiles/assets, industry templates, and UI preferences)
+- Projects key: `ecom-workbench.projects.v3`
 - Assets: `ecom-workbench-assets-v2`
 - Current sessions: `ecom-workbench.workspace.api.v1.{projectId}`
 - Production runs: IndexedDB `ecom-workbench-runs-api-v1`
+- Execution jobs: IndexedDB `ecom-workbench-jobs-v1`
 
 Workspace V3 contains current sessions only. It does not contain runs, TaskRecord history, top-level plan/version mirrors, or Amazon workspace mirrors. Old workspace data is intentionally discarded during this development reset and is not read or migrated. New operations write API-only ProductionRun events and no longer append TaskRecord entries.
 
 New sessions and runs persist the optional `planningInput` snapshot. Readers normalize old records that do not contain it, so this addition requires no destructive migration. Failed planning preserves the draft project, entered text, uploaded images, and selected references for retry.
 
-Runtime settings use `ecom-workbench.runtime-settings.api.v1`; old v1/v2 keys are not read or migrated. Removing a project removes that project's runs, assets, API workspace, and project metadata in a retryable order; it does not clear unrelated browser storage or runtime settings.
+Runtime settings use the `ecom-workbench.runtime-settings.api.v1` key inside the browser KV store; old v1/v2 keys are not read or migrated. On first launch, compatible legacy localStorage keys are copied into IndexedDB and removed only after the transaction succeeds. Removing a project removes that project's runs, assets, API workspace, and project metadata in a retryable order; it does not clear unrelated browser storage or runtime settings.
 
 The product runtime is API-only. Structured task options enter through `taskSettings`; `src/domain/prompting/builders.ts` is the sole Prompt construction entry point.
 

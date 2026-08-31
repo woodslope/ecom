@@ -115,6 +115,40 @@ describe("OpenAIImageGenerator", () => {
     expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(returnedImage);
   });
 
+  it.each([
+    { model: "gpt-image-1", expected: { model: "gpt-image-1", n: 1, size: "1024x1024" } },
+    {
+      model: "gpt-image-2",
+      expected: {
+        model: "gpt-image-2",
+        n: 1,
+        aspect_ratio: "1:1",
+        size: "1024x1024",
+        quality: "standard",
+        response_format: "url",
+        watermark: false,
+      },
+    },
+  ])("uses the provider-compatible request body for $model", async ({ model, expected }) => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ data: [{ b64_json: btoa("test-image") }] }), { status: 200 }),
+    );
+    const generator = new OpenAIImageGenerator({
+      baseUrl: "https://provider.example/v1/images/generations",
+      apiKey: "test-secret-key",
+      model,
+      fetch: fetchMock,
+    });
+
+    await generator.generate(request, new AbortController().signal);
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://provider.example/v1/images/generations");
+    const body = JSON.parse(String(init?.body));
+    expect(body).toMatchObject({ prompt: expect.any(String), ...expected });
+    if (model === "gpt-image-1") expect(body).not.toHaveProperty("response_format");
+  });
+
   it("posts reference images as multipart form data to the edits endpoint", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(

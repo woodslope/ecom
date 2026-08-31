@@ -97,12 +97,13 @@ flowchart LR
 
 项目与素材使用 API-only 业务命名空间：
 
-- 项目：`ecom-workbench.projects.v3`
+- 浏览器业务 KV：IndexedDB `ecom-workbench-browser-v1` / `kv`（项目、设置、工作区、Prompt 方案、Prompt 资产、行业模板和界面偏好）
+- 项目键：`ecom-workbench.projects.v3`
 - 素材数据库：`ecom-workbench-assets-v2`
 
 当前可编辑会话使用 `ecom-workbench.workspace.api.v1.{projectId}`。V3 只保存 `currentSessions` 和 `updatedAt`；ProductionRun 独立保存在 IndexedDB `ecom-workbench-runs-api-v1`，不再依赖当前 session 存在。旧 workspace 在本次开发重置中直接失效，不由产品路径读取或迁移。
 
-旧 v1 测试业务数据和旧运行设置均不迁移、不读取。运行设置以 API-only key `ecom-workbench.runtime-settings.api.v1` 保存；旧 v1/v2 key 过期。删除项目按 runs、assets、API workspace、项目元数据顺序清理，失败可重试；不调用 `localStorage.clear()`。
+旧 v1 测试业务数据和旧运行设置均不迁移、不读取。当前 API-only 运行设置键 `ecom-workbench.runtime-settings.api.v1` 保存在 IndexedDB KV 中；首次启动会把兼容的旧 localStorage 业务键迁移到 IndexedDB，事务成功后才清理旧键。删除项目按 runs、assets、API workspace、项目元数据顺序清理，失败可重试；不调用 `localStorage.clear()`。
 
 设置页支持导出和恢复单个 JSON 本地备份。备份覆盖商品、v2/v3 workspace、素材 Blob、ProductionRun、本地任务和界面偏好；恢复会替换这些业务数据，并在写入失败时尝试回滚。运行设置、API Key 和 Provider 地址不进入备份，恢复后保持当前浏览器配置不变。
 

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, RefreshCw } from "lucide-react";
 
 import {
   defaultRuntimeSettings,
+  readApiModels,
   runtimeTextBaseUrl,
   type ConnectionTestResult,
+  type ModelListResult,
   type RuntimeSettings,
 } from "../domain/settings";
 import { Button, ConfirmDialog, Dialog, Field, IconButton, SegmentedControl, Select, StatusMessage } from "./ui";
@@ -91,6 +93,7 @@ export function SettingsDialog({
   onTest = async () => ({ ok: true, message: "连接成功" }),
   onTestText,
   onTestImage,
+  onReadModels,
   onExportLocalBackup,
   onImportLocalBackup,
 }: {
@@ -109,6 +112,7 @@ export function SettingsDialog({
   onTest?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onTestText?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
   onTestImage?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
+  onReadModels?: (settings: RuntimeSettings, service: "text" | "image") => Promise<ModelListResult>;
   onExportLocalBackup?: () => Promise<string>;
   onImportLocalBackup?: (file: File) => Promise<string>;
 }) {
@@ -116,6 +120,9 @@ export function SettingsDialog({
   const [draft, setDraft] = useState<RuntimeSettings>(settings);
   const [saving, setSaving] = useState(false);
   const [testingService, setTestingService] = useState<"text" | "image" | null>(null);
+  const [readingModelsService, setReadingModelsService] = useState<"text" | "image" | null>(null);
+  const [modelOptions, setModelOptions] = useState<{ text: string[]; image: string[] }>({ text: [], image: [] });
+  const [modelReadMessage, setModelReadMessage] = useState<{ service: "text" | "image"; tone: "success" | "danger"; text: string } | null>(null);
   const [draftChanged, setDraftChanged] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [textResult, setTextResult] = useState<ConnectionTestResult | null>(null);
@@ -132,7 +139,7 @@ export function SettingsDialog({
     connectionStatus === "testing" ||
     textConnectionStatus === "testing" ||
     imageConnectionStatus === "testing";
-  const operationBusy = saving || activeTesting || loading || backupOperation !== null;
+  const operationBusy = saving || activeTesting || readingModelsService !== null || loading || backupOperation !== null;
   const controlsDisabled = operationBusy || Boolean(lockReason);
 
   useEffect(() => {
@@ -142,6 +149,9 @@ export function SettingsDialog({
     setSaveMessage(null);
     setTextResult(null);
     setImageResult(null);
+    setModelReadMessage(null);
+    setReadingModelsService(null);
+    setModelOptions({ text: [], image: [] });
     setTextKeyVisible(false);
     setImageKeyVisible(false);
     setBackupOperation(null);
@@ -167,6 +177,7 @@ export function SettingsDialog({
     setSaveMessage(null);
     setTextResult(null);
     setImageResult(null);
+    setModelReadMessage(null);
   };
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -177,7 +188,7 @@ export function SettingsDialog({
     setSaving(false);
     if (saved) {
       setDraftChanged(false);
-      setSaveMessage("设置已保存。");
+      onClose();
     }
   };
 
@@ -195,6 +206,22 @@ export function SettingsDialog({
       else setImageResult(result);
     } finally {
       setTestingService(null);
+    }
+  };
+
+  const readModels = async (service: "text" | "image") => {
+    setReadingModelsService(service);
+    setModelReadMessage(null);
+    try {
+      const result = await (onReadModels ?? readApiModels)({ ...draft, mode: "api" }, service);
+      if (result.ok) {
+        setModelOptions((current) => ({ ...current, [service]: result.models }));
+      }
+      setModelReadMessage({ service, tone: result.ok ? "success" : "danger", text: result.message });
+    } catch {
+      setModelReadMessage({ service, tone: "danger", text: "无法读取模型，请检查网络、API Key 和根地址。" });
+    } finally {
+      setReadingModelsService(null);
     }
   };
 
@@ -347,15 +374,23 @@ export function SettingsDialog({
                   </IconButton>
                 </div>
               </Field>
-              {effectiveConnectionMode === "single" ? <Field label="图片生成模型" name="imageModel" error={fieldError("imageModel")}><input value={draft.imageModel} disabled={controlsDisabled} onChange={(event) => update("imageModel", event.target.value)} /></Field> : null}
+              {effectiveConnectionMode === "single" ? <Field label="图片生成模型" name="imageModel" error={fieldError("imageModel")}><div className="settings-model-field"><input list="runtime-image-model-options" value={draft.imageModel} disabled={controlsDisabled} onChange={(event) => update("imageModel", event.target.value)} /><Button type="button" variant="secondary" size="compact" onClick={() => void readModels("image")} disabled={controlsDisabled}><RefreshCw size={14} aria-hidden="true" />{readingModelsService === "image" ? "读取中..." : "读取模型"}</Button></div><datalist id="runtime-image-model-options">{modelOptions.image.map((model) => <option key={model} value={model} />)}</datalist>{modelReadMessage?.service === "image" ? <StatusMessage tone={modelReadMessage.tone} live={modelReadMessage.tone === "danger" ? "assertive" : "polite"}>{modelReadMessage.text}</StatusMessage> : null}</Field> : null}
               {String(draft.textBaseUrl ?? baseFromEndpoint(draft)).includes("api.deepseek.com") ? <StatusMessage tone="warning">{effectiveConnectionMode === "single" ? "DeepSeek 官方连接不支持生图；请改用双配置并设置独立图片服务。" : "DeepSeek 官方策划接口仅接收文本；参考图会在策划请求中明确跳过，正式生图仍使用独立图片服务。"}</StatusMessage> : null}
               <Field label="文本策划模型" error={fieldError("planningModel")}>
-                <input
-                  name="planningModel"
-                  value={draft.planningModel}
-                  disabled={controlsDisabled}
-                  onChange={(event) => update("planningModel", event.target.value)}
-                />
+                <div className="settings-model-field">
+                  <input
+                    name="planningModel"
+                    list="runtime-text-model-options"
+                    value={draft.planningModel}
+                    disabled={controlsDisabled}
+                    onChange={(event) => update("planningModel", event.target.value)}
+                  />
+                  <Button type="button" variant="secondary" size="compact" onClick={() => void readModels("text")} disabled={controlsDisabled}>
+                    <RefreshCw size={14} aria-hidden="true" />
+                    {readingModelsService === "text" ? "读取中..." : "读取模型"}
+                  </Button>
+                </div>
+                <datalist id="runtime-text-model-options">{modelOptions.text.map((model) => <option key={model} value={model} />)}</datalist>
               </Field>
               <div className="settings-service-actions">
                 <Button
@@ -369,12 +404,13 @@ export function SettingsDialog({
                 </Button>
                 {textMessage ? <StatusMessage tone={textTone} live={textTone === "danger" ? "assertive" : "polite"}>{textMessage}</StatusMessage> : null}
               </div>
+              {modelReadMessage?.service === "text" ? <StatusMessage tone={modelReadMessage.tone} live={modelReadMessage.tone === "danger" ? "assertive" : "polite"}>{modelReadMessage.text}</StatusMessage> : null}
             </section>
 
             {effectiveConnectionMode === "dual" ? <section className="settings-service-group" aria-labelledby="image-service-title">
               <div className="settings-service-group__heading">
                 <h3 id="image-service-title">图片生成服务</h3>
-                <p>用于根据已确认的槽位提示词生成商品图片。连接测试只验证权限，不实际生图。</p>
+                <p>用于根据已确认的槽位提示词生成商品图片。测试会发送一次最小生图请求并消耗额度。</p>
               </div>
               <Field
                 label="图片 API 根地址"
@@ -403,12 +439,20 @@ export function SettingsDialog({
                 </div>
               </Field>
               <Field label="图片生成模型" error={fieldError("imageModel")}>
-                <input
-                  name="imageModel"
-                  value={draft.imageModel}
-                  disabled={controlsDisabled}
-                  onChange={(event) => update("imageModel", event.target.value)}
-                />
+                <div className="settings-model-field">
+                  <input
+                    name="imageModel"
+                    list="runtime-image-model-options"
+                    value={draft.imageModel}
+                    disabled={controlsDisabled}
+                    onChange={(event) => update("imageModel", event.target.value)}
+                  />
+                  <Button type="button" variant="secondary" size="compact" onClick={() => void readModels("image")} disabled={controlsDisabled}>
+                    <RefreshCw size={14} aria-hidden="true" />
+                    {readingModelsService === "image" ? "读取中..." : "读取模型"}
+                  </Button>
+                </div>
+                <datalist id="runtime-image-model-options">{modelOptions.image.map((model) => <option key={model} value={model} />)}</datalist>
               </Field>
               <Field
                 label="生成方式"
@@ -438,6 +482,7 @@ export function SettingsDialog({
                 </Button>
                 {imageMessage ? <StatusMessage tone={imageTone} live={imageTone === "danger" ? "assertive" : "polite"}>{imageMessage}</StatusMessage> : null}
               </div>
+              {modelReadMessage?.service === "image" ? <StatusMessage tone={modelReadMessage.tone} live={modelReadMessage.tone === "danger" ? "assertive" : "polite"}>{modelReadMessage.text}</StatusMessage> : null}
             </section> : null}
 
 
@@ -448,7 +493,7 @@ export function SettingsDialog({
           <div className="privacy-info-grid">
             <div className="privacy-info-card">
               <strong>浏览器本地</strong>
-              <span>商品资料、参考图、策划方案、生成结果和工作记录仅保存在当前浏览器的 localStorage 和 IndexedDB 中。</span>
+              <span>商品资料、参考图、策划方案、生成结果和工作记录仅保存在当前浏览器的 IndexedDB 中。</span>
             </div>
             <div className="privacy-info-card">
               <strong>API 请求</strong>

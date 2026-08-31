@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowRight, Columns3, Copy, Save } from "lucide-react";
+import { browserStorage } from "../application/browser-storage";
 
 import {
   activeSlotVersion,
@@ -191,7 +192,7 @@ export function SlotInspector({
       industryTemplate.source !== "custom" ||
       !industryGuidance
     ) return;
-    const pack = listIndustryTemplatePacks(window.localStorage, industryTemplate.scope)
+    const pack = listIndustryTemplatePacks(browserStorage, industryTemplate.scope)
       .find((candidate) => candidate.id === industryTemplate.id);
     if (!pack) {
       setIndustryTemplateMessage("行业模板已被删除，当前任务快照仍可继续使用。");
@@ -199,7 +200,7 @@ export function SlotInspector({
       return;
     }
     const latest = industryTemplateSnapshot(pack);
-    const saved = saveIndustryTemplatePack(window.localStorage, {
+    const saved = saveIndustryTemplatePack(browserStorage, {
       id: pack.id,
       name: pack.name,
       description: pack.description,

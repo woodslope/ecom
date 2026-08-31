@@ -168,6 +168,7 @@ import {
 } from "../domain/settings";
 import type { AiRuntimeFactory } from "../services/ai/runtime-factory";
 import { createAiRuntimeFactory } from "../services/ai/runtime-factory";
+import { browserStorage, hydrateBrowserStorage } from "../application/browser-storage";
 import { DEFAULT_IMAGE_REQUEST_TIMEOUT_MS } from "../services/openai-image-generator";
 import { DEFAULT_PLANNER_REQUEST_TIMEOUT_MS } from "../services/openai-planner";
 import { PROMPT_BUNDLE_VERSION, PROMPT_CONTRACT_VERSION } from "../domain/prompting";
@@ -274,6 +275,8 @@ export interface WorkbenchStoreDependencies {
   createObjectURL: (blob: Blob) => string;
   revokeObjectURL: (url: string) => void;
   warning?: string | null;
+  /** Prepare browser persistence before the first repository read. */
+  prepareStorage?: () => Promise<string | null>;
 }
 
 export interface WorkbenchState {
@@ -1023,6 +1026,7 @@ export function createWorkbenchStore(
         isCurrentLifecycle(operationLifecycle) && contextRequestId === projectContextRequestId;
       set({ loading: true, error: null, resourceRestoreError: null });
       try {
+        const storageWarning = await dependencies.prepareStorage?.();
         const [storedProjects, activeProject] = await Promise.all([
           dependencies.projectRepository.list(),
           dependencies.projectRepository.restoreActive(),
@@ -1053,7 +1057,7 @@ export function createWorkbenchStore(
           allProjects: storedProjects,
           activeProject,
           jobs,
-          warning: [dependencies.warning, jobsRestoreError].filter(Boolean).join(" ") || null,
+          warning: [dependencies.warning, storageWarning, jobsRestoreError].filter(Boolean).join(" ") || null,
           runtimeSettings,
           settingsLoading: false,
           settingsError: settingsRestoreError,
@@ -5716,12 +5720,7 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
     settingsRepository = createMemorySettingsRepository();
     warnings.push("当前为非浏览器环境，项目与素材仅保存在内存中。");
   } else {
-    try {
-      projectRepository = createLocalStorageProjectRepository({ storage: window.localStorage });
-    } catch {
-      projectRepository = createMemoryProjectRepository();
-      warnings.push("localStorage 不可用，项目仅在当前会话保存在内存中。");
-    }
+    projectRepository = createLocalStorageProjectRepository({ storage: browserStorage });
 
     try {
       assetRepository = createIndexedDbAssetRepository({ indexedDB: window.indexedDB });
@@ -5730,14 +5729,9 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
       warnings.push("IndexedDB 不可用，素材仅在当前会话保存在内存中。");
     }
 
-    try {
-      workspaceV3Repository = createLocalStorageWorkspaceV3Repository({
-        storage: window.localStorage,
-      });
-    } catch {
-      workspaceV3Repository = createMemoryWorkspaceV3Repository();
-      warnings.push("localStorage 不可用，平台会话仅在当前会话保存在内存中。");
-    }
+    workspaceV3Repository = createLocalStorageWorkspaceV3Repository({
+      storage: browserStorage,
+    });
 
     try {
       runRepository = createIndexedDbRunRepository({ indexedDB: window.indexedDB });
@@ -5761,12 +5755,7 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
       runRepository,
     });
 
-    try {
-      settingsRepository = createLocalStorageSettingsRepository(window.localStorage);
-    } catch {
-      settingsRepository = createMemorySettingsRepository();
-      warnings.push("localStorage 不可用，运行设置仅在当前会话保存在内存中。");
-    }
+    settingsRepository = createLocalStorageSettingsRepository(browserStorage);
   }
 
   const defaultAiRuntimeFactory = createAiRuntimeFactory();
@@ -5799,6 +5788,7 @@ export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies
       }
     },
     warning: warnings.length > 0 ? warnings.join(" ") : null,
+    prepareStorage: hydrateBrowserStorage,
   };
 }
 
