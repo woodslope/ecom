@@ -8,6 +8,7 @@ import {
   testApiConnection,
   validateRuntimeSettings,
 } from "../src/domain/settings";
+import { createAiRuntimeFactory } from "../src/services/ai/runtime-factory";
 
 describe("runtime settings", () => {
   it("normalizes and restores an OpenAI-compatible configuration locally", async () => {
@@ -138,6 +139,30 @@ describe("runtime settings", () => {
       message: "文本策划 API 连接成功。",
     });
     await expect(testImageApiConnection(settings, { fetch: fetchMock })).resolves.toEqual({
+      ok: true,
+      message: "图片生成 API 测试成功，已收到可用图片（本次测试会消耗一次生图额度）。",
+    });
+  });
+
+  it("keeps flattened image credentials when the runtime factory tests the image service", async () => {
+    const fetchMock = async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("https://image.example/v1/images/generations");
+      expect(init?.headers).toMatchObject({ Authorization: "Bearer image-key" });
+      return new Response(JSON.stringify({ data: [{ b64_json: btoa("test-image") }] }), { status: 200 });
+    };
+    const factory = createAiRuntimeFactory({ fetch: fetchMock });
+    const settings = normalizeRuntimeSettings({
+      mode: "api",
+      connectionMode: "dual",
+      textBaseUrl: "https://text.example/v1",
+      textApiKey: "text-key",
+      planningModel: "planning-model",
+      imageBaseUrl: "https://image.example/v1",
+      imageApiKey: "image-key",
+      imageModel: "image-model",
+    });
+
+    await expect(factory.testImageConnection(settings)).resolves.toEqual({
       ok: true,
       message: "图片生成 API 测试成功，已收到可用图片（本次测试会消耗一次生图额度）。",
     });

@@ -4,6 +4,7 @@ import type { ProductLocalizer } from "../../domain/localization/product-localiz
 import type { PlannerEngine } from "../../domain/planning/types";
 import type { IndustryTemplateTransformer } from "../../domain/prompt-templates/industry-template-transformer";
 import {
+  normalizeRuntimeSettings,
   runtimeImageService,
   runtimeSettingsFromV2,
   runtimeTextService,
@@ -53,6 +54,12 @@ function endpoint(baseUrl: string, explicit?: string): string {
   if (!configured) return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
   if (/^https?:\/\//i.test(configured)) return configured;
   return `${baseUrl.replace(/\/+$/, "")}/${configured.replace(/^\/+/, "")}`;
+}
+
+function flattenedRuntimeSettings(settings: RuntimeSettings | RuntimeSettingsV2): RuntimeSettings {
+  return "text" in settings
+    ? runtimeSettingsFromV2(settings)
+    : normalizeRuntimeSettings(settings);
 }
 
 /**
@@ -115,9 +122,9 @@ export function createAiRuntimeFactory(options: AiRuntimeFactoryOptions = {}): A
     });
   };
   const testTextConnection = (settings: RuntimeSettings | RuntimeSettingsV2) =>
-    testTextApiConnection(runtimeSettingsFromV2(settings), { fetch: options.fetch });
+    testTextApiConnection(flattenedRuntimeSettings(settings), { fetch: options.fetch });
   const testImageConnection = (settings: RuntimeSettings | RuntimeSettingsV2) =>
-    testImageApiConnection(runtimeSettingsFromV2(settings), { fetch: options.fetch });
+    testImageApiConnection(flattenedRuntimeSettings(settings), { fetch: options.fetch });
   const createRuntime = (settings: RuntimeSettings | RuntimeSettingsV2): AiRuntime => ({
     planner: createPlanner(settings),
     imageGenerator: createImageGenerator(settings),
