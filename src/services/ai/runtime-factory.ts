@@ -6,13 +6,10 @@ import type { IndustryTemplateTransformer } from "../../domain/prompt-templates/
 import {
   normalizeRuntimeSettings,
   runtimeImageService,
-  runtimeSettingsFromV2,
   runtimeTextService,
 } from "../../domain/settings/runtime-settings";
 import { testImageApiConnection, testTextApiConnection } from "../../domain/settings/test-connection";
-import type { ConnectionTestResult } from "../../domain/settings/types";
-import { detectProviderCapabilities } from "../../domain/settings/provider-capabilities";
-import type { RuntimeSettings, RuntimeSettingsV2 } from "../../domain/settings/types";
+import type { ConnectionTestResult, RuntimeSettings } from "../../domain/settings/types";
 import { OpenAICopilot } from "../openai-copilot";
 import { OpenAIIndustryTemplateTransformer } from "../openai-industry-template-transformer";
 import { OpenAIPlanner } from "../openai-planner";
@@ -38,39 +35,23 @@ export interface AiRuntimeFactoryOptions {
 }
 
 export interface AiRuntimeFactory {
-  create(settings: RuntimeSettings | RuntimeSettingsV2): AiRuntime;
-  resolve(settings: RuntimeSettings | RuntimeSettingsV2): AiRuntime;
-  createPlanner(settings: RuntimeSettings | RuntimeSettingsV2): PlannerEngine;
-  createImageGenerator(settings: RuntimeSettings | RuntimeSettingsV2): ImageGenerator;
-  createCopilot(settings: RuntimeSettings | RuntimeSettingsV2): CopilotEngine;
-  createProductLocalizer(settings: RuntimeSettings | RuntimeSettingsV2): ProductLocalizer;
-  createIndustryTemplateTransformer(settings: RuntimeSettings | RuntimeSettingsV2): IndustryTemplateTransformer;
-  testTextConnection(settings: RuntimeSettings | RuntimeSettingsV2): Promise<ConnectionTestResult>;
-  testImageConnection(settings: RuntimeSettings | RuntimeSettingsV2): Promise<ConnectionTestResult>;
+  create(settings: RuntimeSettings): AiRuntime;
+  resolve(settings: RuntimeSettings): AiRuntime;
+  createPlanner(settings: RuntimeSettings): PlannerEngine;
+  createImageGenerator(settings: RuntimeSettings): ImageGenerator;
+  createCopilot(settings: RuntimeSettings): CopilotEngine;
+  createProductLocalizer(settings: RuntimeSettings): ProductLocalizer;
+  createIndustryTemplateTransformer(settings: RuntimeSettings): IndustryTemplateTransformer;
+  testTextConnection(settings: RuntimeSettings): Promise<ConnectionTestResult>;
+  testImageConnection(settings: RuntimeSettings): Promise<ConnectionTestResult>;
 }
 
-function endpoint(baseUrl: string, explicit?: string): string {
-  const configured = explicit?.trim();
-  if (!configured) return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
-  if (/^https?:\/\//i.test(configured)) return configured;
-  return `${baseUrl.replace(/\/+$/, "")}/${configured.replace(/^\/+/, "")}`;
-}
-
-function flattenedRuntimeSettings(settings: RuntimeSettings | RuntimeSettingsV2): RuntimeSettings {
-  return "text" in settings
-    ? runtimeSettingsFromV2(settings)
-    : normalizeRuntimeSettings(settings);
-}
-
-/**
- * Builds the existing OpenAI-compatible adapters from named runtime profiles.
- * The factory is deliberately dependency-light so callers can inject fetch in tests.
- */
+/** Builds the OpenAI-compatible adapters from the single runtime settings shape. */
 export function createAiRuntimeFactory(options: AiRuntimeFactoryOptions = {}): AiRuntimeFactory {
-  const createPlanner = (settings: RuntimeSettings | RuntimeSettingsV2): PlannerEngine => {
+  const createPlanner = (settings: RuntimeSettings): PlannerEngine => {
     const text = runtimeTextService(settings);
     return new OpenAIPlanner({
-      endpoint: endpoint(text.baseUrl, text.endpoint),
+      endpoint: text.endpoint ?? text.baseUrl,
       apiKey: text.apiKey,
       model: text.model,
       protocol: text.protocol,
@@ -78,7 +59,7 @@ export function createAiRuntimeFactory(options: AiRuntimeFactoryOptions = {}): A
       timeoutMs: options.plannerTimeoutMs,
     });
   };
-  const createImageGenerator = (settings: RuntimeSettings | RuntimeSettingsV2): ImageGenerator => {
+  const createImageGenerator = (settings: RuntimeSettings): ImageGenerator => {
     const image = runtimeImageService(settings);
     return new OpenAICompatibleImageTransport({
       baseUrl: image.baseUrl,
@@ -86,13 +67,13 @@ export function createAiRuntimeFactory(options: AiRuntimeFactoryOptions = {}): A
       model: image.model,
       fetch: options.fetch,
       timeoutMs: options.imageTimeoutMs,
-      transport: image.protocol ?? detectProviderCapabilities(image.baseUrl).imageTransport,
+      transport: image.protocol,
     });
   };
-  const createCopilot = (settings: RuntimeSettings | RuntimeSettingsV2): CopilotEngine => {
+  const createCopilot = (settings: RuntimeSettings): CopilotEngine => {
     const text = runtimeTextService(settings);
     return new OpenAICopilot({
-      endpoint: endpoint(text.baseUrl, text.endpoint),
+      endpoint: text.endpoint ?? text.baseUrl,
       apiKey: text.apiKey,
       model: text.model,
       protocol: text.protocol,
@@ -100,20 +81,20 @@ export function createAiRuntimeFactory(options: AiRuntimeFactoryOptions = {}): A
       timeoutMs: options.copilotTimeoutMs,
     });
   };
-  const createProductLocalizer = (settings: RuntimeSettings | RuntimeSettingsV2): ProductLocalizer => {
+  const createProductLocalizer = (settings: RuntimeSettings): ProductLocalizer => {
     const text = runtimeTextService(settings);
     return new OpenAIProductLocalizer({
-      endpoint: endpoint(text.baseUrl, text.endpoint),
+      endpoint: text.endpoint ?? text.baseUrl,
       apiKey: text.apiKey,
       model: text.model,
       protocol: text.protocol,
       fetch: options.fetch,
     });
   };
-  const createIndustryTemplateTransformer = (settings: RuntimeSettings | RuntimeSettingsV2): IndustryTemplateTransformer => {
+  const createIndustryTemplateTransformer = (settings: RuntimeSettings): IndustryTemplateTransformer => {
     const text = runtimeTextService(settings);
     return new OpenAIIndustryTemplateTransformer({
-      endpoint: endpoint(text.baseUrl, text.endpoint),
+      endpoint: text.endpoint ?? text.baseUrl,
       apiKey: text.apiKey,
       model: text.model,
       protocol: text.protocol,
@@ -121,11 +102,11 @@ export function createAiRuntimeFactory(options: AiRuntimeFactoryOptions = {}): A
       timeoutMs: options.industryTemplateTimeoutMs,
     });
   };
-  const testTextConnection = (settings: RuntimeSettings | RuntimeSettingsV2) =>
-    testTextApiConnection(flattenedRuntimeSettings(settings), { fetch: options.fetch });
-  const testImageConnection = (settings: RuntimeSettings | RuntimeSettingsV2) =>
-    testImageApiConnection(flattenedRuntimeSettings(settings), { fetch: options.fetch });
-  const createRuntime = (settings: RuntimeSettings | RuntimeSettingsV2): AiRuntime => ({
+  const testTextConnection = (settings: RuntimeSettings) =>
+    testTextApiConnection(normalizeRuntimeSettings(settings), { fetch: options.fetch });
+  const testImageConnection = (settings: RuntimeSettings) =>
+    testImageApiConnection(normalizeRuntimeSettings(settings), { fetch: options.fetch });
+  const createRuntime = (settings: RuntimeSettings): AiRuntime => ({
     planner: createPlanner(settings),
     imageGenerator: createImageGenerator(settings),
     copilot: createCopilot(settings),

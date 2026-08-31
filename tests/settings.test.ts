@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createLocalStorageSettingsRepository,
   createMemorySettingsRepository,
   normalizeRuntimeSettings,
+  runtimeImageRequestUrl,
+  runtimeTextRequestUrl,
   testImageApiConnection,
   testTextApiConnection,
   testApiConnection,
@@ -27,11 +30,70 @@ describe("runtime settings", () => {
     expect(await repository.load()).toEqual({
       mode: "api",
       connectionMode: "dual",
-      apiKey: "sk-local-secret",
-      planningEndpoint: "https://provider.example/v1/chat/completions",
+      textBaseUrl: "https://provider.example/v1",
+      textApiKey: "sk-local-secret",
       planningModel: "planning-model",
+      textProtocol: "chat-completions",
       imageBaseUrl: "https://provider.example/v1",
+      imageApiKey: "sk-local-secret",
       imageModel: "image-model",
+      imageGenerationMode: "sync",
+      imageProtocol: "images-api",
+    });
+  });
+
+  it("migrates a stored v2 document to the single runtime settings shape", async () => {
+    const records = new Map<string, string>();
+    const storage = {
+      getItem(key: string) { return records.get(key) ?? null; },
+      setItem(key: string, value: string) { records.set(key, value); },
+    };
+    records.set("ecom-workbench.runtime-settings.api.v1", JSON.stringify({
+      version: 2,
+      schemaVersion: 2,
+      mode: "api",
+      connectionMode: "dual",
+      text: {
+        baseUrl: "https://text.example/v1",
+        apiKey: "text-key",
+        model: "text-model",
+        protocol: "chat-completions",
+      },
+      image: {
+        baseUrl: "https://image.example/v1",
+        apiKey: "image-key",
+        model: "image-model",
+        generationMode: "sync",
+        protocol: "images-api",
+      },
+    }));
+
+    const settings = await createLocalStorageSettingsRepository(storage).load();
+
+    expect(settings).toEqual({
+      mode: "api",
+      connectionMode: "dual",
+      textBaseUrl: "https://text.example/v1",
+      textApiKey: "text-key",
+      planningModel: "text-model",
+      textProtocol: "chat-completions",
+      imageBaseUrl: "https://image.example/v1",
+      imageApiKey: "image-key",
+      imageModel: "image-model",
+      imageGenerationMode: "sync",
+      imageProtocol: "images-api",
+    });
+    expect(JSON.parse(records.get("ecom-workbench.runtime-settings.api.v1") ?? "null")).toEqual(settings);
+  });
+
+  it("does not let an empty modern key erase a legacy configured key", () => {
+    expect(normalizeRuntimeSettings({
+      textApiKey: "",
+      imageApiKey: "",
+      apiKey: "legacy-key",
+    })).toMatchObject({
+      textApiKey: "legacy-key",
+      imageApiKey: "legacy-key",
     });
   });
 
@@ -65,19 +127,19 @@ describe("runtime settings", () => {
   it("rejects invalid or insecure remote endpoints instead of silently changing them", () => {
     const invalid = normalizeRuntimeSettings({
       mode: "api",
-      apiKey: "sk-local-secret",
-      planningEndpoint: "not-a-url",
+      textApiKey: "sk-local-secret",
+      textBaseUrl: "not-a-url",
       planningModel: "planning-model",
       imageBaseUrl: "http://provider.example/v1",
       imageModel: "image-model",
     });
 
-    expect(invalid.planningEndpoint).toBe("not-a-url");
-    expect(validateRuntimeSettings(invalid)).toContain("文本策划请求地址无效");
+    expect(invalid.textBaseUrl).toBe("not-a-url");
+    expect(validateRuntimeSettings(invalid)).toContain("文本 API 根地址无效");
 
     const insecure = normalizeRuntimeSettings({
       ...invalid,
-      planningEndpoint: "https://provider.example/v1/chat/completions",
+      textBaseUrl: "https://provider.example/v1",
     });
     expect(validateRuntimeSettings(insecure)).toContain("图片服务地址必须使用 HTTPS");
 
@@ -88,7 +150,7 @@ describe("runtime settings", () => {
     expect(validateRuntimeSettings(localProxy)).toBeNull();
   });
 
-  it("supports separate VisPath-style text and image credentials while keeping legacy aliases", () => {
+  it("normalizes separate text and image credentials without runtime aliases", () => {
     const settings = normalizeRuntimeSettings({
       mode: "api",
       textBaseUrl: " https://text.example/v1/ ",
@@ -103,13 +165,33 @@ describe("runtime settings", () => {
     expect(settings).toMatchObject({
       textBaseUrl: "https://text.example/v1",
       textApiKey: "text-key",
-      planningEndpoint: "https://text.example/v1/chat/completions",
-      apiKey: "text-key",
       imageBaseUrl: "https://image.example/v1",
       imageApiKey: "image-key",
       imageGenerationMode: "sync",
     });
+    expect(settings).not.toHaveProperty("apiKey");
+    expect(settings).not.toHaveProperty("planningEndpoint");
+    expect(settings).not.toHaveProperty("version");
+    expect(settings).not.toHaveProperty("text");
     expect(validateRuntimeSettings(settings)).toBeNull();
+  });
+
+  it("resolves the same request URLs shown in settings and used by transports", () => {
+    const dual = normalizeRuntimeSettings({
+      mode: "api",
+      connectionMode: "dual",
+      textBaseUrl: "https://text.example/v1",
+      imageBaseUrl: "https://image.example/v1",
+    });
+    expect(runtimeTextRequestUrl(dual)).toBe("https://text.example/v1/chat/completions");
+    expect(runtimeImageRequestUrl(dual)).toBe("https://image.example/v1/images/generations");
+
+    const single = normalizeRuntimeSettings({
+      mode: "api",
+      connectionMode: "single",
+      textBaseUrl: "https://openrouter.ai/api/v1",
+    });
+    expect(runtimeImageRequestUrl(single)).toBe("https://openrouter.ai/api/v1/chat/completions");
   });
 
   it("tests text and image services independently, including a minimal image request", async () => {

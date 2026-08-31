@@ -49,11 +49,16 @@ describe("workbench runtime settings", () => {
     await store.getState().initialize();
     const saved = await store.getState().saveRuntimeSettings({
       mode: "api",
-      apiKey: "sk-local-only",
-      planningEndpoint: "https://provider.example/v1/chat/completions",
+      connectionMode: "dual",
+      textBaseUrl: "https://provider.example/v1",
+      textApiKey: "sk-local-only",
       planningModel: "planning-model",
+      textProtocol: "chat-completions",
       imageBaseUrl: "https://provider.example/v1",
+      imageApiKey: "sk-local-only",
       imageModel: "image-model",
+      imageGenerationMode: "sync",
+      imageProtocol: "images-api",
     });
     await store.getState().createProject({ name: "API 项目", facts: productFacts });
     await store.getState().planPlatform("amazon");
@@ -67,7 +72,7 @@ describe("workbench runtime settings", () => {
     await restored.getState().initialize();
     expect(restored.getState().runtimeSettings).toMatchObject({
       mode: "api",
-      apiKey: "sk-local-only",
+      textApiKey: "sk-local-only",
       planningModel: "planning-model",
       imageModel: "image-model",
     });
@@ -116,11 +121,16 @@ describe("workbench runtime settings", () => {
 
     const result = await store.getState().testRuntimeConnection({
       mode: "api",
-      apiKey: "sk-secret-value",
-      planningEndpoint: "https://provider.example/v1/chat/completions",
+      connectionMode: "dual",
+      textBaseUrl: "https://provider.example/v1",
+      textApiKey: "sk-secret-value",
       planningModel: "planning-model",
+      textProtocol: "chat-completions",
       imageBaseUrl: "https://provider.example/v1",
+      imageApiKey: "sk-secret-value",
       imageModel: "image-model",
+      imageGenerationMode: "sync",
+      imageProtocol: "images-api",
     });
 
     expect(result).toEqual({
@@ -160,11 +170,16 @@ describe("workbench runtime settings", () => {
     await generationStarted;
     const saved = await store.getState().saveRuntimeSettings({
       mode: "api",
-      apiKey: "sk-new-mode",
-      planningEndpoint: "https://provider.example/v1/chat/completions",
+      connectionMode: "dual",
+      textBaseUrl: "https://provider.example/v1",
+      textApiKey: "sk-new-mode",
       planningModel: "planning-model",
+      textProtocol: "chat-completions",
       imageBaseUrl: "https://provider.example/v1",
+      imageApiKey: "sk-new-mode",
       imageModel: "image-model",
+      imageGenerationMode: "sync",
+      imageProtocol: "images-api",
     });
 
     expect(saved).toBe(false);

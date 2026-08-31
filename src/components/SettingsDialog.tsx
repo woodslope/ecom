@@ -3,8 +3,11 @@ import { Eye, EyeOff, RefreshCw } from "lucide-react";
 
 import {
   defaultRuntimeSettings,
+  detectProviderCapabilities,
+  inferTextProtocol,
   readApiModels,
-  runtimeTextBaseUrl,
+  runtimeImageRequestUrl,
+  runtimeTextRequestUrl,
   type ConnectionTestResult,
   type ModelListResult,
   type RuntimeSettings,
@@ -42,10 +45,6 @@ export async function runConnectionTestSafely(
           : "API 连接测试未能完成，请检查网络、代理或服务配置后重试。",
     };
   }
-}
-
-function baseFromEndpoint(settings: RuntimeSettings): string {
-  return runtimeTextBaseUrl(settings);
 }
 
 type RuntimeSettingsField =
@@ -165,11 +164,15 @@ export function SettingsDialog({
     setDraft((current) => {
       if (key === "textBaseUrl") {
         const base = String(value ?? "").replace(/\/+$/, "");
-        return { ...current, textBaseUrl: base, planningEndpoint: `${base}/chat/completions` };
+        return { ...current, textBaseUrl: base, textProtocol: inferTextProtocol(base) };
       }
-      if (key === "textApiKey") {
-        const next = String(value ?? "");
-        return { ...current, textApiKey: next, apiKey: next };
+      if (key === "imageBaseUrl") {
+        const base = String(value ?? "").replace(/\/+$/, "");
+        return {
+          ...current,
+          imageBaseUrl: base,
+          imageProtocol: detectProviderCapabilities(base).imageTransport,
+        };
       }
       return { ...current, [key]: value };
     });
@@ -294,9 +297,11 @@ export function SettingsDialog({
     : imageResult?.ok === false || imageConnectionStatus === "error"
       ? "danger"
       : "neutral";
-  const textKey = draft.apiKey || draft.textApiKey || "";
-  const imageKey = draft.imageApiKey !== undefined ? draft.imageApiKey : draft.apiKey || "";
-  const effectiveConnectionMode = draft.connectionMode ?? "dual";
+  const textKey = draft.textApiKey;
+  const imageKey = draft.imageApiKey;
+  const effectiveConnectionMode = draft.connectionMode;
+  const textRequestUrl = runtimeTextRequestUrl(draft);
+  const imageRequestUrl = runtimeImageRequestUrl(draft);
   const fieldError = (field: RuntimeSettingsField) => runtimeSettingsFieldError(error, field);
   const hasFieldError = (
     [
@@ -350,13 +355,14 @@ export function SettingsDialog({
               </div>
               <Field
                 label="文本 API 根地址"
-                hint="例如 https://provider.example/v1"
+                hint={`实际请求：${textRequestUrl || "请填写地址"}`}
                 error={fieldError("textBaseUrl")}
               >
                 <input
                   name="textBaseUrl"
                   type="url"
-                  value={draft.textBaseUrl ?? baseFromEndpoint(draft)}
+                  value={draft.textBaseUrl}
+                  placeholder="https://provider.example/v1"
                   disabled={controlsDisabled}
                   onChange={(event) => update("textBaseUrl", event.target.value)}
                 />
@@ -374,8 +380,8 @@ export function SettingsDialog({
                   </IconButton>
                 </div>
               </Field>
-              {effectiveConnectionMode === "single" ? <Field label="图片生成模型" name="imageModel" error={fieldError("imageModel")}><div className="settings-model-field"><input list="runtime-image-model-options" value={draft.imageModel} disabled={controlsDisabled} onChange={(event) => update("imageModel", event.target.value)} /><Button type="button" variant="secondary" size="compact" onClick={() => void readModels("image")} disabled={controlsDisabled}><RefreshCw size={14} aria-hidden="true" />{readingModelsService === "image" ? "读取中..." : "读取模型"}</Button></div><datalist id="runtime-image-model-options">{modelOptions.image.map((model) => <option key={model} value={model} />)}</datalist>{modelReadMessage?.service === "image" ? <StatusMessage tone={modelReadMessage.tone} live={modelReadMessage.tone === "danger" ? "assertive" : "polite"}>{modelReadMessage.text}</StatusMessage> : null}</Field> : null}
-              {String(draft.textBaseUrl ?? baseFromEndpoint(draft)).includes("api.deepseek.com") ? <StatusMessage tone="warning">{effectiveConnectionMode === "single" ? "DeepSeek 官方连接不支持生图；请改用双配置并设置独立图片服务。" : "DeepSeek 官方策划接口仅接收文本；参考图会在策划请求中明确跳过，正式生图仍使用独立图片服务。"}</StatusMessage> : null}
+              {effectiveConnectionMode === "single" ? <Field label="图片生成模型" name="imageModel" hint={`实际请求：${imageRequestUrl || "请填写地址"}`} error={fieldError("imageModel")}><div className="settings-model-field"><input list="runtime-image-model-options" value={draft.imageModel} disabled={controlsDisabled} onChange={(event) => update("imageModel", event.target.value)} /><Button type="button" variant="secondary" size="compact" onClick={() => void readModels("image")} disabled={controlsDisabled}><RefreshCw size={14} aria-hidden="true" />{readingModelsService === "image" ? "读取中..." : "读取模型"}</Button></div><datalist id="runtime-image-model-options">{modelOptions.image.map((model) => <option key={model} value={model} />)}</datalist>{modelReadMessage?.service === "image" ? <StatusMessage tone={modelReadMessage.tone} live={modelReadMessage.tone === "danger" ? "assertive" : "polite"}>{modelReadMessage.text}</StatusMessage> : null}</Field> : null}
+              {draft.textBaseUrl.includes("api.deepseek.com") ? <StatusMessage tone="warning">{effectiveConnectionMode === "single" ? "DeepSeek 官方连接不支持生图；请改用双配置并设置独立图片服务。" : "DeepSeek 官方策划接口仅接收文本；参考图会在策划请求中明确跳过，正式生图仍使用独立图片服务。"}</StatusMessage> : null}
               <Field label="文本策划模型" error={fieldError("planningModel")}>
                 <div className="settings-model-field">
                   <input
@@ -414,13 +420,14 @@ export function SettingsDialog({
               </div>
               <Field
                 label="图片 API 根地址"
-                hint="例如 https://provider.example/v1"
+                hint={`实际请求：${imageRequestUrl || "请填写地址"}`}
                 error={fieldError("imageBaseUrl")}
               >
                 <input
                   name="imageBaseUrl"
                   type="url"
                   value={draft.imageBaseUrl}
+                  placeholder="https://provider.example/v1"
                   disabled={controlsDisabled}
                   onChange={(event) => update("imageBaseUrl", event.target.value)}
                 />
@@ -460,7 +467,7 @@ export function SettingsDialog({
               >
                 <Select
                   aria-label="图片生成方式"
-                  value={draft.imageGenerationMode ?? "sync"}
+                  value={draft.imageGenerationMode}
                   disabled={controlsDisabled}
                   onChange={(event) => update("imageGenerationMode", event.target.value as RuntimeSettings["imageGenerationMode"])}
                 >

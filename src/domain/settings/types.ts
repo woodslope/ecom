@@ -41,33 +41,18 @@ export interface RuntimeServiceSummary {
   protocol?: TextServiceProtocol | ImageServiceProtocol;
 }
 
-/** Current API-only shape persisted under the API runtime settings key. */
-export interface RuntimeSettingsV2 {
-  version: 2;
-  /** Preferred explicit schema marker; `version` remains for older callers. */
-  schemaVersion?: 2;
+export interface RuntimeSettings {
   mode: RuntimeMode;
   connectionMode: ConnectionMode;
-  text: TextServiceConfig;
-  image: ImageServiceConfig;
-}
-
-export interface RuntimeSettings {
-  /** Flattened settings used by the Store and settings UI. */
-  mode: RuntimeMode;
-  connectionMode?: ConnectionMode;
-  apiKey: string;
-  planningEndpoint: string;
+  textBaseUrl: string;
+  textApiKey: string;
   planningModel: string;
+  textProtocol: TextServiceProtocol;
   imageBaseUrl: string;
+  imageApiKey: string;
   imageModel: string;
-  /** VisPath-style service-specific settings. */
-  textBaseUrl?: string;
-  textApiKey?: string;
-  imageApiKey?: string;
-  imageGenerationMode?: ImageGenerationMode;
-  textProtocol?: TextServiceProtocol;
-  imageProtocol?: ImageServiceProtocol;
+  imageGenerationMode: ImageGenerationMode;
+  imageProtocol: ImageServiceProtocol;
 }
 
 export interface ConnectionTestResult {

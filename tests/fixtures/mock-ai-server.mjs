@@ -261,25 +261,17 @@ export async function startMockAiServer(options = {}) {
 export function createApiRuntimeSettings(baseUrl, overrides = {}) {
   const root = `${String(baseUrl).replace(/\/+$/, "")}/v1`;
   return {
-    version: 2,
-    schemaVersion: 2,
     mode: "api",
     connectionMode: overrides.connectionMode ?? "dual",
-    text: {
-      name: "文本策划",
-      baseUrl: overrides.textBaseUrl ?? root,
-      apiKey: overrides.textApiKey ?? "mock-text-key",
-      model: overrides.planningModel ?? "mock-planner",
-      protocol: "chat-completions",
-    },
-    image: {
-      name: "图片生成",
-      baseUrl: overrides.imageBaseUrl ?? root,
-      apiKey: overrides.imageApiKey ?? "mock-image-key",
-      model: overrides.imageModel ?? "mock-image",
-      generationMode: "sync",
-      protocol: "images-api",
-    },
+    textBaseUrl: overrides.textBaseUrl ?? root,
+    textApiKey: overrides.textApiKey ?? "mock-text-key",
+    planningModel: overrides.planningModel ?? "mock-planner",
+    textProtocol: "chat-completions",
+    imageBaseUrl: overrides.imageBaseUrl ?? root,
+    imageApiKey: overrides.imageApiKey ?? "mock-image-key",
+    imageModel: overrides.imageModel ?? "mock-image",
+    imageGenerationMode: "sync",
+    imageProtocol: "images-api",
   };
 }
 

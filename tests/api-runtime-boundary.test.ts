@@ -54,14 +54,15 @@ function settings(overrides: Record<string, unknown> = {}) {
   return {
     mode: "api" as const,
     connectionMode: "dual" as const,
-    apiKey: "",
     textBaseUrl: "https://text.example/v1",
     textApiKey: "",
-    planningEndpoint: "https://text.example/v1/chat/completions",
     planningModel: "",
+    textProtocol: "chat-completions" as const,
     imageBaseUrl: "https://image.example/v1",
     imageApiKey: "",
     imageModel: "",
+    imageGenerationMode: "sync" as const,
+    imageProtocol: "images-api" as const,
     ...overrides,
   };
 }

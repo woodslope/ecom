@@ -1,17 +1,12 @@
 export {
   createLocalStorageSettingsRepository,
-  createLocalStorageRuntimeSettingsV2Repository,
   createMemorySettingsRepository,
   defaultRuntimeSettings,
-  defaultRuntimeSettingsV2,
   normalizeRuntimeSettings,
-  normalizeRuntimeSettingsV2,
   RUNTIME_SETTINGS_STORAGE_KEY,
   runtimeImageService,
   runtimeImageServiceSummary,
   runtimeImageConfig,
-  runtimeSettingsFromV2,
-  runtimeSettingsToV2,
   runtimeTextService,
   runtimeTextServiceSummary,
   runtimeTextConfig,
@@ -22,13 +17,23 @@ export {
   runtimeImageApiKey,
   runtimeImageBaseUrl,
   runtimeImageGenerationMode,
+  runtimeImageRequestUrl,
   runtimeSupportsImageEditing,
   runtimeTextApiKey,
   runtimeTextBaseUrl,
+  runtimeTextRequestUrl,
   validateRuntimeSettings,
   type SettingsRepository,
-  type RuntimeSettingsV2Repository,
 } from "./runtime-settings";
+export {
+  deriveModelsEndpoint,
+  inferTextProtocol,
+  isResponsesEndpoint,
+  resolveEndpoint,
+  resolveImageEndpoint,
+  resolveTextEndpoint,
+  trimBaseUrl,
+} from "./endpoints";
 export { detectProviderCapabilities, type ProviderCapabilities } from "./provider-capabilities";
 export { readApiModels, testApiConnection, testImageApiConnection, testTextApiConnection, type ModelListResult } from "./test-connection";
 export type {
@@ -45,6 +50,5 @@ export type {
   TextServiceProtocol,
   ImageServiceProtocol,
   RuntimeSettings,
-  RuntimeSettingsV2,
   TextServiceConfig,
 } from "./types";

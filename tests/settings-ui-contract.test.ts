@@ -12,15 +12,16 @@ import type { RuntimeSettings } from "../src/domain/settings";
 
 const apiSettings: RuntimeSettings = {
   mode: "api",
-  apiKey: "sk-password-field-only",
-  planningEndpoint: "https://provider.example/v1/chat/completions",
-  planningModel: "planning-model",
-  imageBaseUrl: "https://provider.example/v1",
-  imageModel: "image-model",
+  connectionMode: "dual",
   textBaseUrl: "https://provider.example/v1",
   textApiKey: "text-key",
+  planningModel: "planning-model",
+  textProtocol: "chat-completions",
+  imageBaseUrl: "https://provider.example/v1",
   imageApiKey: "image-key",
+  imageModel: "image-model",
   imageGenerationMode: "sync",
+  imageProtocol: "images-api",
 };
 
 describe("settings UI", () => {
@@ -42,6 +43,8 @@ describe("settings UI", () => {
     expect(markup).toContain("图片生成服务");
     expect(markup).toContain("文本 API 根地址");
     expect(markup).toContain("图片 API 根地址");
+    expect(markup).toContain("实际请求：https://provider.example/v1/chat/completions");
+    expect(markup).toContain("实际请求：https://provider.example/v1/images/generations");
     expect(markup).toContain("测试文本 API");
     expect(markup).toContain("测试图片 API");
     expect(markup).toContain("填写到 /v1");
@@ -52,7 +55,7 @@ describe("settings UI", () => {
     expect(markup).toContain('aria-label="显示文本 API Key"');
     expect(markup).toContain('aria-label="显示图片 API Key"');
     expect(markup.match(/settings-secret-field/g)).toHaveLength(2);
-    expect(markup.match(/sk-password-field-only/g)).toHaveLength(1);
+    expect(markup.match(/text-key/g)).toHaveLength(1);
     expect(markup).toContain("测试连接");
     expect(markup).toContain("保存设置");
     expect(markup).toContain("运行设置");
@@ -128,7 +131,7 @@ describe("settings UI", () => {
     const markup = renderToStaticMarkup(
       createElement(SettingsDialog, {
         open: true,
-        settings: { ...apiSettings, textApiKey: "", apiKey: "" },
+        settings: { ...apiSettings, textApiKey: "" },
         error: "请填写文本策划 API Key。",
         onClose: () => undefined,
       }),

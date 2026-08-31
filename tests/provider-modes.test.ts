@@ -9,7 +9,7 @@ import { normalizeRuntimeSettings, runtimeImageApiKey } from "../src/domain/sett
 import { validateRuntimeSettings } from "../src/domain/settings";
 
 describe("provider modes", () => {
-  it("normalizes legacy v1 settings to dual without clearing credentials", () => {
+  it("migrates legacy flat settings to the single runtime shape without clearing credentials", () => {
     const settings = normalizeRuntimeSettings({
       mode: "api",
       apiKey: "legacy-key",
@@ -19,7 +19,8 @@ describe("provider modes", () => {
       imageModel: "image-model",
     });
     expect(settings.connectionMode).toBe("dual");
-    expect(settings.apiKey).toBe("legacy-key");
+    expect(settings.textApiKey).toBe("legacy-key");
+    expect(settings.imageApiKey).toBe("legacy-key");
   });
 
   it("single mode reuses one compatible connection for image requests", () => {

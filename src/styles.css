@@ -2945,6 +2945,7 @@ select.select-control__input:disabled + .select-control__icon {
 
 .field__hint {
   color: var(--text-muted);
+  overflow-wrap: anywhere;
 }
 
 .field__error {

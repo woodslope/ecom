@@ -8,7 +8,7 @@ import {
   validateRuntimeSettings,
 } from "./runtime-settings";
 import type { ConnectionTestResult, RuntimeSettings } from "./types";
-import { deriveModelsEndpoint } from "../../services/ai/transport/endpoint";
+import { deriveModelsEndpoint } from "./endpoints";
 import { OpenAIImageGenerator } from "../../services/openai-image-generator";
 
 interface TestConnectionOptions {
@@ -38,10 +38,6 @@ function httpFailure(status: number, service: "text" | "image"): string {
   if (status === 429) return `${subject}额度或速率限制已触发，请检查余额、配额或稍后重试。`;
   if (status >= 500) return `${subject}服务暂时不可用，请稍后重试。`;
   return `${subject}连接测试失败（HTTP ${status}），请检查配置。`;
-}
-
-function endpoint(baseUrl: string, path: string): string {
-  return `${baseUrl.replace(/\/+$/, "")}/${path}`;
 }
 
 function serviceValidation(settings: RuntimeSettings, service: "text" | "image"): string | null {
@@ -106,10 +102,7 @@ async function testService(
       };
     }
     const response = await fetcher(
-      textService?.endpoint || endpoint(
-        runtimeTextBaseUrl(settings),
-        textService?.protocol === "responses" ? "responses" : "chat/completions",
-      ),
+      textService?.endpoint ?? runtimeTextBaseUrl(settings),
       {
         method: "POST",
         headers: {

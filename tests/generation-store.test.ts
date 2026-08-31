@@ -861,13 +861,15 @@ describe("workbench generation versions", () => {
     await store.getState().saveRuntimeSettings({
       mode: "api",
       connectionMode: "single",
-      apiKey: "one-key",
       textApiKey: "one-key",
       textBaseUrl: "https://openrouter.ai/api/v1",
-      planningEndpoint: "https://openrouter.ai/api/v1/chat/completions",
       planningModel: "text-model",
+      textProtocol: "chat-completions",
       imageBaseUrl: "https://ignored.example/v1",
+      imageApiKey: "",
       imageModel: "image-model",
+      imageGenerationMode: "sync",
+      imageProtocol: "images-api",
     });
 
     const result = await store.getState().generateMaskedVersion(

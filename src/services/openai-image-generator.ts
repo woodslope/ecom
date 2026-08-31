@@ -5,6 +5,7 @@ import type {
 } from "../domain/generation/types";
 import { buildGenerationPrompt } from "../domain/prompting";
 import { closestStandardAspectRatio } from "../domain/platforms/generation-size";
+import { resolveImageEndpoint } from "../domain/settings/endpoints";
 
 export interface OpenAIImageGeneratorOptions {
   baseUrl: string;
@@ -83,31 +84,6 @@ interface ImagesResponse {
 
 interface ChatImageResponse {
   choices?: Array<{ message?: { images?: Array<{ image_url?: { url?: unknown } }>; content?: unknown } }>;
-}
-
-function endpoint(baseUrl: string, path: "images/generations" | "images/edits" | "chat/completions"): string {
-  const raw = baseUrl.trim();
-  try {
-    const url = new URL(raw);
-    const pathname = url.pathname.replace(/\/+$/, "");
-    const imageSuffix = /\/images\/(?:generations|edits)$/i;
-    if (path === "chat/completions") {
-      if (/\/chat\/completions$/i.test(pathname)) return raw;
-      if (imageSuffix.test(pathname)) {
-        url.pathname = `${pathname.replace(imageSuffix, "")}/chat/completions`;
-        return url.toString();
-      }
-    } else {
-      if (pathname.toLowerCase().endsWith(`/${path}`.toLowerCase())) return raw;
-      if (imageSuffix.test(pathname)) {
-        url.pathname = `${pathname.replace(imageSuffix, "")}/${path}`;
-        return url.toString();
-      }
-    }
-  } catch {
-    // The settings validator provides the user-facing URL error.
-  }
-  return `${raw.replace(/\/+$/, "")}/${path}`;
 }
 
 const isGptImageModel = (model: string): boolean => /^gpt-image(?:-|$)/i.test(model.trim());
@@ -392,7 +368,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
       for (const reference of request.referenceImages) {
         content.push({ type: "image_url", image_url: { url: await blobDataUrl(reference.blob, reference.mimeType) } });
       }
-      const response = await this.fetch(endpoint(this.options.baseUrl, "chat/completions"), {
+      const response = await this.fetch(resolveImageEndpoint(this.options.baseUrl, "chat-completions"), {
         method: "POST",
         headers: { Authorization: `Bearer ${this.options.apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -470,7 +446,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
     }
 
     const response = await this.fetch(
-      endpoint(this.options.baseUrl, isEdit ? "images/edits" : "images/generations"),
+      resolveImageEndpoint(this.options.baseUrl, "images-api", isEdit ? "edit" : "generation"),
       {
         method: "POST",
         headers,

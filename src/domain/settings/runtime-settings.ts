@@ -1,124 +1,68 @@
+import { resolveImageEndpoint, resolveTextEndpoint } from "./endpoints";
+import { detectProviderCapabilities } from "./provider-capabilities";
 import type {
   ImageGenerationMode,
   ImageServiceConfig,
+  ImageServiceProtocol,
   RuntimeServiceSummary,
   RuntimeSettings,
-  RuntimeSettingsV2,
   TextServiceConfig,
   TextServiceProtocol,
-  ImageServiceProtocol,
 } from "./types";
-import { detectProviderCapabilities } from "./provider-capabilities";
 
-/** API-only runtime settings. Older development keys are intentionally expired. */
+/** Current API-only runtime settings document. */
 export const RUNTIME_SETTINGS_STORAGE_KEY = "ecom-workbench.runtime-settings.api.v1";
 
 export const defaultRuntimeSettings: RuntimeSettings = {
   mode: "api",
   connectionMode: "dual",
-  apiKey: "",
-  planningEndpoint: "https://api.openai.com/v1/chat/completions",
+  textBaseUrl: "https://api.openai.com/v1",
+  textApiKey: "",
   planningModel: "",
+  textProtocol: "chat-completions",
   imageBaseUrl: "https://api.openai.com/v1",
+  imageApiKey: "",
   imageModel: "",
+  imageGenerationMode: "sync",
+  imageProtocol: "images-api",
 };
 
-export const defaultRuntimeSettingsV2: RuntimeSettingsV2 = {
-  version: 2,
-  schemaVersion: 2,
-  mode: "api",
-  connectionMode: "dual",
-  text: {
-    name: "文本策划",
-    baseUrl: "https://api.openai.com/v1",
-    apiKey: "",
-    model: "",
-    endpoint: "https://api.openai.com/v1/chat/completions",
-    protocol: "chat-completions",
-  },
-  image: {
-    name: "图片生成",
-    baseUrl: "https://api.openai.com/v1",
-    apiKey: "",
-    model: "",
-    generationMode: "sync",
-    protocol: "images-api",
-  },
-};
+type UnknownRecord = Record<string, unknown>;
 
-function normalizedUrl(value: unknown, fallback: string, stripTrailingSlash = false): string {
-  const trimmed = typeof value === "string" ? value.trim() : "";
-  const candidate = trimmed || fallback;
-  return stripTrailingSlash ? candidate.replace(/\/+$/, "") : candidate;
+function recordValue(value: unknown): UnknownRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as UnknownRecord
+    : {};
 }
 
-function normalizedTextBaseUrl(value: unknown, fallback: string): string {
-  return normalizedUrl(value, fallback, true);
-}
-
-function baseUrlFromPlanningEndpoint(value: unknown): string {
-  const endpoint = typeof value === "string" ? value.trim() : "";
-  return endpoint.replace(/\/chat\/completions\/?$/i, "").replace(/\/+$/, "") ||
-    defaultRuntimeSettings.imageBaseUrl;
-}
-
-function hasModernSettings(value: Partial<RuntimeSettings>): boolean {
-  return ["textBaseUrl", "textApiKey", "imageApiKey", "imageGenerationMode", "textProtocol", "imageProtocol"].some((key) =>
-    Object.prototype.hasOwnProperty.call(value, key),
-  );
-}
-
-export function normalizeRuntimeSettings(value: Partial<RuntimeSettings>): RuntimeSettings {
-  const textApiKey = typeof value.textApiKey === "string" ? value.textApiKey.trim() : "";
-  const legacyApiKey = typeof value.apiKey === "string" ? value.apiKey.trim() : "";
-  const resolvedTextApiKey = textApiKey || legacyApiKey;
-  const textBaseUrl = normalizedTextBaseUrl(
-    value.textBaseUrl,
-    baseUrlFromPlanningEndpoint(value.planningEndpoint ?? defaultRuntimeSettings.planningEndpoint),
-  );
-  const planningEndpoint = normalizedUrl(
-    value.planningEndpoint,
-    `${textBaseUrl}/chat/completions`,
-  );
-  const imageBaseUrl = normalizedUrl(
-    value.imageBaseUrl,
-    defaultRuntimeSettings.imageBaseUrl,
-    true,
-  );
-  const normalized: RuntimeSettings = {
-    // Runtime mode is intentionally API-only.
-    mode: "api",
-    connectionMode: value.connectionMode === "single" ? "single" : "dual",
-    apiKey: resolvedTextApiKey,
-    planningEndpoint,
-    planningModel: typeof value.planningModel === "string" ? value.planningModel.trim() : "",
-    imageBaseUrl,
-    imageModel: typeof value.imageModel === "string" ? value.imageModel.trim() : "",
-  };
-  if (hasModernSettings(value)) {
-    normalized.textBaseUrl = textBaseUrl;
-    normalized.textApiKey = resolvedTextApiKey;
-    normalized.imageApiKey =
-      typeof value.imageApiKey === "string" ? value.imageApiKey.trim() : legacyApiKey;
-    normalized.imageGenerationMode =
-      value.imageGenerationMode === "async" ? "async" : ("sync" as ImageGenerationMode);
-    normalized.textProtocol = value.textProtocol === "responses" ? "responses" : "chat-completions";
-    normalized.imageProtocol = value.imageProtocol === "chat-completions" ? "chat-completions" : "images-api";
-  }
-  return normalized;
-}
-
-function stringValue(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value.trim() : fallback;
-}
-
-function profileValue(value: unknown, ...keys: string[]): unknown {
-  if (!value || typeof value !== "object") return undefined;
-  const record = value as Record<string, unknown>;
+function nestedRecord(value: UnknownRecord, ...keys: string[]): UnknownRecord {
   for (const key of keys) {
-    if (record[key] !== undefined) return record[key];
+    const nested = recordValue(value[key]);
+    if (Object.keys(nested).length > 0) return nested;
+  }
+  return {};
+}
+
+function stringField(value: UnknownRecord, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    if (typeof value[key] === "string") return value[key].trim();
   }
   return undefined;
+}
+
+function firstString(...values: Array<string | undefined>): string {
+  return values.find((value) => value !== undefined && value.length > 0)
+    ?? values.find((value) => value !== undefined)
+    ?? "";
+}
+
+function normalizedUrl(value: string | undefined, fallback: string): string {
+  return (value?.trim() || fallback).replace(/\/+$/, "");
+}
+
+function baseUrlFromLegacyEndpoint(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return value.replace(/\/(?:chat\/completions|responses)\/?$/i, "").replace(/\/+$/, "");
 }
 
 function normalizeTextProtocol(value: unknown, endpoint: string): TextServiceProtocol {
@@ -133,128 +77,95 @@ function normalizeImageProtocol(value: unknown, baseUrl: string): ImageServicePr
   return detectProviderCapabilities(baseUrl).imageTransport;
 }
 
-/** Normalize the current API-only persisted settings document. */
-export function normalizeRuntimeSettingsV2(value: unknown): RuntimeSettingsV2 {
-  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
-  const textInput = profileValue(input, "text", "textService", "textConfig");
-  const imageInput = profileValue(input, "image", "imageService", "imageConfig");
-  const textRecord = textInput && typeof textInput === "object" ? textInput as Record<string, unknown> : {};
-  const imageRecord = imageInput && typeof imageInput === "object" ? imageInput as Record<string, unknown> : {};
-  const textBaseUrl = normalizedTextBaseUrl(
-    profileValue(textRecord, "baseUrl", "url"),
-    defaultRuntimeSettingsV2.text.baseUrl,
-  );
-  const textApiKey = stringValue(profileValue(textRecord, "apiKey", "key"));
-  const textModel = stringValue(profileValue(textRecord, "model"));
-  const imageBaseUrl = normalizedUrl(
-    profileValue(imageRecord, "baseUrl", "url"),
-    defaultRuntimeSettingsV2.image.baseUrl,
-    true,
-  );
-  const imageApiKey = stringValue(profileValue(imageRecord, "apiKey", "key"));
-  const imageModel = stringValue(profileValue(imageRecord, "model"));
-  const rawTextEndpoint = profileValue(textRecord, "endpoint");
-  const textProtocol = normalizeTextProtocol(profileValue(textRecord, "protocol"), String(rawTextEndpoint ?? ""));
-  const text: TextServiceConfig = {
-    name: stringValue(profileValue(textRecord, "name", "label", "displayName"), "文本策划"),
-    baseUrl: textBaseUrl,
-    apiKey: textApiKey,
-    model: textModel,
-    endpoint: normalizedUrl(
-      rawTextEndpoint,
-      `${textBaseUrl}/${textProtocol === "responses" ? "responses" : "chat/completions"}`,
+/**
+ * Normalize current settings and migrate legacy flat or nested v2 documents.
+ * The returned object is the only runtime and persistence shape used by the app.
+ */
+export function normalizeRuntimeSettings(value: unknown): RuntimeSettings {
+  const input = recordValue(value);
+  const text = nestedRecord(input, "text", "textService", "textConfig");
+  const image = nestedRecord(input, "image", "imageService", "imageConfig");
+  const legacyEndpoint = stringField(input, "planningEndpoint");
+  const textBaseUrl = normalizedUrl(
+    firstString(
+      stringField(input, "textBaseUrl"),
+      stringField(text, "baseUrl", "url"),
+      baseUrlFromLegacyEndpoint(legacyEndpoint),
     ),
-    protocol: textProtocol,
-  };
-  const image: ImageServiceConfig = {
-    name: stringValue(profileValue(imageRecord, "name", "label", "displayName"), "图片生成"),
-    baseUrl: imageBaseUrl,
-    apiKey: imageApiKey,
-    model: imageModel,
-    generationMode: profileValue(imageRecord, "generationMode") === "async" ? "async" : "sync",
-    protocol: normalizeImageProtocol(profileValue(imageRecord, "protocol"), imageBaseUrl),
-  };
+    defaultRuntimeSettings.textBaseUrl,
+  );
+  const imageBaseUrl = normalizedUrl(
+    firstString(
+      stringField(input, "imageBaseUrl"),
+      stringField(image, "baseUrl", "url"),
+    ),
+    defaultRuntimeSettings.imageBaseUrl,
+  );
+  const textProtocolValue = input.textProtocol ?? text.protocol;
+  const imageProtocolValue = input.imageProtocol ?? image.protocol;
+
   return {
-    version: 2,
-    schemaVersion: 2,
     mode: "api",
     connectionMode: input.connectionMode === "single" ? "single" : "dual",
-    text,
-    image,
+    textBaseUrl,
+    textApiKey: firstString(
+      stringField(input, "textApiKey"),
+      stringField(text, "apiKey", "key"),
+      stringField(input, "apiKey"),
+    ),
+    planningModel: firstString(
+      stringField(input, "planningModel"),
+      stringField(text, "model"),
+    ),
+    textProtocol: normalizeTextProtocol(textProtocolValue, legacyEndpoint ?? textBaseUrl),
+    imageBaseUrl,
+    imageApiKey: firstString(
+      stringField(input, "imageApiKey"),
+      stringField(image, "apiKey", "key"),
+      stringField(input, "apiKey"),
+    ),
+    imageModel: firstString(
+      stringField(input, "imageModel"),
+      stringField(image, "model"),
+    ),
+    imageGenerationMode:
+      (input.imageGenerationMode ?? image.generationMode) === "async" ? "async" : "sync",
+    imageProtocol: normalizeImageProtocol(imageProtocolValue, imageBaseUrl),
   };
 }
 
-/** Flatten v2 settings for existing UI/store/service consumers. */
-export function runtimeSettingsFromV2(value: RuntimeSettingsV2 | unknown): RuntimeSettings {
-  const normalized = normalizeRuntimeSettingsV2(value);
-  return normalizeRuntimeSettings({
-    mode: normalized.mode,
-    connectionMode: normalized.connectionMode,
-    textBaseUrl: normalized.text.baseUrl,
-    textApiKey: normalized.text.apiKey,
-    planningEndpoint: normalized.text.endpoint,
-    planningModel: normalized.text.model,
-    imageBaseUrl: normalized.image.baseUrl,
-    imageApiKey: normalized.image.apiKey,
-    imageModel: normalized.image.model,
-    imageGenerationMode: normalized.image.generationMode,
-    textProtocol: normalized.text.protocol,
-    imageProtocol: normalized.image.protocol,
-  });
+export function runtimeTextService(settings: RuntimeSettings): TextServiceConfig {
+  const normalized = normalizeRuntimeSettings(settings);
+  return {
+    name: "文本策划",
+    baseUrl: normalized.textBaseUrl,
+    apiKey: normalized.textApiKey,
+    model: normalized.planningModel,
+    endpoint: resolveTextEndpoint(normalized.textBaseUrl, normalized.textProtocol),
+    protocol: normalized.textProtocol,
+  };
 }
 
-export function runtimeSettingsToV2(settings: RuntimeSettings): RuntimeSettingsV2 {
-  return persistedRuntimeSettingsV2(settings);
-}
-
-function persistedRuntimeSettingsV2(settings: RuntimeSettings | RuntimeSettingsV2): RuntimeSettingsV2 {
-  const normalized = "text" in settings
-    ? normalizeRuntimeSettingsV2(settings)
-    : normalizeRuntimeSettingsV2({
-        version: 2,
-        schemaVersion: 2,
-        mode: "api",
-        connectionMode: settings.connectionMode ?? "dual",
-        text: {
-          name: "文本策划",
-          baseUrl: runtimeTextBaseUrl(settings),
-          apiKey: runtimeTextApiKey(settings),
-          model: settings.planningModel,
-          endpoint: settings.planningEndpoint,
-          protocol: settings.textProtocol ?? "chat-completions",
-        },
-        image: {
-          name: "图片生成",
-          baseUrl: runtimeImageBaseUrl(settings),
-          apiKey: runtimeImageApiKey(settings),
-          model: settings.imageModel,
-          generationMode: runtimeImageGenerationMode(settings),
-          protocol: settings.imageProtocol ?? "images-api",
-        },
-      });
-  const { endpoint: _endpoint, ...text } = normalized.text;
-  return { ...normalized, text };
-}
-
-export function runtimeTextService(settings: RuntimeSettings | RuntimeSettingsV2): TextServiceConfig {
-  if ("text" in settings) return normalizeRuntimeSettingsV2(settings).text;
-  return persistedRuntimeSettingsV2(settings).text;
-}
-
-export function runtimeImageService(settings: RuntimeSettings | RuntimeSettingsV2): ImageServiceConfig {
-  const normalized = "text" in settings
-    ? normalizeRuntimeSettingsV2(settings)
-    : persistedRuntimeSettingsV2(settings);
+export function runtimeImageService(settings: RuntimeSettings): ImageServiceConfig {
+  const normalized = normalizeRuntimeSettings(settings);
   if (normalized.connectionMode === "single") {
     return {
-      ...normalized.image,
-      name: normalized.text.name,
-      baseUrl: normalized.text.baseUrl,
-      apiKey: normalized.text.apiKey,
-      model: normalized.image.model || normalized.text.model,
+      name: "统一模型连接",
+      baseUrl: normalized.textBaseUrl,
+      apiKey: normalized.textApiKey,
+      model: normalized.imageModel || normalized.planningModel,
+      generationMode: normalized.imageGenerationMode,
+      protocol: detectProviderCapabilities(normalized.textBaseUrl).imageTransport,
     };
   }
-  return normalized.image;
+  return {
+    name: "图片生成",
+    baseUrl: normalized.imageBaseUrl,
+    apiKey: normalized.imageApiKey,
+    model: normalized.imageModel,
+    generationMode: normalized.imageGenerationMode,
+    protocol: normalized.imageProtocol,
+  };
 }
 
 export const getTextServiceConfig = runtimeTextService;
@@ -264,40 +175,61 @@ export const getImageConfig = runtimeImageService;
 export const runtimeTextConfig = runtimeTextService;
 export const runtimeImageConfig = runtimeImageService;
 
-export function runtimeTextServiceSummary(settings: RuntimeSettings | RuntimeSettingsV2): RuntimeServiceSummary {
+export function runtimeTextServiceSummary(settings: RuntimeSettings): RuntimeServiceSummary {
   const service = runtimeTextService(settings);
   const capabilities = detectProviderCapabilities(service.baseUrl);
-  return { name: service.name, baseUrl: service.baseUrl, model: service.model, provider: capabilities.provider, protocol: service.protocol };
+  return {
+    name: service.name,
+    baseUrl: service.baseUrl,
+    model: service.model,
+    provider: capabilities.provider,
+    protocol: service.protocol,
+  };
 }
 
-export function runtimeImageServiceSummary(settings: RuntimeSettings | RuntimeSettingsV2): RuntimeServiceSummary {
+export function runtimeImageServiceSummary(settings: RuntimeSettings): RuntimeServiceSummary {
   const service = runtimeImageService(settings);
   const capabilities = detectProviderCapabilities(service.baseUrl);
-  return { name: service.name, baseUrl: service.baseUrl, model: service.model, provider: capabilities.provider, protocol: service.protocol };
+  return {
+    name: service.name,
+    baseUrl: service.baseUrl,
+    model: service.model,
+    provider: capabilities.provider,
+    protocol: service.protocol,
+  };
 }
 
 export function runtimeTextBaseUrl(settings: RuntimeSettings): string {
-  return normalizedTextBaseUrl(
-    settings.textBaseUrl,
-    baseUrlFromPlanningEndpoint(settings.planningEndpoint),
-  );
+  return settings.textBaseUrl.trim();
 }
 
 export function runtimeTextApiKey(settings: RuntimeSettings): string {
-  return (settings.textApiKey !== undefined ? settings.textApiKey : settings.apiKey || "").trim();
+  return settings.textApiKey.trim();
 }
 
 export function runtimeImageApiKey(settings: RuntimeSettings): string {
-  if (settings.connectionMode === "single") return runtimeTextApiKey(settings);
-  return (settings.imageApiKey !== undefined ? settings.imageApiKey : settings.apiKey || "").trim();
+  return settings.connectionMode === "single"
+    ? runtimeTextApiKey(settings)
+    : settings.imageApiKey.trim();
 }
 
 export function runtimeImageBaseUrl(settings: RuntimeSettings): string {
-  return settings.connectionMode === "single" ? runtimeTextBaseUrl(settings) : settings.imageBaseUrl;
+  return settings.connectionMode === "single"
+    ? runtimeTextBaseUrl(settings)
+    : settings.imageBaseUrl.trim();
 }
 
 export function runtimeImageGenerationMode(settings: RuntimeSettings): ImageGenerationMode {
-  return settings.imageGenerationMode === "async" ? "async" : "sync";
+  return settings.imageGenerationMode;
+}
+
+export function runtimeTextRequestUrl(settings: RuntimeSettings): string {
+  return runtimeTextService(settings).endpoint ?? "";
+}
+
+export function runtimeImageRequestUrl(settings: RuntimeSettings): string {
+  const service = runtimeImageService(settings);
+  return resolveImageEndpoint(service.baseUrl, service.protocol, "generation");
 }
 
 export function runtimeSupportsImageEditing(settings: RuntimeSettings): boolean {
@@ -305,10 +237,7 @@ export function runtimeSupportsImageEditing(settings: RuntimeSettings): boolean 
 }
 
 export function validateRuntimeSettings(settings: RuntimeSettings): string | null {
-  const planningUrlError = validateServiceUrl(
-    runtimeTextBaseUrl(settings),
-    settings.textBaseUrl !== undefined ? "文本 API 根地址" : "文本策划请求地址",
-  );
+  const planningUrlError = validateServiceUrl(runtimeTextBaseUrl(settings), "文本 API 根地址");
   if (planningUrlError) return planningUrlError;
   const imageUrlError = validateServiceUrl(runtimeImageBaseUrl(settings), "图片服务地址");
   if (imageUrlError) return imageUrlError;
@@ -334,7 +263,7 @@ export interface SettingsRepository {
 }
 
 export function createMemorySettingsRepository(
-  initial: RuntimeSettings = defaultRuntimeSettings,
+  initial: unknown = defaultRuntimeSettings,
 ): SettingsRepository {
   let saved = normalizeRuntimeSettings(initial);
   return {
@@ -355,7 +284,9 @@ export function createLocalStorageSettingsRepository(
       const raw = storage.getItem(RUNTIME_SETTINGS_STORAGE_KEY);
       if (raw) {
         try {
-          return runtimeSettingsFromV2(JSON.parse(raw) as unknown);
+          const settings = normalizeRuntimeSettings(JSON.parse(raw) as unknown);
+          storage.setItem(RUNTIME_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+          return settings;
         } catch {
           // Malformed API settings fall back to defaults.
         }
@@ -365,35 +296,8 @@ export function createLocalStorageSettingsRepository(
     async save(settings) {
       storage.setItem(
         RUNTIME_SETTINGS_STORAGE_KEY,
-        JSON.stringify(persistedRuntimeSettingsV2(settings)),
+        JSON.stringify(normalizeRuntimeSettings(settings)),
       );
-    },
-  };
-}
-
-export interface RuntimeSettingsV2Repository {
-  load(): Promise<RuntimeSettingsV2>;
-  save(settings: RuntimeSettingsV2): Promise<void>;
-}
-
-/** V2-native repository for callers that do not need the legacy flat adapter. */
-export function createLocalStorageRuntimeSettingsV2Repository(
-  storage: Pick<Storage, "getItem" | "setItem">,
-): RuntimeSettingsV2Repository {
-  return {
-    async load() {
-      const raw = storage.getItem(RUNTIME_SETTINGS_STORAGE_KEY);
-      if (raw) {
-        try {
-          return normalizeRuntimeSettingsV2(JSON.parse(raw) as unknown);
-        } catch {
-          // Return defaults for malformed browser storage.
-        }
-      }
-      return normalizeRuntimeSettingsV2(defaultRuntimeSettingsV2);
-    },
-    async save(settings) {
-      storage.setItem(RUNTIME_SETTINGS_STORAGE_KEY, JSON.stringify(persistedRuntimeSettingsV2(settings)));
     },
   };
 }
