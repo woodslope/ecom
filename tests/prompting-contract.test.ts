@@ -45,6 +45,24 @@ describe("prompting contract", () => {
     expect(bundle.user).not.toMatch(/apiKey|endpoint|model/i);
   });
 
+  it("includes the provider aspect ratio and both canvas contracts", () => {
+    const bundle = buildGenerationPrompt({
+      request: {
+        productName: "Lamp",
+        platformId: "taobao",
+        slotKey: "TB-DETAIL-01",
+        prompt: "制作商品详情图",
+        negativePrompt: "模糊",
+        visibleCopy: "",
+        dimensions: { width: 1024, height: 1536, unit: "px" },
+        uploadDimensions: { width: 750, height: 1000, unit: "px" },
+      },
+    });
+    expect(bundle.user).toContain("Target aspect ratio: 2:3.");
+    expect(bundle.user).toContain("Expected output resolution: 1024x1536.");
+    expect(bundle.user).toContain("Upload reference size: 750x1000.");
+  });
+
   it("keeps selected planner task settings explicit and separate from rule data", () => {
     const resolved = resolvePlanningRulePack("amazon", {
       marketplaceId: "jp",

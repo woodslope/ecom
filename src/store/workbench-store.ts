@@ -439,7 +439,7 @@ function planningErrorMessage(error: unknown): string {
 
 function generationErrorMessage(error: unknown): string {
   if (error instanceof DOMException && error.name === "TimeoutError") {
-    return "图片生成超时，请检查连接后重试。已有版本未受影响。";
+    return "图片生成超时（请求可能已提交并产生费用），请先检查中转站任务状态，确认没有生成中的任务后再重试。已有版本未受影响。";
   }
   if (error instanceof DOMException && error.name === "AbortError") {
     return "本次图片生成已取消，已有版本未受影响。";
@@ -3548,10 +3548,9 @@ export function createWorkbenchStore(
       }
       const sizeTier = plan?.amazonSession?.sizeTier ?? "2K";
       const uploadDimensions = rule.dimensions;
-      const generationDimensions =
-        platformId === "amazon"
-          ? generationDimensionsForUpload(uploadDimensions, sizeTier)
-          : uploadDimensions;
+      // Both platforms use the provider's fixed aspect-ratio canvases for API
+      // generation; uploadDimensions remains the platform delivery contract.
+      const generationDimensions = generationDimensionsForUpload(uploadDimensions, sizeTier);
       if (!hasCurrentPlanningInputs(get(), platformId)) {
         set({
           generationError: STALE_PLAN_MESSAGE,
@@ -4174,9 +4173,7 @@ export function createWorkbenchStore(
             : imageGenerator);
         if (!activeImageGenerator) throw new Error("图片 API 运行时不可用。");
         const sizeTier = session.options.platformId === "amazon" ? session.options.sizeTier : undefined;
-        const dimensions = platformId === "amazon"
-          ? generationDimensionsForUpload(rule.dimensions, sizeTier ?? "2K")
-          : rule.dimensions;
+        const dimensions = generationDimensionsForUpload(rule.dimensions, sizeTier ?? "2K");
         const generated = await activeImageGenerator.generate(
           {
             projectId,

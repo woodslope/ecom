@@ -297,7 +297,7 @@ describe("Taobao product workflow", () => {
     expect(await store.getState().selectSessionSlot(session.id, "TB-HERO-02")).toBe(true);
     const version = await store.getState().generateSessionSlot(session.id, "TB-HERO-02");
 
-    expect(version).toMatchObject({ slotKey: "TB-HERO-02", width: 800, height: 800 });
+    expect(version).toMatchObject({ slotKey: "TB-HERO-02", width: 1024, height: 1024 });
     expect(store.getState().sessions.find((candidate) => candidate.id === session.id)?.slotVersions["TB-HERO-02"])
       .toMatchObject({ activeVersionId: version?.id, versions: [version] });
     expect(store.getState().runs.find((run) => run.id === session.activeRunId)?.events.at(-1))

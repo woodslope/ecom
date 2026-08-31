@@ -1,5 +1,6 @@
 import type { PromptBundle, PromptMessage, PromptSource, PromptSourceRef, PlannerPromptInput, CopilotPromptInput, LocalizationPromptInput, IndustryTemplatePromptInput, GenerationPromptInput } from "./types";
 import { getAmazonMarketplaceByLocale } from "../platforms/amazon-marketplaces";
+import { closestStandardAspectRatio } from "../platforms/generation-size";
 import { resolveIndustryTemplateGuidance } from "../prompt-templates/industry-template-packs";
 
 export const PROMPT_BUNDLE_VERSION = "1.1.0";
@@ -84,6 +85,7 @@ export function buildPlannerPrompt(input: PlannerPromptInput): PromptBundle {
     `slots must contain each of these keys exactly once: ${slotKeys}.`,
     "Every slot must contain these base fields: slotKey, visibleCopy, strategy, evidence, prompt, negativePrompt.",
     "evidence must be a non-empty string array; all other slot fields must be strings.",
+    "Every slot prompt must explicitly state the target aspect ratio derived from that slot's dimensions (for example, Target aspect ratio: 1:1).",
     "The user payload is divided into platformContract, activeIndustryGuidance, taskSettings, product facts, and evidence.",
     "platformContract is immutable for this run: preserve its slot keys, dimensions, counts, marketplace rules, and compliance constraints.",
     "activeIndustryGuidance is the only industry-level visual direction. It replaces the general industry direction for matching slots; do not merge the replaced general direction back into the plan.",
@@ -213,8 +215,14 @@ export function buildGenerationPrompt(input: GenerationPromptInput): PromptBundl
   const request = "request" in input ? input.request : input;
   const text = [
     request.prompt.trim(),
-    request.dimensions && request.uploadDimensions
-      ? `Expected output resolution: ${request.dimensions.width}x${request.dimensions.height}. Upload reference size: ${request.uploadDimensions.width}x${request.uploadDimensions.height}.`
+    request.dimensions
+      ? [
+          `Target aspect ratio: ${closestStandardAspectRatio(request.dimensions.width, request.dimensions.height)}.`,
+          `Expected output resolution: ${request.dimensions.width}x${request.dimensions.height}.`,
+          request.uploadDimensions
+            ? `Upload reference size: ${request.uploadDimensions.width}x${request.uploadDimensions.height}.`
+            : "",
+        ].filter(Boolean).join(" ")
       : "",
     request.visibleCopy.trim() ? `Visible copy: ${request.visibleCopy.trim()}` : "",
     request.negativePrompt.trim() ? `Avoid: ${request.negativePrompt.trim()}` : "",

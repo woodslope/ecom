@@ -4,6 +4,7 @@ import type {
   ImageGenerator,
 } from "../domain/generation/types";
 import { buildGenerationPrompt } from "../domain/prompting";
+import { closestStandardAspectRatio } from "../domain/platforms/generation-size";
 
 export interface OpenAIImageGeneratorOptions {
   baseUrl: string;
@@ -114,7 +115,7 @@ function pngDimensions(blob: Blob): Promise<{ width: number; height: number } | 
 function formatError(): OpenAIImageGeneratorError {
   return new OpenAIImageGeneratorError(
     "format",
-    "图片 API 返回格式不正确，请重试或更换支持 Images API 的模型。",
+    "图片 API 返回格式不正确；请求可能已提交并产生费用，请先检查中转站任务状态，再决定是否重试。",
   );
 }
 
@@ -134,9 +135,7 @@ async function parseImagesResponse(response: Response): Promise<ImagesResponse> 
 }
 
 function closestAspectRatio(width: number, height: number): string {
-  const ratio = width / height;
-  const candidates = [["1:1", 1], ["4:3", 4 / 3], ["3:4", 3 / 4], ["16:9", 16 / 9], ["9:16", 9 / 16]] as const;
-  return candidates.reduce((best, candidate) => Math.abs(candidate[1] - ratio) < Math.abs(best[1] - ratio) ? candidate : best)[0];
+  return closestStandardAspectRatio(width, height);
 }
 
 function closestImageSize(width: number, height: number): "1K" | "2K" | "4K" {
@@ -281,7 +280,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
         timeoutId = setTimeout(() => {
           const error = new OpenAIImageGeneratorError(
             "timeout",
-            "图片生成请求超时，请检查网络或调高超时设置后重试。",
+            "图片生成请求超时（请求可能已提交并产生费用）。请先检查中转站任务状态，确认没有生成中的任务后再重试。",
           );
           reject(error);
           requestController.abort(error);
@@ -442,6 +441,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
         operation: isEdit ? "edit" : "generation",
         size,
         requestedSize: size,
+        aspectRatio: closestAspectRatio(request.dimensions.width, request.dimensions.height),
         ...(actualDimensions ? { actualSize: `${width}x${height}` } : {}),
         uploadSize: `${request.uploadDimensions.width}x${request.uploadDimensions.height}`,
         ...(request.sizeTier ? { sizeTier: request.sizeTier } : {}),

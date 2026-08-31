@@ -87,7 +87,7 @@ describe("OpenAIImageGenerator", () => {
       model: "image-model",
       prompt: [
         request.prompt,
-        "Expected output resolution: 2000x2000. Upload reference size: 2000x2000.",
+        "Target aspect ratio: 1:1. Expected output resolution: 2000x2000. Upload reference size: 2000x2000.",
         `Visible copy: ${request.visibleCopy}`,
         `Avoid: ${request.negativePrompt}`,
       ].join("\n"),
@@ -155,7 +155,7 @@ describe("OpenAIImageGenerator", () => {
     expect(form.get("prompt")).toBe(
       [
         request.prompt,
-        "Expected output resolution: 2000x2000. Upload reference size: 2000x2000.",
+        "Target aspect ratio: 1:1. Expected output resolution: 2000x2000. Upload reference size: 2000x2000.",
         `Visible copy: ${request.visibleCopy}`,
         `Avoid: ${request.negativePrompt}`,
       ].join("\n"),

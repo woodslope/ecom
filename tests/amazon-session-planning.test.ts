@@ -6,6 +6,8 @@ import type { PlatformPlanCandidate } from "../src/domain/planning/types";
 import {
   generationDimensionsForUpload,
   calculateGenerationSize,
+  STANDARD_GENERATION_SIZES,
+  closestStandardAspectRatio,
 } from "../src/domain/platforms/generation-size";
 import { resolveRulePackForPlan } from "../src/domain/platforms/resolve-rule-pack";
 import { mockPlanner } from "./fixtures/mock-planner";
@@ -100,6 +102,33 @@ describe("Batch 1 session-aware planning", () => {
     expect(banner.height).toBeGreaterThan(0);
     // generation canvas should not be the raw upload 970x300 for 2K tier
     expect(banner.width * banner.height).toBeGreaterThan(970 * 300);
+  });
+
+  it("maps platform slots to the exact provider canvases shown in the selector", () => {
+    const cases = [
+      ["1:1", 1024, 1024],
+      ["16:9", 1792, 1024],
+      ["9:16", 1024, 1792],
+      ["4:3", 1024, 768],
+      ["3:4", 768, 1024],
+      ["3:2", 1536, 1024],
+      ["2:3", 1024, 1536],
+      ["21:9", 1344, 576],
+    ] as const;
+    for (const [ratio, width, height] of cases) {
+      expect(STANDARD_GENERATION_SIZES[ratio]).toEqual({ width, height, unit: "px" });
+      expect(closestStandardAspectRatio(width, height)).toBe(ratio);
+      expect(generationDimensionsForUpload({ width, height, unit: "px" }, "4K")).toEqual({
+        width,
+        height,
+        unit: "px",
+      });
+    }
+    expect(generationDimensionsForUpload({ width: 970, height: 300, unit: "px" }, "2K")).toEqual({
+      width: 1344,
+      height: 576,
+      unit: "px",
+    });
   });
 
 });

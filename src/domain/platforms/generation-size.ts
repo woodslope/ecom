@@ -23,6 +23,28 @@ const TIER_PIXEL_BUDGET: Readonly<Record<SizeTier, number>> = Object.freeze({
 const MAX_RATIO_ERROR = 0.01;
 const RATIO_PATTERN = /^\s*(\d+(?:\.\d+)?)\s*[:xX×]\s*(\d+(?:\.\d+)?)\s*$/;
 
+/**
+ * Provider-safe generation canvases exposed by the image API selector.
+ * Keep these dimensions stable: the upload canvas and the provider canvas are
+ * different contracts (for example Amazon A+ uploads are 970x300).
+ */
+export const STANDARD_GENERATION_SIZES = Object.freeze({
+  "1:1": Object.freeze({ width: 1024, height: 1024, unit: "px" as const }),
+  "16:9": Object.freeze({ width: 1792, height: 1024, unit: "px" as const }),
+  "9:16": Object.freeze({ width: 1024, height: 1792, unit: "px" as const }),
+  "4:3": Object.freeze({ width: 1024, height: 768, unit: "px" as const }),
+  "3:4": Object.freeze({ width: 768, height: 1024, unit: "px" as const }),
+  "3:2": Object.freeze({ width: 1536, height: 1024, unit: "px" as const }),
+  "2:3": Object.freeze({ width: 1024, height: 1536, unit: "px" as const }),
+  "21:9": Object.freeze({ width: 1344, height: 576, unit: "px" as const }),
+});
+
+export type StandardGenerationAspectRatio = keyof typeof STANDARD_GENERATION_SIZES;
+
+const STANDARD_RATIO_ENTRIES = Object.entries(STANDARD_GENERATION_SIZES) as Array<
+  [StandardGenerationAspectRatio, SlotDimensions]
+>;
+
 function floorToMultiple(value: number, multiple: number): number {
   return Math.max(multiple, Math.floor(value / multiple) * multiple);
 }
@@ -53,6 +75,27 @@ export function formatUploadRatio(width: number, height: number): string {
   const h = Math.round(height);
   const divisor = gcd(w, h);
   return `${w / divisor}:${h / divisor}`;
+}
+
+/** Return the closest ratio supported by the image provider selector. */
+export function closestStandardAspectRatio(width: number, height: number): StandardGenerationAspectRatio {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return "1:1";
+  }
+  const target = width / height;
+  return STANDARD_RATIO_ENTRIES.reduce((best, candidate) => {
+    const bestDistance = Math.abs(Math.log(target / (STANDARD_GENERATION_SIZES[best[0]].width / STANDARD_GENERATION_SIZES[best[0]].height)));
+    const candidateDistance = Math.abs(Math.log(target / (candidate[1].width / candidate[1].height)));
+    return candidateDistance < bestDistance ? candidate : best;
+  })[0];
+}
+
+/**
+ * Convert a platform upload slot to one of the exact provider canvases shown
+ * in the UI. This intentionally does not scale to an arbitrary pixel budget.
+ */
+export function standardGenerationSizeForUpload(upload: SlotDimensions): SlotDimensions {
+  return STANDARD_GENERATION_SIZES[closestStandardAspectRatio(upload.width, upload.height)];
 }
 
 /**
@@ -118,13 +161,16 @@ export function generationDimensionsForUpload(
   upload: SlotDimensions,
   tier: SizeTier = "2K",
 ): SlotDimensions {
+  // Provider APIs accept a fixed set of canvases. Use the exact selector size
+  // whenever possible, then retain the tier-based calculation for malformed
+  // or future custom dimensions.
+  if (Number.isFinite(upload.width) && Number.isFinite(upload.height) && upload.width > 0 && upload.height > 0) {
+    return standardGenerationSizeForUpload(upload);
+  }
   const ratio = formatUploadRatio(upload.width, upload.height);
-  return (
-    calculateGenerationSize(tier, ratio) ??
-    Object.freeze({
-      width: upload.width,
-      height: upload.height,
-      unit: "px" as const,
-    })
-  );
+  return calculateGenerationSize(tier, ratio) ?? Object.freeze({
+    width: upload.width,
+    height: upload.height,
+    unit: "px" as const,
+  });
 }
