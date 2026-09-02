@@ -130,7 +130,7 @@ describe("workbench store", () => {
     expect(store.getState().projects).toEqual([updated]);
   });
 
-  it("deletes a project with its assets and workspace, then selects the newest remaining project", async () => {
+  it("deletes a task with its assets and workspace without switching to another platform task", async () => {
     const ids = ["project_01", "project_02"];
     const dependencies = {
       ...createDependencies(),
@@ -181,7 +181,7 @@ describe("workbench store", () => {
 
     expect(store.getState().activeProject?.id).toBe(second.id);
     expect(await store.getState().removeProject(second.id)).toBe(true);
-    expect(store.getState().activeProject?.id).toBe(first.id);
+    expect(store.getState().activeProject).toBeNull();
     expect(store.getState().projects.map((project) => project.id)).toEqual([first.id]);
     expect(await dependencies.assetRepository.list(second.id)).toEqual([]);
     expect((await dependencies.workspaceRepository.load(second.id)).runs).toEqual([]);
@@ -214,9 +214,6 @@ describe("workbench store", () => {
 
     expect(await store.getState().planPlatform("taobao")).toBeNull();
     expect(await store.getState().generateSlot("amazon", "MAIN")).toBeNull();
-    expect(
-      await store.getState().runCopilotCommand("amazon", "PT01", "explain-next"),
-    ).toBe(false);
     expect(await store.getState().exportPlatform("amazon")).toBeNull();
 
     releaseCompression();

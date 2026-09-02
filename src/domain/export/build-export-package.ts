@@ -127,6 +127,15 @@ export async function buildExportPackage({
     });
   }
 
+  const complianceErrorSlots = slots
+    .filter((slot) => slot.compliance.severity === "error")
+    .map((slot) => slot.slotKey);
+  if (complianceErrorSlots.length > 0) {
+    throw new Error(
+      `合规检查未通过，以下槽位存在必须处理的问题：${complianceErrorSlots.join("、")}。请修正后重新导出。`,
+    );
+  }
+
   const exportedAt = now();
   const marketplace = plan.platformId === "amazon"
     ? getAmazonMarketplace(plan.amazonSession?.marketplaceId)

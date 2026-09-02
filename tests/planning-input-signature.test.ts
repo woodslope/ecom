@@ -6,6 +6,8 @@ import {
   isPlanningInputCurrent,
 } from "../src/domain/planning/input-signature";
 import type { ProductFacts } from "../src/domain/projects/types";
+import { createGeneralIndustryTemplateSnapshot } from "../src/domain/prompt-templates/industry-template-packs";
+import { getPlatformRulePack } from "../src/domain/platforms/registry";
 
 const facts: ProductFacts = {
   productName: "云感旅行颈枕",
@@ -74,5 +76,29 @@ describe("planning input signature", () => {
         [selected.id],
       ),
     ).toBe(false);
+  });
+
+  it("invalidates the plan when workflow, options, or industry guidance changes", () => {
+    const rulePack = getPlatformRulePack("taobao");
+    const template = createGeneralIndustryTemplateSnapshot(
+      { platformId: "taobao", workflowId: "taobao-product" },
+      rulePack,
+    );
+    const context = {
+      workflowId: "taobao-product" as const,
+      industryTemplate: template,
+      sessionOptions: { platformId: "taobao" as const, stylePresetId: null },
+    };
+    const signature = createPlanningInputSignature(facts, [], [], context);
+
+    expect(isPlanningInputCurrent(signature, facts, [], [], context)).toBe(true);
+    expect(isPlanningInputCurrent(signature, facts, [], [], {
+      ...context,
+      industryTemplate: { ...template, version: 2 },
+    })).toBe(false);
+    expect(isPlanningInputCurrent(signature, facts, [], [], {
+      ...context,
+      sessionOptions: { platformId: "taobao", stylePresetId: "editorial" },
+    })).toBe(false);
   });
 });

@@ -24,8 +24,6 @@ interface StoredValue {
 const MIGRATABLE_EXACT_KEYS = new Set([
   "ecom-workbench.projects.v3",
   "ecom-workbench.runtime-settings.api.v1",
-  "ecom-prompt-profiles-v1",
-  "ecom-slot-prompt-assets-v1",
   "ecom-industry-template-packs-v1",
   "ecom-workbench.last-platform.v2",
   "ecom-workbench.last-platform.v1",

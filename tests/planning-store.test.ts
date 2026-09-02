@@ -165,11 +165,20 @@ describe("workbench planning state", () => {
       selectedSlotKeys: { amazon: "MAIN" },
     });
     expect(firstStore.getState().plans.amazon).toEqual(plan);
+    const plannedSession = firstStore.getState().sessions.find(
+      (session) => session.workflowId === "amazon-listing",
+    )!;
     expect(
       isPlanningInputCurrent(
         firstStore.getState().planInputSignatures.amazon,
         productFacts,
         firstStore.getState().assets.map((asset) => asset.metadata),
+        plannedSession.selectedReferenceAssetIds,
+        {
+          workflowId: plannedSession.workflowId,
+          industryTemplate: plannedSession.industryTemplate,
+          sessionOptions: plannedSession.options,
+        },
       ),
     ).toBe(true);
 
@@ -215,19 +224,29 @@ describe("workbench planning state", () => {
       },
     };
     const store = createWorkbenchStore(createDependencies(planner));
-    const project = await store.getState().createProject({ name: "勾选参考图", facts: productFacts });
-    const uploaded = await store.getState().uploadReferenceFiles([
-      new File(["selected"], "selected.png", { type: "image/png" }),
-      new File(["unused"], "unused.png", { type: "image/png" }),
-    ]);
+    await store.getState().startAmazonSession({
+      sourceMode: "manual",
+      workflowId: "amazon-listing",
+      listingText: "Title: Selected Image Product\n- Verified benefit",
+      facts: productFacts,
+      files: [
+        new File(["selected"], "selected.png", { type: "image/png" }),
+        new File(["unused"], "unused.png", { type: "image/png" }),
+      ],
+      selectedReferenceAssetIds: [],
+      options: { plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
+      autoPlan: false,
+    });
+    const selectedAsset = store.getState().assets.find(
+      (asset) => asset.metadata.kind === "reference" && asset.metadata.name === "selected.png",
+    )!;
 
     const session = await store.getState().startAmazonSession({
-      projectId: project!.id,
-      sourceMode: "library",
+      sourceMode: "manual",
       workflowId: "amazon-listing",
       listingText: "Title: Selected Image Product\n- Verified benefit",
       files: [],
-      selectedReferenceAssetIds: [uploaded[0]!.metadata.id],
+      selectedReferenceAssetIds: [selectedAsset.metadata.id],
       options: { plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
     });
     await store.getState().confirmLocalizedFacts(
@@ -240,11 +259,11 @@ describe("workbench planning state", () => {
     );
 
     expect(session?.selectedReferenceAssetIds).toHaveLength(1);
-    expect(session?.selectedReferenceAssetIds).not.toEqual([uploaded[0]!.metadata.id]);
+    expect(session?.selectedReferenceAssetIds).toEqual([selectedAsset.metadata.id]);
     expect(receivedReferenceImages?.map((image) => image.name)).toEqual(["selected.png"]);
   });
 
-  it("blocks editing, generation, Copilot, and export when the saved plan uses old inputs", async () => {
+  it("blocks editing, generation, and export when the saved plan uses old inputs", async () => {
     const store = createWorkbenchStore(createDependencies());
     await store.getState().createProject({ name: "输入版本保护", facts: productFacts });
     await store.getState().planPlatform("amazon");
@@ -271,11 +290,6 @@ describe("workbench planning state", () => {
 
     expect(await store.getState().generateSlot("amazon", "PT01")).toBeNull();
     expect(store.getState().generationError).toContain("重新策划");
-
-    expect(await store.getState().runCopilotCommand("amazon", "PT01", "explain-next")).toBe(
-      false,
-    );
-    expect(store.getState().copilotError).toContain("重新策划");
 
     expect(await store.getState().exportPlatform("amazon")).toBeNull();
     expect(store.getState().exportError).toContain("重新策划");

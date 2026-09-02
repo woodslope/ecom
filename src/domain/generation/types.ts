@@ -1,5 +1,6 @@
 import type { SizeTier } from "../platforms/amazon-catalog";
-import type { PlatformId, SlotDimensions } from "../platforms/types";
+import type { PlatformId, PlatformRulePack, SlotDimensions } from "../platforms/types";
+import type { PlanningProjectFacts } from "../planning/types";
 
 export type GenerationSource = "api";
 
@@ -31,6 +32,40 @@ export interface ImageGenerationRequest {
   referenceImages: readonly GenerationReferenceImage[];
   /** Explicit local edit input. The mask uses transparent pixels as the editable area. */
   edit?: ImageEditInput;
+  /** Runtime correlation and freshness metadata. Optional for legacy adapters. */
+  operationId?: string;
+  taskId?: string;
+  inputSignature?: string;
+  productFacts?: PlanningProjectFacts;
+  platformRules?: PlatformRulePack;
+  aiInstructions?: readonly string[];
+  /** Optional user-authored requirements that must be translated into the image brief. */
+  additionalRequirements?: string;
+  /** Names of selected references; binary image payloads remain in referenceImages. */
+  referenceImageNames?: readonly string[];
+  /** Editable slot planning context included in the final generation brief. */
+  slotStrategy?: string;
+  slotEvidence?: readonly string[];
+  outputConstraints?: {
+    format: "image";
+    slotKey: string;
+    promptRequired: true;
+  };
+}
+
+/** Canonical runtime boundary for generating one planned slot. */
+export interface SlotGenerationRequest extends Omit<ImageGenerationRequest, "operationId" | "taskId" | "inputSignature" | "productFacts" | "platformRules" | "aiInstructions" | "outputConstraints"> {
+  operationId: string;
+  taskId: string;
+  inputSignature: string;
+  productFacts: PlanningProjectFacts;
+  platformRules: PlatformRulePack;
+  aiInstructions: readonly string[];
+  outputConstraints: {
+    format: "image";
+    slotKey: string;
+    promptRequired: true;
+  };
 }
 
 export interface GeneratedImage {
@@ -44,6 +79,8 @@ export interface GeneratedImage {
 
 export interface ImageGenerator {
   generate(request: ImageGenerationRequest, signal: AbortSignal): Promise<GeneratedImage>;
+  /** Optional envelope-based adapter entry point. */
+  generateRequest?(request: SlotGenerationRequest, signal: AbortSignal): Promise<GeneratedImage>;
 }
 
 export interface SlotVersion {

@@ -1,0 +1,32 @@
+@media (min-width: 900px) and (max-width: 1320px) {
+  .slot-inspector__chrome-bottom .generation-actions__primary .status-chip {
+    /* Runtime mode remains visible in the rail and inspector header at compact width. */
+    display: none;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1099px) {
+  .workbench-grid:not(.workbench-grid--guided) {
+    position: relative;
+    grid-template-columns: minmax(320px, 0.82fr) minmax(340px, 1.18fr);
+  }
+
+  .workbench-grid:not(.workbench-grid--guided) > .workbench-source-column:not([hidden]) {
+    position: absolute;
+    z-index: 20;
+    inset: 0 auto 0 0;
+    width: min(360px, calc(100% - var(--space-4)));
+    box-shadow: var(--elevation-shadow);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

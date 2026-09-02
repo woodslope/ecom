@@ -5,11 +5,13 @@ import {
   applyIndustryTemplateToRulePack,
   deleteIndustryTemplatePack,
   getDefaultIndustryTemplatePackId,
+  getDefaultIndustryTemplate,
   industryTemplateSnapshot,
   listIndustryTemplatePacks,
   normalizeIndustryTemplateSnapshot,
   saveIndustryTemplatePack,
   setDefaultIndustryTemplatePackId,
+  validateIndustryTemplateSlots,
 } from "../src/domain/prompt-templates/industry-template-packs";
 import { getPlatformRulePack } from "../src/domain/platforms/registry";
 
@@ -98,10 +100,28 @@ describe("industry template packs", () => {
     expect(snapshot.version).toBe(2);
     expect(normalizeIndustryTemplateSnapshot(JSON.parse(JSON.stringify(snapshot)))).toEqual(snapshot);
 
-    setDefaultIndustryTemplatePackId(storage, scope, second.id);
+    setDefaultIndustryTemplatePackId(storage, scope, second.id, 1);
     expect(getDefaultIndustryTemplatePackId(storage, scope)).toBe(second.id);
+    expect(getDefaultIndustryTemplate(storage, scope)).toEqual({ id: second.id, version: 1 });
     deleteIndustryTemplatePack(storage, second.id);
     expect(listIndustryTemplatePacks(storage, scope)).toEqual([]);
     expect(getDefaultIndustryTemplatePackId(storage, scope)).toBeNull();
+  });
+
+  it("rejects incomplete, repeated, or product-specific industry guidance", () => {
+    const general = createGeneralIndustryTemplateSnapshot(scope, rulePack);
+    expect(validateIndustryTemplateSlots(general.slots.slice(1), rulePack)).toContain(
+      `缺少槽位：${rulePack.slots[0]!.key}`,
+    );
+    expect(validateIndustryTemplateSlots(
+      general.slots.map((slot) => ({ ...slot, guidance: "统一的行业方向描述" })),
+      rulePack,
+    ).some((message) => message.includes("内容重复"))).toBe(true);
+    expect(validateIndustryTemplateSlots(
+      general.slots.map((slot, index) => index === 0
+        ? { ...slot, guidance: "突出产品 SKU: ABC-123 的具体包装" }
+        : slot),
+      rulePack,
+    ).some((message) => message.includes("具体商品参数"))).toBe(true);
   });
 });

@@ -10,7 +10,7 @@ export interface TextReferenceImage {
 }
 
 export interface TextRequest {
-  service: "planner" | "copilot" | "localizer" | "industry-template";
+  service: "planner" | "localizer" | "industry-template";
   model: string;
   prompt: PromptBundle;
   referenceImages?: readonly TextReferenceImage[];

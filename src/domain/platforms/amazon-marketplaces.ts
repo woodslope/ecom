@@ -3,7 +3,7 @@
  * (Ali-Aria/amazon-image-studio @ bca89d728e415c453db363dcba30ac8ea243edaf).
  *
  * Behavior mirror of AIS `src/lib/amazonMarketplaces.ts`, consumed by session controls,
- * planners, Copilot, compliance, history, and export.
+ * planners, compliance, history, and export.
  */
 
 export type AmazonMarketplaceId = "us" | "jp" | "de" | "fr" | "it" | "es";

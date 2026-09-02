@@ -58,7 +58,7 @@ describe("industry template workflow", () => {
 
     const session = await store.getState().analyzeTaobaoProduct({
       projectId: project!.id,
-      sourceMode: "library",
+      sourceMode: "manual",
       productText: "商品名：陶瓷花瓶\n卖点：手工釉面",
       files: [],
       selectedReferenceAssetIds: [asset!.metadata.id],

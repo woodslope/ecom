@@ -59,7 +59,7 @@ export function AmazonSessionSummary({
       </StatusMessage>
       {planningInput ? (
         <StatusMessage tone={planningInput.quality === "standard" ? "success" : "warning"}>
-          {planningInput.sourceMode === "library" ? "已保存任务资料" : "当前任务填写"} · {planningInputQualityLabel(planningInput.quality)}
+          当前平台任务资料 · {planningInputQualityLabel(planningInput.quality)}
           {planningInput.missingFacts.length > 0
             ? ` · 待补：${planningInput.missingFacts.join("、")}`
             : " · 输入完整"}

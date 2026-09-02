@@ -2,6 +2,7 @@ import type {
   GeneratedImage,
   ImageGenerationRequest,
   ImageGenerator,
+  SlotGenerationRequest,
 } from "../domain/generation/types";
 import { buildGenerationPrompt } from "../domain/prompting";
 import { closestStandardAspectRatio } from "../domain/platforms/generation-size";
@@ -293,6 +294,10 @@ export class OpenAIImageGenerator implements ImageGenerator {
 
   constructor(private readonly options: OpenAIImageGeneratorOptions) {
     this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  async generateRequest(request: SlotGenerationRequest, signal: AbortSignal): Promise<GeneratedImage> {
+    return this.generate(request, signal);
   }
 
   async generate(

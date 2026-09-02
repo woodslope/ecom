@@ -1,6 +1,5 @@
 import { applyTaobaoAnalysisToFacts } from "../platforms/taobao-analysis";
 import {
-  createEmptyProductFacts,
   resolveAmazonPlanningFacts,
 } from "../planning/input-assessment";
 import type { ProductProject } from "../projects/types";
@@ -10,6 +9,7 @@ import { productFactsEqual } from "../localization/product-localizer";
 type EffectiveSessionContext = Pick<
   PlatformSession,
   | "projectId"
+  | "platformId"
   | "workflowId"
   | "sourceInput"
   | "planningInput"
@@ -18,34 +18,24 @@ type EffectiveSessionContext = Pick<
 >;
 
 /**
- * Resolves the facts visible to a platform workflow without mutating the shared project.
- * Platform-specific intake is session-owned; every downstream consumer must use this view.
+ * Resolves the facts visible to one platform task without consulting another task.
  */
 export function resolveSessionEffectiveFacts(
   project: ProductProject,
   session?: EffectiveSessionContext,
 ): ProductProject["facts"] {
-  if (!session || session.projectId !== project.id) return project.facts;
+  if (
+    !session ||
+    session.projectId !== project.id ||
+    (project.platformId !== undefined && session.platformId !== project.platformId)
+  ) {
+    return project.facts;
+  }
   let sourceFacts: ProductProject["facts"];
   if (session.workflowId === "taobao-product") {
-    const baseFacts = session.planningInput?.sourceMode === "manual"
-      ? createEmptyProductFacts()
-      : project.facts;
-    sourceFacts = applyTaobaoAnalysisToFacts(baseFacts, session.taobaoAnalysis);
+    sourceFacts = applyTaobaoAnalysisToFacts(project.facts, session.taobaoAnalysis);
   } else {
-    // Manual Amazon input is copied into a task-owned draft project before planning.
-    // Keep manual sessions isolated from library facts, but do not discard the
-    // facts that belong to that draft itself when downstream consumers resolve
-    // the effective project again.
-    const factsSourceMode =
-      session.planningInput?.sourceMode === "manual" && project.scope !== "task-draft"
-        ? "manual"
-        : "library";
-    sourceFacts = resolveAmazonPlanningFacts(
-      project.facts,
-      session.sourceInput.listingText,
-      factsSourceMode,
-    );
+    sourceFacts = resolveAmazonPlanningFacts(project.facts, session.sourceInput.listingText, "manual");
   }
   if (
     session.localizedFactsDraft?.status === "confirmed" &&

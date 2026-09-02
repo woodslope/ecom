@@ -3,7 +3,7 @@ import type { PlanningProjectFacts } from "./types";
 import type { ProductFacts } from "../projects/types";
 
 export type PlanningInputQuality = "standard" | "image-only" | "facts-only" | "empty";
-export type PlanningInputSourceMode = "library" | "manual";
+export type PlanningInputSourceMode = "manual";
 
 export interface PlanningInputAssessment {
   quality: PlanningInputQuality;
@@ -20,8 +20,6 @@ export interface PlanningInputSnapshot {
   missingFacts: string[];
   productText: string;
   selectedReferenceAssetIds: string[];
-  sourceProjectId?: string;
-  sourceProjectUpdatedAt?: string;
 }
 
 function hasText(value: unknown): boolean {
@@ -61,9 +59,10 @@ export function resolveAmazonPlanningFacts(
   listingText: string,
   sourceMode: PlanningInputSourceMode,
 ): ProductFacts {
-  const base = sourceMode === "library" && projectFacts
-    ? projectFacts
-    : createEmptyProductFacts();
+  // Facts are local to the current platform task. Keep the parameter for
+  // backwards-compatible persisted sessions.
+  void sourceMode;
+  const base = projectFacts ?? createEmptyProductFacts();
   const patch = listingParseToFactsPatch(parseAmazonListingText(listingText));
   return {
     ...base,

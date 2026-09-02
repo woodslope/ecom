@@ -77,7 +77,6 @@ export function PlatformWorkspace({
   generationRecoveryRequired = false,
   generationErrorTarget = null,
   generationError = null,
-  copilotTarget = null,
   exporting = false,
   exportError = null,
   onPlan,
@@ -118,7 +117,6 @@ export function PlatformWorkspace({
   generationRecoveryRequired?: boolean;
   generationErrorTarget?: GenerationTarget | null;
   generationError?: string | null;
-  copilotTarget?: GenerationTarget | null;
   exporting?: boolean;
   exportError?: string | null;
   /** Compatibility callbacks retained for existing consumers; production task input is read-only here. */
@@ -166,7 +164,6 @@ export function PlatformWorkspace({
   const runAmazonPlan = () =>
     void onPlan(isAmazon ? amazonOptionsFromControls(amazonSession) : undefined);
   const referenceAssets = assets.filter((asset) => asset.metadata.kind === "reference");
-  const canPlan = Boolean(activeProject && (isAmazon || referenceAssets.length > 0));
   const planningLocked = Boolean(planningPlatformId);
   const effectiveProject = activeProject
     ? resolveSessionEffectiveProject(activeProject, productionSession)
@@ -179,8 +176,23 @@ export function PlatformWorkspace({
           planningFacts,
           referenceAssets.map((asset) => asset.metadata),
           productionSession?.selectedReferenceAssetIds,
+          productionSession
+            ? {
+                workflowId: productionSession.workflowId,
+                industryTemplate: productionSession.industryTemplate,
+                sessionOptions: productionSession.options,
+              }
+            : undefined,
         )
       : null;
+  const canPlan = Boolean(activeProject && planningFacts && (
+    planningFacts.productName.trim() ||
+    planningFacts.category.trim() ||
+    planningFacts.description.trim() ||
+    planningFacts.sellingPoints.some((item) => item.trim()) ||
+    Object.values(planningFacts.specifications).some((item) => item.trim()) ||
+    referenceAssets.length > 0
+  ));
   const amazonControlsStale = isAmazon && Boolean(plan) && !amazonControlsMatchPlan(amazonSession, plan);
   const planRefreshReason =
     amazonControlsStale
@@ -261,8 +273,7 @@ export function PlatformWorkspace({
   const generationLocked = Boolean(
     loading ||
       generationRecoveryRequired ||
-      (generatingSlot && !selectedSlotIsGenerating) ||
-      copilotTarget,
+      (generatingSlot && !selectedSlotIsGenerating),
   );
   const generationLockReason = loading
     ? "工作台正在加载或保存项目与素材，请完成后再生成图片。"
@@ -270,8 +281,6 @@ export function PlatformWorkspace({
     ? "上次图片生成状态需要恢复，请先点击“重试恢复”。"
     : generatingSlot
       ? `${getPlatformRulePack(generatingSlot.platformId).label} · ${generatingSlot.slotKey} 正在生成，请先等待或取消。`
-      : copilotTarget
-        ? `${getPlatformRulePack(copilotTarget.platformId).label} · ${copilotTarget.slotKey} Copilot 请求处理中，请先等待或取消。`
       : undefined;
   const [slotDirty, setSlotDirty] = useState(false);
   const [amazonPreviewOpen, setAmazonPreviewOpen] = useState(false);
@@ -290,16 +299,12 @@ export function PlatformWorkspace({
     ? "请先填写商品资料"
     : loading
       ? "工作台正在加载或保存项目与素材"
-    : !isAmazon && referenceAssets.length === 0
-      ? "请先上传至少一张商品参考图"
-      : planningPlatformId
+    : planningPlatformId
         ? `${getPlatformRulePack(planningPlatformId).label} 正在生成平台策划，请先等待或取消。`
       : generationRecoveryRequired
         ? "请先重试恢复图片版本与素材"
         : generatingSlot?.platformId === platform
-        ? `${generationLockReason}`
-        : copilotTarget
-          ? `${getPlatformRulePack(copilotTarget.platformId).label} · ${copilotTarget.slotKey} Copilot 请求处理中，请先等待或取消。`
+          ? `${generationLockReason}`
           : undefined);
   const planActionDisabled = Boolean(
     !canPlan ||
@@ -307,8 +312,7 @@ export function PlatformWorkspace({
       loading ||
       planningLocked ||
       generationRecoveryRequired ||
-      generatingSlot?.platformId === platform ||
-      copilotTarget,
+      generatingSlot?.platformId === platform
   );
   const planDescriptionId = planningLocked
     ? "planning-task-status"
@@ -331,7 +335,6 @@ export function PlatformWorkspace({
       loading ||
       planning ||
       generatingSlot ||
-      copilotTarget ||
       generationRecoveryRequired ||
       planNeedsRefresh ||
       batchJob?.status === "running" ||
@@ -654,7 +657,6 @@ export function PlatformWorkspace({
             loading ||
               planning ||
               generatingSlot ||
-              copilotTarget ||
               generationRecoveryRequired ||
               planNeedsRefresh,
           )}
@@ -663,8 +665,8 @@ export function PlatformWorkspace({
               ? "工作台正在加载或保存项目。"
               : generationRecoveryRequired
                 ? "请先恢复图片版本与素材。"
-                : planning || generatingSlot || copilotTarget
-                  ? "请等待当前策划、图片生成或 Copilot 任务完成。"
+                : planning || generatingSlot
+                  ? "请等待当前策划或图片生成任务完成。"
                   : planRefreshReason
                     ? planRefreshReason
                     : !plan

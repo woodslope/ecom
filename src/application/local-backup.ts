@@ -3,8 +3,6 @@ import { DEFAULT_ASSET_DATABASE_NAME } from "../domain/assets/repository";
 import { DEFAULT_EXECUTION_JOB_DATABASE_NAME } from "../domain/jobs/repository";
 import { DEFAULT_PROJECT_STORAGE_KEY } from "../domain/projects/repository";
 import { DEFAULT_RUN_DATABASE_NAME } from "../domain/runs/repository";
-import { CUSTOM_PROMPT_PROFILES_STORAGE_KEY } from "../domain/prompt-profiles/prompt-profiles";
-import { SLOT_PROMPT_ASSETS_STORAGE_KEY } from "../domain/prompt-profiles/slot-prompt-assets";
 import { INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY } from "../domain/prompt-templates/industry-template-packs";
 import {
   RUNTIME_SETTINGS_STORAGE_KEY,
@@ -89,8 +87,6 @@ const PREFERENCE_STORAGE_KEYS = new Set([
 ]);
 const EXACT_STORAGE_KEYS = new Set([
   DEFAULT_PROJECT_STORAGE_KEY,
-  CUSTOM_PROMPT_PROFILES_STORAGE_KEY,
-  SLOT_PROMPT_ASSETS_STORAGE_KEY,
   INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY,
   ...PREFERENCE_STORAGE_KEYS,
 ]);
@@ -128,13 +124,11 @@ const ASSET_KINDS = new Set(["reference", "generated", "style-reference"]);
 
 function isPlanningInput(value: unknown): boolean {
   return isRecord(value) &&
-    (value.sourceMode === "library" || value.sourceMode === "manual") &&
+    value.sourceMode === "manual" &&
     ["standard", "image-only", "facts-only", "empty"].includes(String(value.quality)) &&
     isStringArray(value.missingFacts) &&
     typeof value.productText === "string" &&
-    isStringArray(value.selectedReferenceAssetIds) &&
-    isOptionalString(value.sourceProjectId) &&
-    isOptionalString(value.sourceProjectUpdatedAt);
+    isStringArray(value.selectedReferenceAssetIds);
 }
 
 function isPlannedSlot(value: unknown): boolean {

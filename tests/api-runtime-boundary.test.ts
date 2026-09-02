@@ -6,7 +6,7 @@ import { createMemoryProjectRepository } from "../src/domain/projects/repository
 import type { ProductFacts } from "../src/domain/projects/types";
 import { createMemorySettingsRepository } from "../src/domain/settings";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { mockCopilot, mockImageGenerator, mockIndustryTemplateTransformer } from "./fixtures/mock-ai";
+import { mockImageGenerator, mockIndustryTemplateTransformer } from "./fixtures/mock-ai";
 import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 import { createGeneralIndustryTemplateSnapshot } from "../src/domain/prompt-templates/industry-template-packs";
@@ -29,7 +29,6 @@ function runtimeFactory(): AiRuntimeFactory {
   const runtime = {
     planner: mockPlanner,
     imageGenerator: mockImageGenerator,
-    copilot: mockCopilot,
     productLocalizer: {
       async localize(source: ProductFacts) { return { ...source }; },
     },
@@ -42,7 +41,6 @@ function runtimeFactory(): AiRuntimeFactory {
     resolve: () => runtime,
     createPlanner: () => mockPlanner,
     createImageGenerator: () => mockImageGenerator,
-    createCopilot: () => mockCopilot,
     createProductLocalizer: () => runtime.productLocalizer,
     createIndustryTemplateTransformer: () => mockIndustryTemplateTransformer,
     testTextConnection: runtime.testTextConnection,
@@ -125,7 +123,7 @@ describe("API-only runtime boundaries", () => {
     expect(store.getState().planningError).toContain("未配置文本 API Key");
   });
 
-  it("requires text API for industry template changes and Copilot", async () => {
+  it("requires text API for industry template changes", async () => {
     const store = await initializedStore(settings({ textApiKey: "text-key", planningModel: "text-model" }));
     const baseTemplate = createGeneralIndustryTemplateSnapshot(
       { platformId: "amazon", workflowId: "amazon-listing" },
@@ -138,8 +136,6 @@ describe("API-only runtime boundaries", () => {
     })).not.toBeNull();
     expect(await store.getState().planPlatform("amazon")).not.toBeNull();
     expect(await store.getState().saveRuntimeSettings(settings())).toBe(true);
-    expect(await store.getState().runCopilotCommand("amazon", "MAIN", "check-compliance")).toBe(false);
-    expect(store.getState().copilotError).toContain("未配置文本 API Key");
   });
 
   it("writes only api sources for new plans and image versions", async () => {

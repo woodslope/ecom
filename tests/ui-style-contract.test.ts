@@ -1,8 +1,8 @@
 // @ts-expect-error Vitest runs in Node, while this browser app intentionally omits @types/node.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { styles } from "./fixtures/style-source";
 
-const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const guide = readFileSync(new URL("../UI_STYLE_GUIDE.md", import.meta.url), "utf8");
 const indexHtml = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const platformWorkspace = readFileSync(
@@ -11,10 +11,6 @@ const platformWorkspace = readFileSync(
 );
 const amazonSessionControls = readFileSync(
   new URL("../src/components/AmazonSessionControls.tsx", import.meta.url),
-  "utf8",
-);
-const styleReferencePicker = readFileSync(
-  new URL("../src/components/StyleReferencePicker.tsx", import.meta.url),
   "utf8",
 );
 const industryTemplateSelector = readFileSync(
@@ -202,11 +198,9 @@ describe("Commerce Ops visual contract", () => {
       /\.icon-button--secondary:hover:not\(:disabled\)\s*\{[^}]*color:\s*var\(--primary-hover\)[^}]*background:\s*var\(--primary-soft\)[^}]*border-color:\s*var\(--primary-border\)/s,
     );
     expect(amazonSessionControls).not.toContain('className="icon-button--secondary"');
-    expect(styleReferencePicker).toContain('className="icon-button--secondary"');
     expect(industryTemplateSelector).toContain('variant="secondary"');
     expect(industryTemplateSelector).toContain("管理模板");
     expect(styles).toMatch(/\.icon-button:hover:not\(:disabled\)\s*\{[^}]*background:\s*var\(--surface-soft\)/s);
-    expect(styles).toContain(".style-reference-picker__linked");
     expect(amazonSessionControls).not.toContain("prompt-profile-select-row");
   });
 });

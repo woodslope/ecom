@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -99,6 +99,15 @@ async function listFiles(directory, extension) {
     return [];
   }
   return collected.sort();
+}
+
+async function pruneSuccessfulEvidence() {
+  const runsRoot = join(evidenceRoot, "runs");
+  const entries = await readdir(runsRoot, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === runId) continue;
+    await rm(join(runsRoot, entry.name), { recursive: true, force: true });
+  }
 }
 
 async function dependencyVersion(name) {
@@ -222,6 +231,10 @@ await writeFile(latestPath, `${JSON.stringify({
   completedAt: manifest.completedAt,
   manifest: relative(evidenceRoot, manifestPath),
 }, null, 2)}\n`, "utf8");
+
+if (!failed) {
+  await pruneSuccessfulEvidence();
+}
 
 console.log(`\nUI acceptance ${manifest.status}: ${relative(projectRoot, manifestPath)}`);
 process.exit(failed ? 1 : 0);

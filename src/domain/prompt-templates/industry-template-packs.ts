@@ -24,6 +24,7 @@ export interface IndustryTemplateSlotGuidance {
 
 export interface IndustryTemplateRevision {
   version: number;
+  parentVersion?: number;
   brief: IndustryTemplateBrief;
   slots: IndustryTemplateSlotGuidance[];
   createdAt: string;
@@ -55,7 +56,12 @@ export interface IndustryTemplateSnapshot {
 
 interface IndustryTemplateState {
   packs: IndustryTemplatePack[];
-  defaults: Record<string, string>;
+  defaults: Record<string, IndustryTemplateDefault>;
+}
+
+export interface IndustryTemplateDefault {
+  id: string;
+  version?: number;
 }
 
 interface IndustryTemplateStorage {
@@ -143,7 +149,15 @@ function normalizeRevision(value: unknown): IndustryTemplateRevision | null {
   const brief = normalizeBrief(value.brief);
   const slots = value.slots.map(normalizeSlot).filter((slot): slot is IndustryTemplateSlotGuidance => slot !== null);
   if (!brief || slots.length !== value.slots.length || slots.length === 0) return null;
-  return { version: value.version, brief, slots, createdAt: value.createdAt };
+  return {
+    version: value.version,
+    ...(typeof value.parentVersion === "number" && Number.isInteger(value.parentVersion)
+      ? { parentVersion: value.parentVersion }
+      : {}),
+    brief,
+    slots,
+    createdAt: value.createdAt,
+  };
 }
 
 function normalizePack(value: unknown): IndustryTemplatePack | null {
@@ -224,11 +238,16 @@ function readState(storage: IndustryTemplateStorage): IndustryTemplateState {
         ? parsed.packs.map(normalizePack).filter((pack): pack is IndustryTemplatePack => pack !== null)
         : [],
       defaults: isRecord(parsed.defaults)
-        ? Object.fromEntries(
-            Object.entries(parsed.defaults).filter(
-              (entry): entry is [string, string] => typeof entry[1] === "string",
-            ),
-          )
+        ? Object.fromEntries(Object.entries(parsed.defaults).flatMap(([key, value]) => {
+            if (typeof value === "string") return [[key, { id: value }]];
+            if (!isRecord(value) || typeof value.id !== "string") return [];
+            return [[key, {
+              id: value.id,
+              ...(typeof value.version === "number" && Number.isInteger(value.version)
+                ? { version: value.version }
+                : {}),
+            }]];
+          }))
         : {},
     };
   } catch {
@@ -384,6 +403,7 @@ export function saveIndustryTemplatePack(
     description?: string;
     scope: IndustryTemplateScope;
     baseTemplateId?: string;
+    parentVersion?: number;
     brief: IndustryTemplateBrief;
     slots: IndustryTemplateSlotGuidance[];
   },
@@ -409,6 +429,7 @@ export function saveIndustryTemplatePack(
       ...(existing?.revisions ?? []),
       {
         version,
+        ...(input.parentVersion ? { parentVersion: input.parentVersion } : {}),
         brief: { ...input.brief },
         slots: slots.map((slot) => ({ ...slot })),
         createdAt: now,
@@ -429,7 +450,7 @@ export function deleteIndustryTemplatePack(storage: IndustryTemplateStorage, id:
   writeState(storage, {
     packs: state.packs.filter((pack) => pack.id !== id),
     defaults: Object.fromEntries(
-      Object.entries(state.defaults).filter(([, packId]) => packId !== id),
+      Object.entries(state.defaults).filter(([, selection]) => selection.id !== id),
     ),
   });
 }
@@ -438,6 +459,13 @@ export function getDefaultIndustryTemplatePackId(
   storage: IndustryTemplateStorage,
   scope: IndustryTemplateScope,
 ): string | null {
+  return getDefaultIndustryTemplate(storage, scope)?.id ?? null;
+}
+
+export function getDefaultIndustryTemplate(
+  storage: IndustryTemplateStorage,
+  scope: IndustryTemplateScope,
+): IndustryTemplateDefault | null {
   return readState(storage).defaults[industryTemplateScopeKey(scope)] ?? null;
 }
 
@@ -445,13 +473,43 @@ export function setDefaultIndustryTemplatePackId(
   storage: IndustryTemplateStorage,
   scope: IndustryTemplateScope,
   id: string | null,
+  version?: number,
 ): void {
   const state = readState(storage);
   const key = industryTemplateScopeKey(scope);
   const defaults = { ...state.defaults };
-  if (id) defaults[key] = id;
+  if (id) defaults[key] = { id, ...(version ? { version } : {}) };
   else delete defaults[key];
   writeState(storage, { ...state, defaults });
+}
+
+export function validateIndustryTemplateSlots(
+  slots: readonly IndustryTemplateSlotGuidance[],
+  rulePack: PlatformRulePack,
+  brief?: IndustryTemplateBrief,
+): string[] {
+  const errors: string[] = [];
+  const expected = rulePack.slots.map((slot) => slot.key);
+  const received = slots.map((slot) => slot.slotKey);
+  const duplicates = received.filter((key, index) => received.indexOf(key) !== index);
+  const missing = expected.filter((key) => !received.includes(key));
+  const unknown = received.filter((key) => !expected.includes(key));
+  if (duplicates.length) errors.push(`存在重复槽位：${[...new Set(duplicates)].join("、")}`);
+  if (missing.length) errors.push(`缺少槽位：${missing.join("、")}`);
+  if (unknown.length) errors.push(`包含未知槽位：${unknown.join("、")}`);
+  const tooShort = slots.filter((slot) => slot.guidance.trim().length < 6).map((slot) => slot.slotKey);
+  if (tooShort.length) errors.push(`槽位指导过于简略：${tooShort.join("、")}`);
+  const normalized = slots.map((slot) => slot.guidance.normalize("NFKC").replace(/\s+/g, "").toLocaleLowerCase());
+  const repeated = slots.filter((_, index) => normalized.indexOf(normalized[index]!) !== index).map((slot) => slot.slotKey);
+  if (repeated.length) errors.push(`槽位指导内容重复：${repeated.join("、")}`);
+  const concreteFactPattern = /(?:sku|型号|model|认证|certified|\b(?:ce|fda|fcc|rohs|ul|ccc)\b)\s*[:：#-]?\s*[a-z0-9][a-z0-9._/-]{2,}|\b\d+(?:[.,]\d+)?\s*(?:mm|cm|kg|mg|ml|mah|英寸|毫米|厘米|公斤)\b/iu;
+  const leaked = slots.filter((slot) => concreteFactPattern.test(slot.guidance)).map((slot) => slot.slotKey);
+  if (leaked.length) errors.push(`疑似混入具体商品参数：${leaked.join("、")}`);
+  if (brief?.forbiddenContent.trim()) {
+    const missingNegative = slots.filter((slot) => !slot.negativeGuidance.trim()).map((slot) => slot.slotKey);
+    if (missingNegative.length) errors.push(`已填写禁止内容，但这些槽位缺少约束：${missingNegative.join("、")}`);
+  }
+  return errors;
 }
 
 export function templateSlotGuidance(

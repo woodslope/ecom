@@ -9,7 +9,6 @@ import {
   GenerationTaskStatus,
 } from "../src/components/GenerationActions";
 import { VersionStrip } from "../src/components/VersionStrip";
-import { AssetLibrary } from "../src/components/AssetLibrary";
 import {
   isSlotDraftDirty,
   SlotInspector,
@@ -261,7 +260,6 @@ describe("generation UI contract", () => {
     expect(markup.match(/hidden=""/g)).toHaveLength(1);
     expect(markup).toContain('aria-label="版本与图片工具" hidden=""');
     expect(markup).not.toContain('aria-label="策划与合规检查"');
-    expect(markup).not.toContain('aria-label="AI Copilot"');
     expect(markup).not.toContain('aria-expanded=');
   });
 
@@ -342,20 +340,4 @@ describe("generation UI contract", () => {
     expect(markup).toContain("目标上传 2000×2000px");
   });
 
-  it("does not expose the generic asset delete action for generated version Blobs", () => {
-    const markup = renderToStaticMarkup(
-      createElement(AssetLibrary, {
-        assets: [assets[0]],
-        loading: false,
-        title: "生成结果",
-        allowUpload: false,
-        onUpload: async () => undefined,
-        onRemove: async () => undefined,
-      }),
-    );
-
-    expect(markup).not.toContain('aria-label="删除素材 version-01.svg"');
-    expect(markup).toContain("生成结果");
-    expect(markup).not.toContain("上传图片");
-  });
 });

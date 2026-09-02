@@ -54,7 +54,7 @@ describe("AI text transport", () => {
       endpoint: "https://provider.example/v1/chat/completions",
       apiKey: "secret",
       fetch: fetcher,
-    }).request({ service: "copilot", model: "planning", prompt, signal: new AbortController().signal });
+    }).request({ service: "planner", model: "planning", prompt, signal: new AbortController().signal });
     expect(result.text).toBe("AB");
     expect(result.transport).toBe("chat-completions");
   });

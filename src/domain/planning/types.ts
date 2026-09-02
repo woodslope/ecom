@@ -86,6 +86,33 @@ export interface PlatformPlan {
   amazonSession?: AmazonPlanSessionMeta;
 }
 
+/** Canonical runtime boundary for a platform planning operation.
+ * The legacy PlannerEngine.plan positional signature remains supported for
+ * persistence and adapter compatibility; runtimes may consume this snapshot
+ * through planRequest when they need the complete request envelope.
+ */
+export interface PlatformPlanningRequest {
+  platformId: PlatformId;
+  projectId: string;
+  /** ProductProject.id-compatible task identifier retained for callers that use task terminology. */
+  taskId: string;
+  operationId: string;
+  inputSignature: string;
+  productFacts: PlanningProjectFacts;
+  referenceImages: readonly PlanningReferenceImage[];
+  platformRules: PlatformRulePack;
+  aiInstructions: readonly string[];
+  outputConstraints: {
+    format: "json-object";
+    requiredSlotKeys: readonly string[];
+    contractVersion: string;
+  };
+  amazonOptions?: AmazonPlanningRequestOptions;
+  inputAssessment?: PlanningInputAssessment;
+  industryTemplate?: IndustryTemplateSnapshot;
+  taskSettings?: PlannerTaskSettings;
+}
+
 export interface PlannerEngine {
   plan(
     project: PlanningProjectFacts,
@@ -97,4 +124,6 @@ export interface PlannerEngine {
     industryTemplate?: IndustryTemplateSnapshot,
     taskSettings?: PlannerTaskSettings,
   ): Promise<PlatformPlan>;
+  /** Optional envelope-based adapter entry point. */
+  planRequest?(request: PlatformPlanningRequest, signal: AbortSignal): Promise<PlatformPlan>;
 }

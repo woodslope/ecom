@@ -8,7 +8,6 @@ import { createMemoryAssetRepository } from "../src/domain/assets/repository";
 import { createMemoryProjectRepository } from "../src/domain/projects/repository";
 import type { ProductFacts } from "../src/domain/projects/types";
 import { createMemoryWorkspaceRepository } from "../src/domain/workspace/project-workspace";
-import { extractSharedFactsFromRun } from "../src/domain/projects/deposition";
 import { OpenAIProductLocalizer } from "../src/services/openai-product-localizer";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 import { mockPlanner } from "./fixtures/mock-planner";
@@ -111,16 +110,11 @@ describe("task-localized product facts", () => {
     const deps = dependencies();
     const store = createWorkbenchStore(deps);
     await store.getState().initialize();
-    const project = await store.getState().createProject({
-      name: "Amazon 本地化任务",
-      scope: "task-draft",
-      facts,
-    });
     const session = await store.getState().startAmazonSession({
-      projectId: project!.id,
-      sourceMode: "library",
+      sourceMode: "manual",
       workflowId: "amazon-listing",
       listingText: "",
+      facts,
       files: [],
       selectedReferenceAssetIds: [],
       options: { marketplaceId: "us", plannerMode: "listing", listingImageCount: 7 },
@@ -151,11 +145,6 @@ describe("task-localized product facts", () => {
       status: "confirmed",
       localizedFacts: { productName: "Northwind 500 ml Travel Mug" },
     });
-    expect(extractSharedFactsFromRun(store.getState().runs.at(-1)!, {
-      ...facts,
-      productName: "不应写回的站点文案",
-    })).toMatchObject({ productName: facts.productName });
-
     const restored = createWorkbenchStore(deps);
     await restored.getState().initialize();
     expect(restored.getState().runs.at(-1)?.contextSnapshot.localizedFactsDraft).toMatchObject({
@@ -164,7 +153,7 @@ describe("task-localized product facts", () => {
     });
   });
 
-  it("continues directly into the shared production workspace after successful localization", async () => {
+  it("continues directly into the platform production workspace after successful localization", async () => {
     const deps = {
       ...dependencies(),
       productLocalizer: {
@@ -186,17 +175,11 @@ describe("task-localized product facts", () => {
     };
     const store = createWorkbenchStore(deps);
     await store.getState().initialize();
-    const project = await store.getState().createProject({
-      name: "Amazon 自动本地化任务",
-      scope: "task-draft",
-      facts,
-    });
-
     const session = await store.getState().startAmazonSession({
-      projectId: project!.id,
-      sourceMode: "library",
+      sourceMode: "manual",
       workflowId: "amazon-listing",
       listingText: "",
+      facts,
       files: [],
       selectedReferenceAssetIds: [],
       options: { marketplaceId: "us", plannerMode: "listing", listingImageCount: 7 },
@@ -213,7 +196,7 @@ describe("task-localized product facts", () => {
     expect(store.getState().planningError).toBeNull();
   });
 
-  it("falls back to source facts and continues planning when localization fails", async () => {
+  it("keeps source facts as an unconfirmed draft when localization fails", async () => {
     const store = createWorkbenchStore({
       ...dependencies(),
       productLocalizer: {
@@ -223,17 +206,11 @@ describe("task-localized product facts", () => {
       },
     });
     await store.getState().initialize();
-    const project = await store.getState().createProject({
-      name: "Amazon 本地化降级任务",
-      scope: "task-draft",
-      facts,
-    });
-
     const session = await store.getState().startAmazonSession({
-      projectId: project!.id,
-      sourceMode: "library",
+      sourceMode: "manual",
       workflowId: "amazon-listing",
       listingText: "",
+      facts,
       files: [],
       selectedReferenceAssetIds: [],
       options: { marketplaceId: "us", plannerMode: "listing", listingImageCount: 7 },
@@ -241,27 +218,22 @@ describe("task-localized product facts", () => {
 
     expect(session?.localizedFactsDraft).toMatchObject({
       targetLocale: "en-US",
-      status: "confirmed",
+      status: "pending",
       localizedFacts: { productName: facts.productName },
     });
-    expect(session?.plan?.slots).toHaveLength(7);
-    expect(store.getState().plans.amazon?.slots).toHaveLength(7);
-    expect(store.getState().planningError).toBeNull();
+    expect(session?.plan).toBeUndefined();
+    expect(store.getState().plans.amazon).toBeUndefined();
+    expect(store.getState().planningError).toContain("确认站点语言草稿");
   });
 
   it("creates a fresh unconfirmed draft after switching Amazon marketplace", async () => {
     const store = createWorkbenchStore(dependencies());
     await store.getState().initialize();
-    const project = await store.getState().createProject({
-      name: "多站点任务",
-      scope: "task-draft",
-      facts,
-    });
     const session = await store.getState().startAmazonSession({
-      projectId: project!.id,
-      sourceMode: "library",
+      sourceMode: "manual",
       workflowId: "amazon-listing",
       listingText: "",
+      facts,
       files: [],
       selectedReferenceAssetIds: [],
       options: { marketplaceId: "us", plannerMode: "listing", listingImageCount: 7 },
@@ -289,66 +261,4 @@ describe("task-localized product facts", () => {
     expect(current?.options).toMatchObject({ marketplaceId: "jp" });
   });
 
-  it("prepares a Chinese candidate before depositing a foreign-language Amazon run", async () => {
-    const englishFacts: ProductFacts = {
-      ...facts,
-      productName: "Northwind 500 ml Travel Mug",
-      category: "Drinkware",
-      targetAudience: "Commuters",
-      description: "A 500 ml travel mug with a lockable lid.",
-      sellingPoints: ["500 ml capacity", "Lockable lid"],
-      specifications: { Capacity: "500 ml", Material: "Stainless steel" },
-    };
-    const store = createWorkbenchStore({
-      ...dependencies(),
-      productLocalizer: {
-        async localize(source, targetLocale) {
-          return targetLocale === "zh-CN"
-            ? {
-                ...source,
-                productName: "Northwind 500 ml 旅行杯",
-                category: "水杯",
-                targetAudience: "通勤人群",
-                description: "容量 500 ml，杯盖可锁定。",
-                sellingPoints: ["500 ml 容量", "杯盖可锁定"],
-                specifications: { 容量: "500 ml", 材质: "不锈钢" },
-              }
-            : source;
-        },
-      },
-    });
-    await store.getState().initialize();
-    const project = await store.getState().createProject({
-      name: "English task",
-      scope: "task-draft",
-      facts: englishFacts,
-    });
-    const session = await store.getState().startAmazonSession({
-      projectId: project!.id,
-      sourceMode: "library",
-      workflowId: "amazon-listing",
-      listingText: "",
-      files: [],
-      selectedReferenceAssetIds: [],
-      options: { marketplaceId: "us", plannerMode: "listing", listingImageCount: 7 },
-    });
-    await store.getState().confirmLocalizedFacts(
-      session!.id,
-      session!.localizedFactsDraft!.localizedFacts,
-    );
-    await store.getState().planPlatform(
-      "amazon",
-      session!.options.platformId === "amazon" ? session!.options : undefined,
-    );
-
-    const candidate = await store.getState().prepareRunDepositFacts(store.getState().runs[0]!.id);
-
-    expect(candidate).toMatchObject({
-      productName: "Northwind 500 ml 旅行杯",
-      brand: "Northwind",
-      model: "NW-500",
-      sku: "NW-500-GRAY",
-      specifications: { 容量: "500 ml" },
-    });
-  });
 });

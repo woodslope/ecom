@@ -1,6 +1,5 @@
 import {
   ArrowRight,
-  Bot,
   CircleAlert,
   ImagePlus,
   LoaderCircle,
@@ -65,41 +64,6 @@ export function GenerationTaskStatus({
               ? "正在回滚未完成写入并清理临时素材，请稍候。"
               : "已有版本保持可用；其他槽位请先等待或取消。"}
           </span>
-        </span>
-      </span>
-    </Toast>
-  );
-}
-
-export function CopilotTaskStatus({
-  target,
-  onCancel,
-}: {
-  target: GenerationTarget;
-  onCancel: () => void;
-}) {
-  const owner = `${getPlatformRulePack(target.platformId).label} · ${target.slotKey}`;
-
-  return (
-    <Toast
-      live="polite"
-      loading
-      className="operation-status"
-      data-testid="copilot-operation-status"
-      actions={(
-        <Button variant="secondary" size="compact" onClick={onCancel}>
-          <Square size={15} />
-          取消 Copilot
-        </Button>
-      )}
-    >
-      <span className="operation-status__copy">
-        <span className="operation-status__icon">
-          <Bot size={16} />
-        </span>
-        <span className="operation-status__text">
-          <strong className="operation-status__title">{owner} Copilot 请求处理中</strong>
-          <span className="operation-status__description">请求仅作用于目标槽位；其他任务请先等待或取消。</span>
         </span>
       </span>
     </Toast>

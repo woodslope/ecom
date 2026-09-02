@@ -18,6 +18,7 @@ import {
   resolvePromptProfile,
 } from "../domain/prompt-profiles/prompt-profiles";
 import type { IndustryTemplateSnapshot } from "../domain/prompt-templates/industry-template-packs";
+import type { PlatformPlanningRequest } from "../domain/planning/types";
 import { buildPlannerPrompt } from "../domain/prompting";
 import {
   AiTransportError,
@@ -170,6 +171,19 @@ export class OpenAIPlanner implements PlannerEngine {
 
   constructor(private readonly options: OpenAIPlannerOptions) {
     this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  async planRequest(request: PlatformPlanningRequest, signal: AbortSignal): Promise<PlatformPlan> {
+    return this.plan(
+      request.productFacts,
+      request.platformRules,
+      signal,
+      request.referenceImages,
+      request.amazonOptions,
+      request.inputAssessment,
+      request.industryTemplate,
+      request.taskSettings,
+    );
   }
 
   async plan(

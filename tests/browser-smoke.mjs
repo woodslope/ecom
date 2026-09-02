@@ -351,7 +351,7 @@ try {
         projects: [{
           id: "history-project",
           name: "分页历史商品",
-          scope: "task-draft",
+          platformId: "amazon",
           factsLocale: "zh-CN",
           facts: { productName: "分页历史商品", category: "测试", brand: "", model: "", sku: "PAGE-120", targetAudience: "", description: "", sellingPoints: [], forbiddenClaims: [], specifications: {} },
           createdAt: now,
@@ -600,7 +600,7 @@ try {
         projects: [{
           id: "old-project",
           name: "旧项目",
-          scope: "library",
+          platformId: "amazon",
           factsLocale: "zh-CN",
           facts: { productName: "旧商品", category: "", brand: "", model: "", sku: "", targetAudience: "", description: "", sellingPoints: [], forbiddenClaims: [], specifications: {} },
           createdAt: now,

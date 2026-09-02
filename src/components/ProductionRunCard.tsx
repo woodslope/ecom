@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArchiveRestore, CopyPlus, Download, ImageOff, Smartphone, Trash2 } from "lucide-react";
+import { CopyPlus, Download, ImageOff, Smartphone, Trash2 } from "lucide-react";
 
 import { selectRunOutputPreviews } from "../domain/history/run-output-preview";
 import type { ProductionRunRecord } from "../domain/tasks";
@@ -16,7 +16,7 @@ function outputEvent(event: ProductionEvent): boolean {
   return Boolean(event.assetId && event.slotKey && event.status === "success");
 }
 
-export function ProductionRunCard({ record, current, assetUrls, busy, compact = false, onRequestPreviewAssets, onResume, onFork, onExport, onDeposit, onDelete }: {
+export function ProductionRunCard({ record, current, assetUrls, busy, compact = false, onRequestPreviewAssets, onResume, onFork, onExport, onDelete }: {
   record: ProductionRunRecord;
   current: boolean;
   assetUrls: Record<string, string>;
@@ -26,7 +26,6 @@ export function ProductionRunCard({ record, current, assetUrls, busy, compact = 
   onResume: () => void;
   onFork: () => void;
   onExport?: () => void;
-  onDeposit?: () => void;
   onDelete?: () => void;
 }) {
   const { project, run } = record;
@@ -47,8 +46,6 @@ export function ProductionRunCard({ record, current, assetUrls, busy, compact = 
       run.slotVersionsSnapshot &&
       (run.platformId === "taobao" || run.platformId === "amazon"),
   );
-  const manual = run.contextSnapshot.planningInput?.sourceMode === "manual" ||
-    (!run.contextSnapshot.planningInput && project.scope === "task-draft");
   const taskName = project.facts.productName.trim() || project.name;
   const projectLabel = project.name !== taskName ? project.name : null;
   const runLabel = `Run ${run.id}`;
@@ -128,7 +125,6 @@ export function ProductionRunCard({ record, current, assetUrls, busy, compact = 
           <Button variant="secondary" size="compact" disabled={busy} onClick={onResume}>
             <CopyPlus size={14} />继续任务
           </Button>
-          {!compact && manual && onDeposit ? <Button variant="secondary" size="compact" disabled={busy} onClick={onDeposit}><ArchiveRestore size={14} />保存商品</Button> : null}
           {canPreview ? <Button variant="secondary" size="compact" disabled={busy} onClick={() => setPreviewOpen(true)}><Smartphone size={14} />手机预览</Button> : null}
           {!current && onDelete ? <Button variant="danger" size="compact" disabled={busy} onClick={onDelete}><Trash2 size={14} />删除任务</Button> : null}
           {!compact && onExport && outputEvents.length > 0 ? <Button variant="secondary" size="compact" disabled={busy} onClick={onExport}><Download size={14} />重新导出</Button> : null}
@@ -137,9 +133,7 @@ export function ProductionRunCard({ record, current, assetUrls, busy, compact = 
         <div className="production-run-card__facts">
           {!compact ? <span>{run.planSnapshot.slots.length} 个槽位</span> : null}
           {!compact ? <span>{previewOutputs.length} 张结果</span> : null}
-          {!compact ? <span>{manual ? "当前任务填写" : "已保存任务资料"}</span> : null}
-          {!compact && !manual ? <span>来源商品：{record.sourceProject?.name ?? "已删除商品"}</span> : null}
-          {!compact && run.deposit ? <span>已保存：{new Date(run.deposit.depositedAt).toLocaleString("zh-CN")}</span> : null}
+          {!compact ? <span>当前平台任务资料</span> : null}
         </div>
       </div>
 

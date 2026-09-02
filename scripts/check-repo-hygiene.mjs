@@ -40,7 +40,7 @@ function trackedFiles() {
   }
 }
 
-const files = trackedFiles();
+const files = trackedFiles().filter((file) => existsSync(join(projectRoot, file)));
 const fileSet = new Set(files);
 
 const forbiddenTrackedPatterns = [

@@ -117,7 +117,7 @@ describe("Taobao intake", () => {
     expect(markup).toContain('class="workbench-chrome__progress-row"');
     expect(markup).not.toContain("workbench-chrome__progress-row--compact");
     expect(markup).toContain("生成交付");
-    expect(markup).not.toContain("不会自动修改资料库");
+    expect(markup).not.toContain("跨任务复用资料");
     expect(markup).not.toContain("选择已有商品");
     expect(markup).not.toContain("手动填写");
     expect(markup).not.toContain("Amazon Listing");
@@ -162,7 +162,7 @@ describe("Taobao intake", () => {
     expect(markup).not.toMatch(/planning-primary-action[^>]*disabled/);
   });
 
-  it("keeps a failed plan on the shared intake with its saved analysis input", () => {
+  it("keeps a failed plan on the platform intake with its saved analysis input", () => {
     const session = {
       id: "session_failed_plan",
       projectId: project.id,
@@ -227,7 +227,7 @@ describe("Taobao intake", () => {
         specifications: { 材质: "记忆棉" },
         forbiddenClaims: ["治疗颈椎病"],
         referenceAssets: [{ id: "asset_front", name: "正面图.png" }],
-        citations: [{ field: "productName", value: "云感旅行颈枕", source: "shared-product" }],
+        citations: [{ field: "productName", value: "云感旅行颈枕", source: "platform-task" }],
         missingFacts: ["目标人群"],
         warnings: ["禁用声明不得进入文案"],
       },
@@ -241,7 +241,7 @@ describe("Taobao intake", () => {
     expect(markup).toContain("待补资料：目标人群");
     expect(markup).toContain("禁用声明不得进入文案");
     expect(markup).toContain("来源记录 · 1");
-    expect(markup).toContain("历史任务");
+    expect(markup).toContain("当前任务");
     expect(markup).toContain("重新分析");
   });
 

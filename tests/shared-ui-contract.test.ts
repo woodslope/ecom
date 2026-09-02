@@ -1,7 +1,5 @@
 /// <reference types="vite/client" />
 
-// @ts-expect-error Vitest runs in Node, while this browser app intentionally omits @types/node.
-import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -9,17 +7,15 @@ import { describe, expect, it } from "vitest";
 import appSource from "../src/App.tsx?raw";
 import appShellSource from "../src/components/AppShell.tsx?raw";
 import platformWorkspaceSource from "../src/components/PlatformWorkspace.tsx?raw";
+import platformHistoryPaneSource from "../src/components/PlatformHistoryPane.tsx?raw";
 import productionRunCardSource from "../src/components/ProductionRunCard.tsx?raw";
 import settingsDialogSource from "../src/components/SettingsDialog.tsx?raw";
 import slotInspectorSource from "../src/components/SlotInspector.tsx?raw";
-import assetLibrarySource from "../src/components/AssetLibrary.tsx?raw";
 import amazonIntakeSource from "../src/components/AmazonIntake.tsx?raw";
 import localizedFactsReviewSource from "../src/components/LocalizedFactsReview.tsx?raw";
 import taobaoIntakeSource from "../src/components/TaobaoIntake.tsx?raw";
 import taobaoWorkspaceSource from "../src/components/TaobaoWorkspace.tsx?raw";
 import productFactsFormSource from "../src/components/ProductFactsForm.tsx?raw";
-import promptAssetCenterSource from "../src/components/PromptAssetCenterDialog.tsx?raw";
-import promptProfileSource from "../src/components/PromptProfileDialog.tsx?raw";
 import industryTemplateSource from "../src/components/IndustryTemplateSelector.tsx?raw";
 import uiSource from "../src/components/ui.tsx?raw";
 
@@ -41,6 +37,7 @@ import {
 } from "../src/components/ui";
 import { ExportPanel } from "../src/components/ExportPanel";
 import { ProductContextBar } from "../src/components/ProductContextBar";
+import { styles } from "./fixtures/style-source";
 
 describe("shared workbench primitives", () => {
   it("renders the Commerce Ops control and state families", () => {
@@ -271,8 +268,6 @@ describe("shared workbench primitives", () => {
   });
 
   it("protects shared select, compact size, and disabled visual contracts", () => {
-    const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-
     expect(appShellSource.match(/<Select\b/g) ?? []).toHaveLength(0);
     expect(settingsDialogSource.match(/<SegmentedControl\b/g)).toHaveLength(1);
     expect(appShellSource).not.toMatch(/<select\b/);
@@ -320,13 +315,9 @@ describe("shared workbench primitives", () => {
     expect(amazonIntakeSource).toContain('tabIndex={-1}');
     expect(amazonIntakeSource).toContain('aria-hidden="true"');
     expect(amazonIntakeSource).toContain("移除文件 ${file.name}");
-    expect(assetLibrarySource).toContain('data-testid="asset-library-upload"');
-    expect(assetLibrarySource).toContain('aria-hidden="true"');
     expect(industryTemplateSource).toContain("aria-pressed={selectedId === SYSTEM_GENERAL_TEMPLATE_ID}");
     expect(industryTemplateSource).toContain("aria-pressed={selectedId === pack.id}");
     expect(localizedFactsReviewSource).not.toContain('live="polite"');
-    expect(promptAssetCenterSource).toContain("aria-describedby={aiRewriteDisabledReason ? aiRewriteReasonId : undefined}");
-    expect(promptAssetCenterSource).toContain("prompt-asset-center__disabled-reason");
     expect(taobaoIntakeSource).toContain("aria-describedby={reanalyzeDisabledReason ? reanalyzeReasonId : undefined}");
     expect(taobaoIntakeSource).toContain("taobao-analysis-summary__reanalyze-reason");
     expect(taobaoWorkspaceSource).toContain("reanalyzeDisabledReason");
@@ -368,22 +359,17 @@ describe("shared workbench primitives", () => {
     expect(uiSource).toContain("syncModalEnvironment");
     expect(uiSource).toContain("desktopContent.inert = gateActive || modalActive");
     expect(uiSource).toContain("layer.inert = !active");
-    expect(appSource).toContain('variant="sidebar"');
+    expect(platformHistoryPaneSource).toContain('variant="sidebar"');
     expect(appSource).not.toContain("platform-history-backdrop");
     expect(settingsDialogSource).toContain("open={open && !discardConfirmOpen && backupConfirmFile === null}");
-    expect(promptProfileSource).toContain("open={open && !deleteConfirmOpen}");
-    expect(promptAssetCenterSource).toContain("open={open && !deleteConfirmOpen}");
     expect(industryTemplateSource).toContain("open={dialogOpen && !deleteConfirmOpen}");
   });
 
   it("keeps slot details under one inspector view owner", () => {
-    const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-
     expect(slotInspectorSource).toContain("<SegmentedControl");
     expect(slotInspectorSource).toContain('ariaLabel="槽位检查视图"');
     expect(slotInspectorSource).toContain('hidden={activePane !== "versions"}');
     expect(slotInspectorSource).not.toContain('hidden={activePane !== "checks"}');
-    expect(slotInspectorSource).not.toContain('hidden={activePane !== "copilot"}');
     expect(slotInspectorSource).toContain("disabled={submitting || draftDirty}");
     expect(slotInspectorSource).not.toContain("inspector-section__toggle");
     expect(slotInspectorSource).not.toContain("slot-inspector__strategy-toggle");

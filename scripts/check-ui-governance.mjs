@@ -12,7 +12,15 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
-const stylesPath = join(root, "src/styles.css");
+const stylesPaths = [
+  "tokens.css",
+  "shell.css",
+  "workspace.css",
+  "dialogs.css",
+  "intake.css",
+  "components.css",
+  "responsive.css",
+].map((name) => join(root, "src/styles", name));
 const componentsDir = join(root, "src/components");
 const appTsx = join(root, "src/App.tsx");
 const guidePath = join(root, "UI_STYLE_GUIDE.md");
@@ -27,6 +35,10 @@ function fail(message) {
 
 function read(path) {
   return readFileSync(path, "utf8");
+}
+
+function readStyles() {
+  return stylesPaths.map(read).join("\n");
 }
 
 function tokenValue(block, name) {
@@ -70,7 +82,7 @@ function walkTsx(dir, out = []) {
 
 // --- 1. Exactly one :root token block in styles.css ---
 {
-  const css = read(stylesPath);
+  const css = readStyles();
   const rootMatches = css.match(/(^|\n):root\s*\{/g) ?? [];
   if (rootMatches.length !== 1) {
     fail(
@@ -201,7 +213,6 @@ function walkTsx(dir, out = []) {
   const geometrySpacingAllowlist = new Map([
     [".visually-hidden", new Set(["margin: -1px"])],
     [".filter-search input", new Set(["padding-left: 34px"])],
-    [".style-reference-editor__palette input[type=\"color\"]", new Set(["padding: 3px"])],
     [".workbench-stepper", new Set([
       "--workflow-step-gap: 64px",
       "--workflow-connector-width: 48px",
@@ -307,8 +318,6 @@ function walkTsx(dir, out = []) {
     "onboarding-overlay",
     "onboarding-card",
     "history-archive",
-    "deposit-dialog",
-    "deposit-form",
     "amazon-session-controls--embedded",
     "workbench-chrome__controls",
     "workbench-chrome__onboarding",
@@ -393,7 +402,6 @@ function walkTsx(dir, out = []) {
     ["src/components/SlotBoard.tsx", { label: "领域选择卡", count: 1, marker: "slot-card" }],
     ["src/components/VersionStrip.tsx", { label: "版本卡", count: 1, marker: "version-tile" }],
     ["src/components/IndustryTemplateSelector.tsx", { label: "领域选择卡", count: 2, marker: "industry-template-card" }],
-    ["src/components/PromptAssetCenterDialog.tsx", { label: "Prompt 资产卡", count: 2, marker: "prompt-asset-card" }],
     ["src/components/AmazonMobilePreview.tsx", { label: "预览缩略图", count: 1, marker: "amazon-phone-preview__thumb" }],
     ["src/components/TaobaoMobilePreview.tsx", { label: "预览缩略图", count: 1, marker: "taobao-phone-preview__thumb" }],
     ["src/components/MaskEditorDialog.tsx", { label: "画布工具", count: null, marker: "mask-editor" }],
@@ -421,7 +429,6 @@ function walkTsx(dir, out = []) {
 
   const semanticSources = new Map([
     ["AmazonIntake.tsx", read(join(componentsDir, "AmazonIntake.tsx"))],
-    ["AssetLibrary.tsx", read(join(componentsDir, "AssetLibrary.tsx"))],
     ["IndustryTemplateSelector.tsx", read(join(componentsDir, "IndustryTemplateSelector.tsx"))],
     ["ProductContextBar.tsx", read(join(componentsDir, "ProductContextBar.tsx"))],
     ["ProductionRunCard.tsx", read(join(componentsDir, "ProductionRunCard.tsx"))],
@@ -429,14 +436,13 @@ function walkTsx(dir, out = []) {
     ["ExportPanel.tsx", read(join(componentsDir, "ExportPanel.tsx"))],
     ["ImageTools.tsx", read(join(componentsDir, "ImageTools.tsx"))],
     ["GenerationActions.tsx", read(join(componentsDir, "GenerationActions.tsx"))],
-    ["PromptAssetCenterDialog.tsx", read(join(componentsDir, "PromptAssetCenterDialog.tsx"))],
     ["TaobaoIntake.tsx", read(join(componentsDir, "TaobaoIntake.tsx"))],
     ["SlotInspector.tsx", read(join(componentsDir, "SlotInspector.tsx"))],
     ["SettingsDialog.tsx", read(join(componentsDir, "SettingsDialog.tsx"))],
     ["AppShell.tsx", read(join(componentsDir, "AppShell.tsx"))],
   ]);
   const inputContract = /className="visually-hidden-input"[\s\S]*?tabIndex=\{-1\}[\s\S]*?aria-hidden="true"/;
-  for (const name of ["AmazonIntake.tsx", "AssetLibrary.tsx"]) {
+  for (const name of ["AmazonIntake.tsx"]) {
     if (!inputContract.test(semanticSources.get(name))) {
       fail(`${name}: programmatic visually-hidden input must use tabIndex={-1} and aria-hidden="true".`);
     }
@@ -460,7 +466,6 @@ function walkTsx(dir, out = []) {
     ["ExportPanel.tsx", ["aria-describedby={disabledReason ? disabledReasonId : undefined}", "export-panel__disabled-reason"]],
     ["ImageTools.tsx", ["aria-describedby={!editingSupported && showEditingHint ? editingReasonId : undefined}", "image-tools__hint"]],
     ["GenerationActions.tsx", ["aria-describedby={disabledReason ? disabledReasonId : undefined}", "generation-actions__hint"]],
-    ["PromptAssetCenterDialog.tsx", ["aria-describedby={aiRewriteDisabledReason ? aiRewriteReasonId : undefined}", "prompt-asset-center__disabled-reason"]],
     ["TaobaoIntake.tsx", ["aria-describedby={reanalyzeDisabledReason ? reanalyzeReasonId : undefined}", "taobao-analysis-summary__reanalyze-reason"]],
     ["SlotInspector.tsx", ["aria-describedby={nextSlotDisabledReason ? nextSlotDisabledReasonId : undefined}", "slot-inspector__disabled-reason"]],
   ]) {
@@ -522,7 +527,7 @@ function walkTsx(dir, out = []) {
     }
   }
 
-  const css = read(stylesPath);
+  const css = readStyles();
   for (const legacyHook of ["mobilePane", "data-mobile-pane", "mobile-workbench-tabs"]) {
     if (workspace.includes(legacyHook) || css.includes(legacyHook)) {
       fail(
@@ -550,7 +555,7 @@ function walkTsx(dir, out = []) {
   const taobaoWorkspace = read(join(componentsDir, "TaobaoWorkspace.tsx"));
   const amazonIntake = read(join(componentsDir, "AmazonIntake.tsx"));
   const taobaoIntake = read(join(componentsDir, "TaobaoIntake.tsx"));
-  const css = read(stylesPath);
+  const css = readStyles();
 
   for (const [name, source] of [
     ["AmazonWorkspace.tsx", amazonWorkspace],
@@ -591,8 +596,9 @@ function walkTsx(dir, out = []) {
     }
   }
   const app = read(appTsx);
-  if (!app.includes('variant="sidebar"') || app.includes("platform-history-backdrop")) {
-    fail("App.tsx history must use the shared sidebar Dialog without a private backdrop owner.");
+  const historyPane = read(join(componentsDir, "PlatformHistoryPane.tsx"));
+  if (!historyPane.includes('variant="sidebar"') || app.includes("platform-history-backdrop")) {
+    fail("PlatformHistoryPane.tsx must use the shared sidebar Dialog without a private backdrop owner.");
   }
   if (!app.includes("<ToastRegion>") || !app.includes("<Toast")) {
     fail("App.tsx global feedback must render through ToastRegion and Toast.");
@@ -614,7 +620,7 @@ function walkTsx(dir, out = []) {
 // --- 6. Slot inspector has one detail-view owner ---
 {
   const inspector = read(join(componentsDir, "SlotInspector.tsx"));
-  const css = read(stylesPath);
+  const css = readStyles();
 
   for (const needle of [
     "<SegmentedControl",
@@ -657,9 +663,6 @@ function walkTsx(dir, out = []) {
     fail("AmazonSessionControls.tsx must not switch A+ module ownership to a plan-only inline variant.");
   }
 
-  if (intake.includes("StyleReferencePicker") || intake.includes("selectedStyleReferenceId")) {
-    fail("AmazonIntake.tsx must keep the main preparation flow free of the retired style-reference inputs.");
-  }
 }
 
 // --- 8. Current UI owners remain explicit and non-duplicated ---
@@ -711,11 +714,10 @@ function walkTsx(dir, out = []) {
   const amazonIntake = read(join(componentsDir, "AmazonIntake.tsx"));
   const taobaoIntake = read(join(componentsDir, "TaobaoIntake.tsx"));
   const ui = read(join(componentsDir, "ui.tsx"));
-  const css = read(stylesPath);
+  const css = readStyles();
   const retiredFeedbackHooks = [
     "app-toast",
     "generation-task-status",
-    "copilot-task-status",
     "workbench-error",
     "production-history__load-error",
     "generation-actions__error-message",

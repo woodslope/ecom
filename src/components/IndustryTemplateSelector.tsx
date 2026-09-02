@@ -16,6 +16,7 @@ import {
   createGeneralIndustryTemplateSnapshot,
   deleteIndustryTemplatePack,
   EMPTY_INDUSTRY_TEMPLATE_BRIEF,
+  getDefaultIndustryTemplate,
   getDefaultIndustryTemplatePackId,
   industryTemplateSnapshot,
   latestIndustryTemplateRevision,
@@ -23,10 +24,12 @@ import {
   saveIndustryTemplatePack,
   setDefaultIndustryTemplatePackId,
   SYSTEM_GENERAL_TEMPLATE_ID,
+  validateIndustryTemplateSlots,
   type IndustryTemplateBrief,
   type IndustryTemplatePack,
   type IndustryTemplateScope,
   type IndustryTemplateSnapshot,
+  type IndustryTemplateSlotGuidance,
 } from "../domain/prompt-templates/industry-template-packs";
 import type { PlatformRulePack } from "../domain/platforms/types";
 import { useWorkbenchStore } from "../store/workbench-store";
@@ -83,6 +86,7 @@ export function IndustryTemplateSelector({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [brief, setBrief] = useState<IndustryTemplateBrief>(() => blankBrief());
+  const [draftSlots, setDraftSlots] = useState<IndustryTemplateSlotGuidance[] | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const transforming = useWorkbenchStore((state) => state.industryTemplateTransforming);
@@ -108,9 +112,13 @@ export function IndustryTemplateSelector({
       if (value.source === "system") onChange(generalTemplate);
       return;
     }
-    const defaultId = storage ? getDefaultIndustryTemplatePackId(storage, scope) : null;
-    const defaultPack = defaultId ? nextPacks.find((pack) => pack.id === defaultId) : undefined;
-    onChange(defaultPack ? latestSnapshot(defaultPack) : generalTemplate);
+    const defaultSelection = storage ? getDefaultIndustryTemplate(storage, scope) : null;
+    const defaultPack = defaultSelection
+      ? nextPacks.find((pack) => pack.id === defaultSelection.id)
+      : undefined;
+    onChange(defaultPack
+      ? industryTemplateSnapshot(defaultPack, defaultSelection?.version)
+      : generalTemplate);
   }, [scope.platformId, scope.workflowId, rulePackSignature]);
 
   const snapshots = useMemo(
@@ -122,10 +130,12 @@ export function IndustryTemplateSelector({
     ? industryTemplateSnapshot(selectedPack, selectedVersion)
     : generalTemplate;
   const defaultId = storage ? getDefaultIndustryTemplatePackId(storage, scope) : null;
+  const defaultSelection = storage ? getDefaultIndustryTemplate(storage, scope) : null;
 
   const selectForPreview = (id: string) => {
     setSelectedId(id);
     setMessage(null);
+    setDraftSlots(null);
     if (id === SYSTEM_GENERAL_TEMPLATE_ID) {
       setSelectedVersion(1);
       setName("");
@@ -159,6 +169,7 @@ export function IndustryTemplateSelector({
       setBrief(blankBrief());
     }
     setMessage(null);
+    setDraftSlots(null);
     setDialogOpen(true);
   };
 
@@ -174,6 +185,27 @@ export function IndustryTemplateSelector({
       rulePack,
     });
     if (!result) return;
+    setDraftSlots(result.slots.map((slot) => ({ ...slot })));
+    setMessage("AI 草稿已生成。请逐槽位检查并确认发布，当前任务尚未切换。");
+  };
+
+  const updateDraftSlot = (
+    slotKey: string,
+    field: "guidance" | "negativeGuidance",
+    next: string,
+  ) => {
+    setDraftSlots((current) => current?.map((slot) =>
+      slot.slotKey === slotKey ? { ...slot, [field]: next } : slot
+    ) ?? null);
+  };
+
+  const publishDraft = () => {
+    if (!storage || !draftSlots) return;
+    const validationErrors = validateIndustryTemplateSlots(draftSlots, rulePack, brief);
+    if (validationErrors.length > 0) {
+      setMessage(`草稿未通过检查：${validationErrors.join("；")}`);
+      return;
+    }
     try {
       const pack = saveIndustryTemplatePack(storage, {
         ...(selectedPack ? { id: selectedPack.id } : {}),
@@ -181,8 +213,9 @@ export function IndustryTemplateSelector({
         description,
         scope,
         baseTemplateId: selectedSnapshot.id,
+        ...(selectedPack ? { parentVersion: selectedSnapshot.version } : {}),
         brief,
-        slots: result.slots,
+        slots: draftSlots,
       });
       const nextPacks = refresh();
       const saved = nextPacks.find((candidate) => candidate.id === pack.id) ?? pack;
@@ -190,7 +223,8 @@ export function IndustryTemplateSelector({
       setSelectedId(saved.id);
       setSelectedVersion(snapshot.version);
       onChange(snapshot);
-      setMessage(`已保存“${saved.name}”v${snapshot.version}，并设为当前任务的行业指导。`);
+      setDraftSlots(null);
+      setMessage(`已发布“${saved.name}”v${snapshot.version}，并设为当前任务的行业指导。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "行业模板保存失败");
     }
@@ -207,9 +241,10 @@ export function IndustryTemplateSelector({
       storage,
       scope,
       selectedPack?.id ?? null,
+      selectedPack ? selectedSnapshot.version : undefined,
     );
     setMessage(selectedPack
-      ? `已将“${selectedPack.name}”设为当前工作流默认模板。`
+      ? `已将“${selectedPack.name}”v${selectedSnapshot.version}设为当前工作流默认模板。`
       : "已恢复通用模板为当前工作流默认模板。",
     );
   };
@@ -340,10 +375,10 @@ export function IndustryTemplateSelector({
               </div>
               <div className="industry-template-library__toolbar-actions">
                 <Button type="button" variant="quiet" size="compact" onClick={markDefault}>
-                  {selectedPack && defaultId === selectedPack.id
+                  {selectedPack && defaultId === selectedPack.id && defaultSelection?.version === selectedSnapshot.version
                     ? <BookmarkCheck size={14} />
                     : <Bookmark size={14} />}
-                  {selectedPack && defaultId === selectedPack.id ? "当前默认" : "设为默认"}
+                  {selectedPack && defaultId === selectedPack.id && defaultSelection?.version === selectedSnapshot.version ? "当前默认" : "设为默认"}
                 </Button>
                 {selectedPack ? (
                   <IconButton label="删除行业模板" disabled={transforming} onClick={removeSelected}>
@@ -436,6 +471,42 @@ export function IndustryTemplateSelector({
               <Field label="禁止内容">
                 <textarea name="forbiddenContent" rows={2} value={brief.forbiddenContent} disabled={transforming} placeholder="行业特有的禁用场景、道具或表达" onChange={(event) => updateBrief("forbiddenContent", event.target.value)} />
               </Field>
+              {draftSlots ? (
+                <section className="industry-template-draft" aria-label="行业模板待审核草稿">
+                  <div className="industry-template-library__heading">
+                    <div>
+                      <strong>待审核草稿</strong>
+                      <span>逐槽位检查行业方向和禁止项，确认后才会发布并应用。</span>
+                    </div>
+                    <StatusChip tone="warning">未发布</StatusChip>
+                  </div>
+                  {draftSlots.map((slot) => (
+                    <details key={slot.slotKey} open>
+                      <summary><strong>{slot.label}</strong><span>{slot.slotKey}</span></summary>
+                      <Field label="行业指导">
+                        <textarea
+                          rows={3}
+                          value={slot.guidance}
+                          disabled={transforming}
+                          onChange={(event) => updateDraftSlot(slot.slotKey, "guidance", event.target.value)}
+                        />
+                      </Field>
+                      <Field label="禁止与约束">
+                        <textarea
+                          rows={2}
+                          value={slot.negativeGuidance}
+                          disabled={transforming}
+                          onChange={(event) => updateDraftSlot(slot.slotKey, "negativeGuidance", event.target.value)}
+                        />
+                      </Field>
+                    </details>
+                  ))}
+                  <div className="industry-template-transform__actions">
+                    <Button type="button" variant="secondary" onClick={() => setDraftSlots(null)}>放弃草稿</Button>
+                    <Button type="button" onClick={publishDraft}>确认发布并应用</Button>
+                  </div>
+                </section>
+              ) : null}
               <div className="industry-template-transform__actions">
                 {transforming ? (
                   <Button type="button" variant="secondary" onClick={cancelIndustryTemplateTransform}>
@@ -450,11 +521,18 @@ export function IndustryTemplateSelector({
                   onClick={() => void transform()}
                 >
                   {selectedPack ? <Bot size={14} /> : <Plus size={14} />}
-                  {selectedPack ? "生成并保存新版本" : "生成并保存行业模板"}
+                  {selectedPack ? "生成新版本草稿" : "生成行业模板草稿"}
                 </Button>
               </div>
               {transformError ? <StatusMessage tone="danger" live="assertive">{transformError}</StatusMessage> : null}
-              {message ? <StatusMessage tone={message.includes("失败") ? "danger" : "success"} live={message.includes("失败") ? "assertive" : "polite"}>{message}</StatusMessage> : null}
+              {message ? (
+                <StatusMessage
+                  tone={message.includes("失败") || message.includes("未通过") ? "danger" : "success"}
+                  live={message.includes("失败") || message.includes("未通过") ? "assertive" : "polite"}
+                >
+                  {message}
+                </StatusMessage>
+              ) : null}
             </section>
           </section>
         </div>

@@ -10,6 +10,7 @@ export type {
   PlanningSource,
   PlatformPlan,
   PlatformPlanCandidate,
+  PlatformPlanningRequest,
 } from "./types";
 
 export {

@@ -1,7 +1,7 @@
 import type { ProductFacts } from "../projects/types";
 
 export type TaobaoAnalysisCitationSource =
-  | "shared-product"
+  | "platform-task"
   | "analysis-input"
   | "reference-asset";
 
@@ -131,7 +131,7 @@ export function analyzeTaobaoProduct(
   const citations: TaobaoAnalysisCitation[] = [];
 
   if (input.facts.productName) {
-    citations.push({ field: "productName", value: input.facts.productName, source: "shared-product" });
+    citations.push({ field: "productName", value: input.facts.productName, source: "platform-task" });
   }
   if (parsed.productName) {
     citations.push({ field: "productName", value: parsed.productName, source: "analysis-input" });
@@ -144,13 +144,13 @@ export function analyzeTaobaoProduct(
     });
   }
   input.facts.sellingPoints.forEach((value) => {
-    citations.push({ field: "sellingPoints", value, source: "shared-product" });
+    citations.push({ field: "sellingPoints", value, source: "platform-task" });
   });
   parsed.sellingPoints.forEach((value) => {
     citations.push({ field: "sellingPoints", value, source: "analysis-input" });
   });
   Object.entries(input.facts.specifications).forEach(([field, value]) => {
-    citations.push({ field, value, source: "shared-product" });
+    citations.push({ field, value, source: "platform-task" });
   });
   Object.entries(parsed.specifications).forEach(([field, value]) => {
     citations.push({ field, value, source: "analysis-input" });
@@ -159,7 +159,7 @@ export function analyzeTaobaoProduct(
     citations.push({
       field: "forbiddenClaims",
       value,
-      source: input.facts.forbiddenClaims.includes(value) ? "shared-product" : "analysis-input",
+      source: input.facts.forbiddenClaims.includes(value) ? "platform-task" : "analysis-input",
     });
   });
   if (referenceAssets.length > 0) {

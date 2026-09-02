@@ -1,4 +1,4 @@
-import type { PromptBundle, PromptMessage, PromptSource, PromptSourceRef, PlannerPromptInput, CopilotPromptInput, LocalizationPromptInput, IndustryTemplatePromptInput, GenerationPromptInput } from "./types";
+import type { PromptBundle, PromptMessage, PromptSource, PromptSourceRef, PlannerPromptInput, LocalizationPromptInput, IndustryTemplatePromptInput, GenerationPromptInput } from "./types";
 import { getAmazonMarketplaceByLocale } from "../platforms/amazon-marketplaces";
 import { closestStandardAspectRatio } from "../platforms/generation-size";
 import { resolveIndustryTemplateGuidance } from "../prompt-templates/industry-template-packs";
@@ -70,7 +70,6 @@ export function buildPlannerPrompt(input: PlannerPromptInput): PromptBundle {
     industryTemplate,
     strategySnippet,
     referenceImagesSkipped,
-    slotPromptAssets = [],
   } = input;
   const activeIndustryGuidance = resolveIndustryTemplateGuidance(
     rulePack,
@@ -121,12 +120,6 @@ export function buildPlannerPrompt(input: PlannerPromptInput): PromptBundle {
     `Active industry guidance: ${activeIndustryGuidance.name} v${activeIndustryGuidance.version}.`,
     "Treat activeIndustryGuidance as reusable slot direction, not product evidence.",
     "Current product facts, reference-image evidence, platformContract rules, and compliance constraints override any unsupported industry direction.",
-    ...(slotPromptAssets.length > 0
-      ? [
-          "Explicit slot prompt assets are optional reusable direction only; they never override output fields, platform rules, or product evidence.",
-          ...slotPromptAssets.map((asset) => `Slot asset ${asset.assetId} v${asset.version} applies only to ${asset.slotKey}.`),
-        ]
-      : []),
     ...(referenceImagesSkipped ? [referenceImagesSkipped] : []),
   ].join("\n");
   const payload = JSON.stringify({
@@ -141,49 +134,10 @@ export function buildPlannerPrompt(input: PlannerPromptInput): PromptBundle {
     activeIndustryGuidance,
     ...(taskSettings ? { taskSettings } : {}),
     ...(inputAssessment ? { inputAssessment } : {}),
-    ...(slotPromptAssets.length > 0 ? { slotPromptAssets } : {}),
     referenceImages: referenceImages.map(({ name, mimeType }) => ({ name, mimeType })),
     ...(referenceImagesSkipped ? { referenceImagesSkipped } : {}),
   });
   return bundle("planner", [{ role: "system", content: system }, { role: "user", content: payload }], "system", 10);
-}
-
-export function buildCopilotPrompt(input: CopilotPromptInput): PromptBundle {
-  const { context, command } = input;
-  const advice = command === "check-compliance" || command === "explain-next";
-  const marketplace = context.rulePack.platformId === "amazon"
-    ? getAmazonMarketplaceByLocale(context.rulePack.locale)
-    : null;
-  const marketplaceLanguage = context.rulePack.platformId === "amazon" && context.rulePack.promptLanguage === "en"
-    ? [
-        "Language contract for Amazon: prompt uses natural-English model instructions and evidence labels, and must not contain Chinese planning explanations.",
-        `For patch commands, visibleCopy must use natural ${marketplace?.copyLanguage ?? "marketplace language"} for ${marketplace?.domain ?? context.rulePack.locale}; MAIN.visibleCopy must be empty.`,
-        ...(marketplace?.localGuidance ?? []),
-      ].join("\n")
-    : "";
-  const system = [
-    "Return JSON only, without commentary or Markdown.",
-    advice ? "Return exactly one string field: message." : "Return exactly two string fields: visibleCopy and prompt.",
-    `Adjust only the selected slot ${context.slot.slotKey}; never return another slot or whole plan.`,
-    `Command: ${command}.`,
-    marketplaceLanguage,
-    context.rulePack.platformId === "amazon" && context.rulePack.promptLanguage === "en"
-      ? "strategy and evidence are Chinese planning context supplied to you. Do not copy their Chinese labels into prompt."
-      : "",
-    "Use only supplied product facts and slot evidence. Do not invent claims.",
-  ].filter(Boolean).join("\n");
-  const slotRule = context.rulePack.slots.find((rule) => rule.key === context.slot.slotKey);
-  const platform = {
-    platformId: context.rulePack.platformId,
-    label: context.rulePack.label,
-    locale: context.rulePack.locale,
-    promptLanguage: context.rulePack.promptLanguage,
-    planningInstructions: context.rulePack.planningInstructions,
-    promptGuardrails: context.rulePack.promptGuardrails,
-    complianceReminders: context.rulePack.complianceReminders,
-  };
-  const payload = JSON.stringify({ command, project: context.project, platform, slotRule, slot: context.slot });
-  return bundle("copilot", [{ role: "system", content: system }, { role: "user", content: payload }], "system", 20);
 }
 
 export function buildLocalizationPrompt(input: LocalizationPromptInput): PromptBundle {
@@ -213,7 +167,44 @@ export function buildIndustryTemplatePrompt(input: IndustryTemplatePromptInput):
 
 export function buildGenerationPrompt(input: GenerationPromptInput): PromptBundle {
   const request = "request" in input ? input.request : input;
+  const slotRule = request.platformRules?.slots.find((slot) => slot.key === request.slotKey);
+  const facts = request.productFacts;
+  const factLines = facts
+    ? [
+        facts.productName ? `商品身份：${facts.productName}` : "",
+        facts.category ? `品类：${facts.category}` : "",
+        facts.brand ? `品牌：${facts.brand}` : "",
+        facts.model ? `型号：${facts.model}` : "",
+        facts.sku ? `SKU：${facts.sku}` : "",
+        facts.description ? `已提供描述：${facts.description}` : "",
+        facts.sellingPoints?.length ? `已验证卖点：${facts.sellingPoints.join("、")}` : "",
+        facts.specifications && typeof facts.specifications === "object"
+          ? `已验证规格：${JSON.stringify(facts.specifications)}`
+          : "",
+        facts.forbiddenClaims?.length ? `禁止使用的声明：${facts.forbiddenClaims.join("、")}` : "",
+      ].filter(Boolean)
+    : [];
+  const context = request.platformRules
+    ? [
+        `平台：${request.platformRules.label}（${request.platformRules.platformId}，${request.platformRules.locale}）。`,
+        slotRule
+          ? `槽位角色：${slotRule.label}；${slotRule.purpose}；平台上传画布 ${slotRule.dimensions.width}x${slotRule.dimensions.height}。`
+          : "",
+        request.referenceImageNames?.length
+          ? `参考图身份事实来源：${request.referenceImageNames.join("、")}。以参考图中可见的外形、颜色、比例、结构和配件为唯一商品身份依据，不得重设计或替换商品。`
+          : "",
+        factLines.length ? `商品与内容上下文：${factLines.join("；")}` : "",
+        request.slotStrategy?.trim() ? `槽位策划：${request.slotStrategy.trim()}` : "",
+        request.slotEvidence?.length ? `槽位事实证据：${request.slotEvidence.join("；")}` : "",
+        "视觉执行：保持项目级视觉风格一致；明确主体、前景、中景、背景层次，使用具体镜头（景别、焦段、视角）、光线、材质和道具；主体关键结构不被遮挡。",
+        "商业版式：图内标题、卖点、CTA、徽章仅在槽位文案明确提供且有事实依据时出现；文字与徽章置于安全边距内，避免压住商品和裁切边缘。",
+        "物理约束：严格遵守商品已知尺寸、材质、结构、颜色、数量和包装；不添加未提供的功能、配件、材质、认证或功效。",
+        request.aiInstructions?.length ? `平台与项目约束：${request.aiInstructions.join("；")}` : "",
+        request.additionalRequirements?.trim() ? `用户补充要求：${request.additionalRequirements.trim()}。将其落实到镜头、场景、道具、交互、构图和图内文案，不得只复述。` : "",
+      ].filter(Boolean)
+    : [];
   const text = [
+    context.length ? context.join("\n") : "",
     request.prompt.trim(),
     request.dimensions
       ? [
@@ -231,12 +222,10 @@ export function buildGenerationPrompt(input: GenerationPromptInput): PromptBundl
 }
 
 export const buildPlannerPromptBundle = buildPlannerPrompt;
-export const buildCopilotPromptBundle = buildCopilotPrompt;
 export const buildLocalizationPromptBundle = buildLocalizationPrompt;
 export const buildIndustryTemplatePromptBundle = buildIndustryTemplatePrompt;
 export const buildGenerationPromptBundle = buildGenerationPrompt;
 export const createPlannerPrompt = buildPlannerPrompt;
-export const createCopilotPrompt = buildCopilotPrompt;
 export const createLocalizationPrompt = buildLocalizationPrompt;
 export const createIndustryTemplatePrompt = buildIndustryTemplatePrompt;
 export const createGenerationPrompt = buildGenerationPrompt;

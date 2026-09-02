@@ -7,6 +7,7 @@ import { resolveSessionEffectiveProject } from "../src/domain/workspace/effectiv
 const project: ProductProject = {
   id: "project_context",
   name: "淘宝商品",
+  platformId: "taobao",
   facts: {
     productName: "旅行颈枕",
     category: "旅行用品",
@@ -47,7 +48,7 @@ const taobaoSession: PlatformSession = {
 };
 
 describe("session effective product context", () => {
-  it("uses platform-session analysis for compliance and assistant context without mutating shared facts", () => {
+  it("uses the current platform session analysis without mutating its saved task facts", () => {
     const effective = resolveSessionEffectiveProject(project, taobaoSession);
 
     expect(effective.facts).toMatchObject({
@@ -59,8 +60,28 @@ describe("session effective product context", () => {
     expect(project.facts.forbiddenClaims).toEqual([]);
   });
 
-  it("keeps Amazon sessions on the shared product facts", () => {
-    const session = { ...taobaoSession, platformId: "amazon", workflowId: "amazon-listing" as const };
+  it("applies Amazon Listing overrides to the current Amazon task facts", () => {
+    const amazonProject: ProductProject = { ...project, platformId: "amazon" };
+    const session = {
+      ...taobaoSession,
+      platformId: "amazon" as const,
+      workflowId: "amazon-listing" as const,
+      sourceInput: { listingText: "Title: Travel Pillow Plus\n- Washable cover" },
+      taobaoAnalysis: undefined,
+    };
+    expect(resolveSessionEffectiveProject(amazonProject, session).facts).toMatchObject({
+      productName: "Travel Pillow Plus",
+      sellingPoints: ["Washable cover"],
+      description: project.facts.description,
+    });
+  });
+
+  it("does not resolve a session from another platform against this task", () => {
+    const session = {
+      ...taobaoSession,
+      platformId: "amazon" as const,
+      workflowId: "amazon-listing" as const,
+    };
     expect(resolveSessionEffectiveProject(project, session).facts).toEqual(project.facts);
   });
 
@@ -68,7 +89,7 @@ describe("session effective product context", () => {
     const draftProject: ProductProject = {
       ...project,
       id: "project_amazon_draft",
-      scope: "task-draft",
+      platformId: "amazon",
       facts: {
         ...project.facts,
         productName: "手动填写的保温杯",
@@ -98,7 +119,8 @@ describe("session effective product context", () => {
     );
   });
 
-  it("does not leak library facts into a manual Amazon session", () => {
+  it("keeps saved facts when the current Amazon task has no Listing override", () => {
+    const amazonProject: ProductProject = { ...project, platformId: "amazon" };
     const session: PlatformSession = {
       ...taobaoSession,
       id: "session_amazon_isolated",
@@ -115,10 +137,6 @@ describe("session effective product context", () => {
       taobaoAnalysis: undefined,
     };
 
-    expect(resolveSessionEffectiveProject(project, session).facts).toMatchObject({
-      productName: "",
-      description: "",
-      sellingPoints: [],
-    });
+    expect(resolveSessionEffectiveProject(amazonProject, session).facts).toEqual(project.facts);
   });
 });

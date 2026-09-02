@@ -9,7 +9,6 @@ import {
   planningInputQualityMessage,
   type PlanningInputSnapshot,
 } from "../domain/planning/input-assessment";
-import type { ProductIntakeSourceMode } from "../domain/projects/product-source-text";
 import {
   analyzeTaobaoProduct,
   applyTaobaoAnalysisToFacts,
@@ -33,7 +32,7 @@ export function taobaoAnalysisHasReference(input: {
 }
 
 const citationSourceLabel = {
-  "shared-product": "历史任务",
+  "platform-task": "当前任务",
   "analysis-input": "补充资料",
   "reference-asset": "参考图",
 } as const;
@@ -98,7 +97,7 @@ export function TaobaoAnalysisSummary({
       </div>
       {planningInput ? (
         <StatusMessage tone={planningInput.quality === "standard" ? "success" : "warning"}>
-          {planningInput.sourceMode === "library" ? "已保存任务资料" : "当前任务填写"} · {planningInputQualityLabel(planningInput.quality)}
+          当前平台任务资料 · {planningInputQualityLabel(planningInput.quality)}
           {planningInput.missingFacts.length > 0
             ? ` · 待补：${planningInput.missingFacts.join("、")}`
             : " · 输入完整"}
@@ -186,15 +185,16 @@ export function TaobaoIntake({
     [assets],
   );
   const sessionDraft = session?.sourceInput.taobaoProduct;
-  const [sourceMode, setSourceMode] = useState<ProductIntakeSourceMode>(
-    () => session?.planningInput?.sourceMode ?? "manual",
-  );
   const [productText, setProductText] = useState(() => {
     if (sessionDraft?.productText?.trim()) return sessionDraft.productText;
     return "";
   });
   const [facts, setFacts] = useState<ProductFacts>(() => {
-    const base = activeProject && session ? activeProject.facts : createEmptyProductFacts();
+    const base = activeProject &&
+      session?.platformId === "taobao" &&
+      session.projectId === activeProject.id
+      ? activeProject.facts
+      : createEmptyProductFacts();
     return applyTaobaoAnalysisToFacts(base, analyzeTaobaoProduct({ facts: base, productText, referenceAssets: [] }));
   });
   const [selectedIds, setSelectedIds] = useState<string[]>(
@@ -218,15 +218,17 @@ export function TaobaoIntake({
 
   useEffect(() => {
     const draft = session?.sourceInput.taobaoProduct;
-    const nextMode = session?.planningInput?.sourceMode ?? "manual";
-    setSourceMode(nextMode);
     if (draft?.productText?.trim()) {
       setProductText(draft.productText);
     } else {
       setProductText("");
     }
     const nextText = draft?.productText ?? "";
-    const base = activeProject && session ? activeProject.facts : createEmptyProductFacts();
+    const base = activeProject &&
+      session?.platformId === "taobao" &&
+      session.projectId === activeProject.id
+      ? activeProject.facts
+      : createEmptyProductFacts();
     setFacts(applyTaobaoAnalysisToFacts(base, analyzeTaobaoProduct({ facts: base, productText: nextText, referenceAssets: [] })));
     setSelectedIds(
       draft?.selectedReferenceAssetIds ?? [],
@@ -236,7 +238,6 @@ export function TaobaoIntake({
     setIndustryTemplate(session?.industryTemplate);
   }, [
     activeProject,
-    session?.planningInput?.sourceMode,
     session?.sourceInput.taobaoProduct?.productText,
     session?.sourceInput.taobaoProduct?.selectedReferenceAssetIds,
     session?.industryTemplate,
@@ -291,10 +292,7 @@ export function TaobaoIntake({
   const submit = async () => {
     if (assessment.quality === "empty") return;
     const result = await onAnalyze({
-      ...(activeProject && (sourceMode === "library" || session?.planningInput?.sourceMode === "manual")
-        ? { projectId: activeProject.id }
-        : {}),
-      sourceMode,
+      sourceMode: "manual",
       productText,
       facts,
       files,

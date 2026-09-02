@@ -1,4 +1,3 @@
-import type { CopilotCommand, CopilotContext } from "../copilot/types";
 import type { IndustryTemplateBrief, IndustryTemplateSnapshot } from "../prompt-templates/industry-template-packs";
 import type { PlanningInputAssessment } from "../planning/input-assessment";
 import type { PlanningProjectFacts, PlanningReferenceImage } from "../planning/types";
@@ -13,7 +12,7 @@ import type { AmazonMarketplaceId } from "../platforms/amazon-marketplaces";
 import type { LocalizationRules } from "../localization/product-localizer";
 import type { ImageGenerationRequest } from "../generation/types";
 
-export type PromptKind = "planner" | "copilot" | "localization" | "industry-template" | "generation";
+export type PromptKind = "planner" | "localization" | "industry-template" | "generation";
 export type PromptVersion = string;
 export type PromptSource =
   | "system"
@@ -52,7 +51,6 @@ export interface PromptTrace {
     profileId?: string | null;
     industryTemplateId?: string;
     industryTemplateVersion?: number;
-    slotAssetRefs?: Array<{ slotKey: string; assetId: string; version: number }>;
   };
   generation?: {
     promptId: string;
@@ -105,13 +103,6 @@ export interface PlannerPromptInput {
   strategySnippet?: string;
   /** Set when the configured planner cannot receive the selected product images. */
   referenceImagesSkipped?: string;
-  /** Optional, explicit slot-level assets. No asset is applied implicitly. */
-  slotPromptAssets?: readonly {
-    slotKey: string;
-    assetId: string;
-    version: number;
-    prompt: string;
-  }[];
 }
 
 /** JSON-safe task settings sent to the planner as authoritative run variables. */
@@ -129,11 +120,6 @@ export interface PlannerTaskSettings {
   selectedReferenceAssetIds: readonly string[];
 }
 
-export interface CopilotPromptInput {
-  context: CopilotContext;
-  command: CopilotCommand;
-}
-
 export interface LocalizationPromptInput {
   facts: unknown;
   targetLocale: string;
@@ -149,5 +135,5 @@ export interface IndustryTemplatePromptInput {
 }
 
 /** Deliberately contains only generation-domain data; transport/API options are not accepted. */
-export type GenerationPromptFields = Pick<ImageGenerationRequest, "productName" | "platformId" | "slotKey" | "prompt" | "negativePrompt" | "visibleCopy"> & Partial<Pick<ImageGenerationRequest, "dimensions" | "uploadDimensions" | "sizeTier">>;
+export type GenerationPromptFields = Pick<ImageGenerationRequest, "productName" | "platformId" | "slotKey" | "prompt" | "negativePrompt" | "visibleCopy"> & Partial<Pick<ImageGenerationRequest, "dimensions" | "uploadDimensions" | "sizeTier" | "productFacts" | "platformRules" | "aiInstructions" | "additionalRequirements" | "referenceImageNames" | "slotStrategy" | "slotEvidence">>;
 export type GenerationPromptInput = { request: GenerationPromptFields } | GenerationPromptFields;

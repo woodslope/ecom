@@ -1,7 +1,22 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
+import type {
+  AnalyzeTaobaoProductInput,
+  StartAmazonSessionInput,
+  StartTaobaoSessionInput,
+  WorkbenchAsset,
+  WorkbenchState,
+  WorkbenchStoreDependencies,
+} from "./workbench/types";
+export type {
+  AnalyzeTaobaoProductInput,
+  StartAmazonSessionInput,
+  StartTaobaoSessionInput,
+  WorkbenchAsset,
+  WorkbenchState,
+  WorkbenchStoreDependencies,
+} from "./workbench/types";
 
-import { compressImageFile } from "../domain/assets/compress";
 import {
   assertGenerationReferenceBudget,
   assertImageFiles,
@@ -9,22 +24,18 @@ import {
   prepareGenerationReferencePayload,
 } from "../domain/assets/reference-payload";
 import {
-  createIndexedDbAssetRepository,
   createMemoryAssetRepository,
   type AssetRepository,
 } from "../domain/assets/repository";
 import {
-  createIndexedDbRunRepository,
   createMemoryRunRepository,
   type RunRepository,
 } from "../domain/runs/repository";
 import {
-  createIndexedDbExecutionJobRepository,
   createMemoryExecutionJobRepository,
   type ExecutionJobRepository,
 } from "../domain/jobs/repository";
 import {
-  createBrowserExecutionJobCoordinator,
   createMemoryExecutionJobCoordinator,
   type ExecutionJobCoordinator,
 } from "../domain/jobs/execution-coordinator";
@@ -38,7 +49,6 @@ import {
   retryExecutionJob,
 } from "../domain/jobs/state";
 import type { ExecutionJob, ExecutionJobKind } from "../domain/jobs/types";
-import { createV3WorkspacePersistence } from "../application/workspace-persistence";
 import {
   activateVersion,
   appendRunEvent,
@@ -57,7 +67,6 @@ import {
 import type { AssetMetadata } from "../domain/assets/types";
 import {
   createStyleReferenceBoardBitmap,
-  type StyleReferenceDraft,
 } from "../domain/assets/style-reference";
 import type {
   ImageGenerator,
@@ -65,9 +74,9 @@ import type {
   SlotVersionState,
 } from "../domain/generation/types";
 import type { MaskDraft } from "../domain/generation/mask";
+import { currentSlotVersion } from "../domain/generation/current-version";
 import { prepareMaskTarget } from "../domain/generation/mask-preprocess";
 import { buildRunExportPackage, type ExportPackage } from "../domain/export";
-import type { CopilotCommand, CopilotEngine } from "../domain/copilot";
 import { normalizePlatformPlan } from "../domain/planning/normalizer";
 import {
   listingParseToFactsPatch,
@@ -76,7 +85,6 @@ import {
 import { resolvePlanningRulePack } from "../domain/planning/resolve-planning-pack";
 import {
   createPlanningInputSignature,
-  isPlanningInputCurrent,
 } from "../domain/planning/input-signature";
 import {
   assessPlanningInput,
@@ -89,9 +97,12 @@ import type {
   PlannedSlot,
   PlannerEngine,
   PlanningReferenceImage,
+  PlatformPlanningRequest,
   PlatformPlan,
   AmazonPlanningRequestOptions,
 } from "../domain/planning/types";
+import type { SlotGenerationRequest } from "../domain/generation/types";
+import { assertPlatformPlanningRequest, assertSlotGenerationRequest } from "../domain/ai/request-boundary";
 import { getPlatformRulePack } from "../domain/platforms/registry";
 import {
   applyTaobaoAnalysisToFacts,
@@ -99,14 +110,8 @@ import {
 } from "../domain/platforms/taobao-analysis";
 import { resolveRulePackForPlan } from "../domain/platforms/resolve-rule-pack";
 import { generationDimensionsForUpload } from "../domain/platforms/generation-size";
+import { resolveAmazonPlanningSession } from "../domain/platforms/amazon-catalog";
 import {
-  DEFAULT_A_PLUS_CONTENT_TYPE,
-  DEFAULT_LISTING_IMAGE_COUNT,
-  DEFAULT_SIZE_TIER,
-  resolveAmazonPlanningSession,
-} from "../domain/platforms/amazon-catalog";
-import {
-  DEFAULT_AMAZON_MARKETPLACE_ID,
   getAmazonMarketplace,
 } from "../domain/platforms/amazon-marketplaces";
 import {
@@ -123,17 +128,12 @@ import type {
   IndustryTemplateTransformResult,
 } from "../domain/prompt-templates/industry-template-transformer";
 import type { PlatformId } from "../domain/platforms/types";
-import {
-  productFactsToAmazonListingText,
-  productFactsToTaobaoText,
-} from "../domain/projects/product-source-text";
 import type {
   CreateProductProjectInput,
   ProductFacts,
   ProductProject,
   UpdateProductProjectInput,
 } from "../domain/projects/types";
-import { extractSharedFactsFromRun, mergeProductFacts } from "../domain/projects/deposition";
 import {
   DEFAULT_LOCALIZATION_RULES,
   cloneProductFacts,
@@ -142,20 +142,13 @@ import {
   type PlatformFactsDraft,
   type ProductLocalizer,
 } from "../domain/localization/product-localizer";
-import {
-  createLocalStorageProjectRepository,
-  createMemoryProjectRepository,
-  type ProjectRepository,
-} from "../domain/projects/repository";
+import type { ProjectRepository } from "../domain/projects/repository";
 import { createStableId } from "../domain/shared/id";
 import {
-  createLocalStorageSettingsRepository,
   createMemorySettingsRepository,
   defaultRuntimeSettings,
   normalizeRuntimeSettings,
   runtimeImageServiceSummary,
-  runtimeImageApiKey,
-  runtimeTextApiKey,
   runtimeTextServiceSummary,
   runtimeSupportsImageEditing,
   testApiConnection,
@@ -167,12 +160,30 @@ import {
   type SettingsRepository,
 } from "../domain/settings";
 import type { AiRuntimeFactory } from "../services/ai/runtime-factory";
-import { createAiRuntimeFactory } from "../services/ai/runtime-factory";
-import { browserStorage, hydrateBrowserStorage } from "../application/browser-storage";
 import { DEFAULT_IMAGE_REQUEST_TIMEOUT_MS } from "../services/openai-image-generator";
 import { DEFAULT_PLANNER_REQUEST_TIMEOUT_MS } from "../services/openai-planner";
 import { PROMPT_BUNDLE_VERSION, PROMPT_CONTRACT_VERSION } from "../domain/prompting";
 import { createPlannerTaskSettings } from "../domain/prompting/planner-settings";
+import { createDefaultWorkbenchDependencies as createDefaultDependencies } from "./workbench/dependencies";
+import {
+  planningErrorMessage,
+  planningOperationId,
+  STALE_PLAN_MESSAGE,
+} from "./workbench/planning-actions";
+import {
+  CANCELED_GENERATION_MESSAGE,
+  generationErrorMessage,
+  generationOperationId,
+} from "./workbench/generation-actions";
+import { locateRun as locateHistoryRun } from "./workbench/history-actions";
+import { createRuntimeAvailabilityChecks } from "./workbench/settings-actions";
+import {
+  amazonModeForPlan,
+  hasCurrentPlanningInputs,
+  optionsForPlan,
+  selectedKeysFor,
+  workflowForPlan,
+} from "./workbench/selectors";
 import {
   createMemoryWorkspaceRepository,
   type AmazonModeWorkspaceSnapshot,
@@ -185,350 +196,9 @@ import {
   type ProjectWorkspaceRepository,
 } from "../domain/workspace/project-workspace";
 import { resolveSessionEffectiveFacts, resolveSessionEffectiveProject } from "../domain/workspace/effective-facts";
-import {
-  createLocalStorageWorkspaceV3Repository,
-  createMemoryWorkspaceV3Repository,
-  type ProjectWorkspaceV3Repository,
-} from "../domain/workspace/workspace-v3";
-
-export interface WorkbenchAsset {
-  metadata: AssetMetadata;
-  objectUrl: string;
-}
-
-export interface StartAmazonSessionInput {
-  projectId?: string;
-  sourceMode?: PlanningInputSourceMode;
-  workflowId: Extract<PlatformWorkflowId, "amazon-listing" | "amazon-aplus">;
-  listingText: string;
-  facts?: ProductFacts;
-  files: File[];
-  selectedReferenceAssetIds: string[];
-  selectedStyleReferenceId?: string | null;
-  industryTemplate?: IndustryTemplateSnapshot;
-  options: AmazonPlanningRequestOptions;
-  autoPlan?: boolean;
-}
-
-export interface StartTaobaoSessionInput {
-  projectId?: string;
-  sourceMode?: PlanningInputSourceMode;
-  productText?: string;
-  facts?: ProductFacts;
-  selectedReferenceAssetIds: string[];
-  planningInput?: PlanningInputSnapshot;
-  /** Prompt profile id carried into the session options. */
-  stylePresetId?: string | null;
-  industryTemplate?: IndustryTemplateSnapshot;
-}
-
-export interface AnalyzeTaobaoProductInput {
-  projectId?: string;
-  sourceMode?: PlanningInputSourceMode;
-  productText: string;
-  facts?: ProductFacts;
-  files: File[];
-  selectedReferenceAssetIds: string[];
-  stylePresetId?: string | null;
-  industryTemplate?: IndustryTemplateSnapshot;
-}
-
-export interface DepositRunInput {
-  runId: string;
-  mode: "create" | "merge";
-  name?: string;
-  targetProjectId?: string;
-  facts: ProductFacts;
-  selectedAssetIds: string[];
-  overwriteFields?: Array<keyof ProductFacts>;
-}
-
-export interface WorkbenchStoreDependencies {
-  projectRepository: ProjectRepository;
-  assetRepository: AssetRepository;
-  workspaceRepository?: ProjectWorkspaceRepository;
-  runRepository?: RunRepository;
-  executionJobRepository?: ExecutionJobRepository;
-  executionJobCoordinator?: ExecutionJobCoordinator;
-  historyQueryService?: HistoryQueryService;
-  settingsRepository?: SettingsRepository;
-  /** Preferred runtime boundary; test engines may be injected explicitly. */
-  aiRuntimeFactory?: AiRuntimeFactory;
-  plannerEngine?: PlannerEngine;
-  createPlannerEngine?: (settings: RuntimeSettings) => PlannerEngine;
-  productLocalizer?: ProductLocalizer;
-  createProductLocalizer?: (settings: RuntimeSettings) => ProductLocalizer;
-  planningTimeoutMs?: number;
-  imageGenerator?: ImageGenerator;
-  createImageGenerator?: (settings: RuntimeSettings) => ImageGenerator;
-  copilotEngine?: CopilotEngine;
-  createCopilotEngine?: (settings: RuntimeSettings) => CopilotEngine;
-  industryTemplateTransformer?: IndustryTemplateTransformer;
-  createIndustryTemplateTransformer?: (settings: RuntimeSettings) => IndustryTemplateTransformer;
-  testConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
-  testTextConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
-  testImageConnection?: (settings: RuntimeSettings) => Promise<ConnectionTestResult>;
-  generationTimeoutMs?: number;
-  createVersionId?: () => string;
-  now?: () => string;
-  compressImageFile: (file: File) => Promise<File>;
-  createObjectURL: (blob: Blob) => string;
-  revokeObjectURL: (url: string) => void;
-  warning?: string | null;
-  /** Prepare browser persistence before the first repository read. */
-  prepareStorage?: () => Promise<string | null>;
-}
-
-export interface WorkbenchState {
-  initialized: boolean;
-  loading: boolean;
-  error: string | null;
-  warning: string | null;
-  projects: ProductProject[];
-  allProjects: ProductProject[];
-  activeProject: ProductProject | null;
-  assets: WorkbenchAsset[];
-  sessions: PlatformSession[];
-  runs: ProductionRun[];
-  jobs: ExecutionJob[];
-  plans: Partial<Record<PlatformId, PlatformPlan>>;
-  planInputSignatures: Partial<Record<PlatformId, string>>;
-  selectedSlotKeys: Partial<Record<PlatformId, string>>;
-  amazonPlannerMode: AmazonWorkspaceMode;
-  amazonWorkspaces: Partial<Record<AmazonWorkspaceMode, AmazonModeWorkspaceSnapshot>>;
-  slotVersions: Partial<Record<PlatformId, Record<string, SlotVersionState>>>;
-  historyQueryService: HistoryQueryService | null;
-  planningPlatformId: PlatformId | null;
-  planningError: string | null;
-  generatingSlot: { platformId: PlatformId; slotKey: string } | null;
-  generationCanceling: boolean;
-  generationRecoveryRequired: boolean;
-  generationError: string | null;
-  generationErrorTarget: { platformId: PlatformId; slotKey: string } | null;
-  resourceRestoreError: string | null;
-  exportingPlatform: PlatformId | null;
-  exportError: string | null;
-  exportErrorPlatform: PlatformId | null;
-  runtimeSettings: RuntimeSettings;
-  settingsLoading: boolean;
-  settingsError: string | null;
-  connectionTestStatus: "idle" | "testing" | "success" | "error";
-  connectionTestMessage: string | null;
-  textConnectionTestStatus: "idle" | "testing" | "success" | "error";
-  textConnectionTestMessage: string | null;
-  imageConnectionTestStatus: "idle" | "testing" | "success" | "error";
-  imageConnectionTestMessage: string | null;
-  copilotTarget: { platformId: PlatformId; slotKey: string } | null;
-  copilotFeedbackTarget: { platformId: PlatformId; slotKey: string } | null;
-  copilotError: string | null;
-  copilotMessage: string | null;
-  industryTemplateTransforming: boolean;
-  industryTemplateTransformError: string | null;
-  initialize(): Promise<void>;
-  startAmazonSession(input: StartAmazonSessionInput): Promise<PlatformSession | null>;
-  startTaobaoSession(input: StartTaobaoSessionInput): Promise<PlatformSession | null>;
-  analyzeTaobaoProduct(input: AnalyzeTaobaoProductInput): Promise<PlatformSession | null>;
-  reopenTaobaoAnalysis(sessionId?: string): Promise<boolean>;
-  /**
-   * Prefill platform intake from shared product facts + reference assets.
-   * Does not start planning. Returns needs-confirm when session already has draft/plan
-   * unless force is true.
-   */
-  seedPlatformIntakeFromProject(
-    projectId: string,
-    platform: PlatformId,
-    options?: { force?: boolean },
-  ): Promise<"seeded" | "needs-confirm" | "skipped" | "failed">;
-  syncAmazonListingFacts(listingText: string): Promise<boolean>;
-  syncAmazonSessionFacts(sessionId: string): Promise<boolean>;
-  confirmLocalizedFacts(sessionId: string, facts: ProductFacts): Promise<boolean>;
-  createProject(input: CreateProductProjectInput): Promise<ProductProject | null>;
-  updateActiveProject(input: UpdateProductProjectInput): Promise<ProductProject | null>;
-  removeProject(id: string): Promise<boolean>;
-  selectProject(id: string): Promise<void>;
-  uploadReferenceFiles(files: File[]): Promise<WorkbenchAsset[]>;
-  createStyleReference(
-    presetId: string,
-    draft?: Partial<StyleReferenceDraft>,
-  ): Promise<WorkbenchAsset | null>;
-  removeAsset(id: string): Promise<void>;
-  refreshAssets(): Promise<void>;
-  planPlatform(
-    platformId: PlatformId,
-    amazonOptions?: AmazonPlanningRequestOptions,
-  ): Promise<PlatformPlan | null>;
-  selectAmazonPlannerMode(mode: AmazonWorkspaceMode): Promise<boolean>;
-  cancelPlanning(): void;
-  selectSessionSlot(sessionId: string, slotKey: string): Promise<boolean>;
-  selectPlannedSlot(platformId: PlatformId, slotKey: string): Promise<boolean>;
-  updatePlannedSlot(
-    platformId: PlatformId,
-    slotKey: string,
-    patch: Pick<PlannedSlot, "visibleCopy" | "prompt"> &
-      Partial<Pick<PlannedSlot, "externalText">>,
-  ): Promise<boolean>;
-  generateSessionSlot(sessionId: string, slotKey: string): Promise<SlotVersion | null>;
-  generateSlot(platformId: PlatformId, slotKey: string): Promise<SlotVersion | null>;
-  generateMaskedVersion(
-    sessionId: string,
-    slotKey: string,
-    versionId: string,
-    mask: MaskDraft,
-    prompt: string,
-  ): Promise<SlotVersion | null>;
-  cancelGeneration(): void;
-  activateSlotVersion(
-    platformId: PlatformId,
-    slotKey: string,
-    versionId: string,
-  ): Promise<boolean>;
-  clearGenerationError(): void;
-  exportPlatform(platformId: PlatformId): Promise<ExportPackage | null>;
-  exportRun(runId: string): Promise<ExportPackage | null>;
-  startBatchGeneration(platformId: PlatformId): Promise<ExecutionJob | null>;
-  resumeExecutionJob(jobId: string): Promise<ExecutionJob | null>;
-  retryExecutionJob(jobId: string): Promise<ExecutionJob | null>;
-  cancelExecutionJob(jobId: string): Promise<boolean>;
-  refreshExecutionJobs(): Promise<void>;
-  resumeRun(runId: string): Promise<boolean>;
-  forkRun(runId: string): Promise<PlatformSession | null>;
-  removeRun(runId: string): Promise<boolean>;
-  depositRunToLibrary(input: DepositRunInput): Promise<ProductProject | null>;
-  prepareRunDepositFacts(runId: string): Promise<ProductFacts | null>;
-  reuseRunImageAsReference(runId: string, eventId: string): Promise<WorkbenchAsset | null>;
-  reuseGeneratedImageAsReference(assetId: string): Promise<WorkbenchAsset | null>;
-  clearExportError(): void;
-  saveRuntimeSettings(settings: RuntimeSettings): Promise<boolean>;
-  testRuntimeConnection(
-    settings?: RuntimeSettings,
-    service?: "text" | "image" | "all",
-  ): Promise<ConnectionTestResult>;
-  clearSettingsFeedback(): void;
-  runCopilotCommand(
-    platformId: PlatformId,
-    slotKey: string,
-    command: CopilotCommand,
-  ): Promise<boolean>;
-  cancelCopilot(): void;
-  clearCopilotFeedback(): void;
-  transformIndustryTemplate(
-    request: IndustryTemplateTransformRequest,
-  ): Promise<IndustryTemplateTransformResult | null>;
-  cancelIndustryTemplateTransform(): void;
-  retryActiveProjectResources(): Promise<void>;
-  clearResourceRestoreError(): void;
-  clearPlanningError(): void;
-  clearError(): void;
-  dispose(): void;
-}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "工作台操作失败";
-}
-
-function withoutTerminalPunctuation(message: string): string {
-  return message.trim().replace(/[。.!！?？]+$/u, "");
-}
-
-function planningErrorMessage(error: unknown): string {
-  if (error instanceof DOMException && error.name === "TimeoutError") {
-    return "AI 策划超时，请检查连接后重试。商品资料和已有结果未受影响。";
-  }
-  if (error instanceof DOMException && error.name === "AbortError") {
-    return "本次策划已取消，商品资料和已有结果未受影响。";
-  }
-  return `AI 策划失败：${errorMessage(error)}。商品资料和已有结果未受影响。`;
-}
-
-function generationErrorMessage(error: unknown): string {
-  if (error instanceof DOMException && error.name === "TimeoutError") {
-    return "图片生成超时（请求可能已提交并产生费用），请先检查中转站任务状态，确认没有生成中的任务后再重试。已有版本未受影响。";
-  }
-  if (error instanceof DOMException && error.name === "AbortError") {
-    return "本次图片生成已取消，已有版本未受影响。";
-  }
-  return `图片生成失败：${withoutTerminalPunctuation(errorMessage(error))}。已有版本未受影响。`;
-}
-
-const CANCELED_GENERATION_MESSAGE = "已取消本次图片生成，已有版本未受影响。";
-const STALE_PLAN_MESSAGE = "商品资料或参考素材已更新，请重新策划当前平台后再继续。";
-
-function hasCurrentPlanningInputs(state: WorkbenchState, platformId: PlatformId): boolean {
-  const planningSession = [...state.sessions]
-    .filter((session) => session.platformId === platformId)
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-  const planningFacts = state.activeProject
-    ? resolveSessionEffectiveFacts(state.activeProject, planningSession)
-    : undefined;
-  return Boolean(
-    planningFacts &&
-      isPlanningInputCurrent(
-        state.planInputSignatures[platformId],
-        planningFacts,
-        state.assets.map((asset) => asset.metadata),
-        planningSession?.selectedReferenceAssetIds,
-      ),
-  );
-}
-
-function selectedKeysFor(document: ProjectWorkspaceDocument): Partial<Record<PlatformId, string>> {
-  const selectedSlotKeys = { ...document.selectedSlotKeys };
-  for (const [platformId, plan] of Object.entries(document.plans) as [
-    PlatformId,
-    PlatformPlan | undefined,
-  ][]) {
-    if (!plan) continue;
-    const selected = selectedSlotKeys[platformId];
-    if (!selected || !plan.slots.some((slot) => slot.slotKey === selected)) {
-      selectedSlotKeys[platformId] = plan.slots[0]?.slotKey;
-    }
-  }
-  return selectedSlotKeys;
-}
-
-function amazonModeForPlan(plan?: PlatformPlan): AmazonWorkspaceMode | null {
-  const mode = plan?.amazonSession?.plannerMode;
-  return mode === "listing" || mode === "aplus" ? mode : null;
-}
-
-function workflowForPlan(platformId: PlatformId, plan: PlatformPlan): PlatformWorkflowId {
-  if (platformId === "taobao") return "taobao-product";
-  return plan.amazonSession?.plannerMode === "aplus" ? "amazon-aplus" : "amazon-listing";
-}
-
-function optionsForPlan(
-  platformId: PlatformId,
-  plan: PlatformPlan,
-  existingOptions?: PlatformSession["options"],
-): PlatformSession["options"] {
-  if (platformId === "taobao") {
-    return {
-      platformId: "taobao",
-      stylePresetId:
-        existingOptions?.platformId === "taobao"
-          ? existingOptions.stylePresetId ?? null
-          : null,
-    };
-  }
-  const resolved = resolveAmazonPlanningSession({
-    plannerMode: plan.amazonSession?.plannerMode === "aplus" ? "aplus" : "listing",
-    marketplaceId: plan.amazonSession?.marketplaceId,
-    listingImageCount: plan.amazonSession?.listingImageCount,
-    aPlusType: plan.amazonSession?.aPlusType,
-    aPlusModuleSpecs: plan.amazonSession?.aPlusModuleSpecs,
-    sizeTier: plan.amazonSession?.sizeTier,
-    stylePresetId: plan.amazonSession?.stylePresetId,
-  });
-  return {
-    platformId: "amazon",
-    marketplaceId: resolved.marketplaceId,
-    plannerMode: resolved.plannerMode === "aplus" ? "aplus" : "listing",
-    listingImageCount: resolved.listingImageCount,
-    aPlusType: resolved.aPlusType,
-    aPlusModuleSpecs: resolved.aPlusModuleSpecs.map((spec) => ({ ...spec })),
-    sizeTier: resolved.sizeTier,
-    stylePresetId: resolved.stylePresetId,
-  };
 }
 
 function withAmazonSnapshot(
@@ -688,7 +358,6 @@ export function createWorkbenchStore(
   // Keep the operation guard slightly longer than the API planner's own request timeout.
   const planningTimeoutMs = dependencies.planningTimeoutMs ?? DEFAULT_PLANNER_REQUEST_TIMEOUT_MS + 15_000;
   const imageGenerator = dependencies.imageGenerator;
-  const copilotEngine = dependencies.copilotEngine;
   const industryTemplateTransformer = dependencies.industryTemplateTransformer;
   const aiRuntimeFactory = dependencies.aiRuntimeFactory;
   const resolveAiRuntime = (settings: RuntimeSettings) => {
@@ -696,24 +365,11 @@ export function createWorkbenchStore(
       ? aiRuntimeFactory.resolve(settings)
       : null;
   };
-  const requireTextRuntime = (settings: RuntimeSettings): string | null => {
-    const hasInjectedTextEngine = Boolean(aiRuntimeFactory === undefined && (dependencies.createPlannerEngine || plannerEngine));
-    if (!hasInjectedTextEngine && !runtimeTextApiKey(settings)) return "未配置文本 API Key，请先在设置中填写文本 API。";
-    if (!hasInjectedTextEngine && !settings.planningModel.trim()) return "未配置文本模型，请先在设置中填写文本模型。";
-    if (!aiRuntimeFactory && !dependencies.createPlannerEngine && !plannerEngine) {
-      return "文本 API 运行时不可用，请检查运行设置。";
-    }
-    return null;
-  };
-  const requireImageRuntime = (settings: RuntimeSettings): string | null => {
-    const hasInjectedImageEngine = Boolean(aiRuntimeFactory === undefined && (dependencies.createImageGenerator || imageGenerator));
-    if (!hasInjectedImageEngine && !runtimeImageApiKey(settings)) return "未配置图片 API Key，请先在设置中填写图片 API。";
-    if (!hasInjectedImageEngine && settings.connectionMode !== "single" && !settings.imageModel.trim()) return "未配置图片模型，请先在设置中填写图片模型。";
-    if (!aiRuntimeFactory && !dependencies.createImageGenerator && !imageGenerator) {
-      return "图片 API 运行时不可用，请检查运行设置。";
-    }
-    return null;
-  };
+  const { requireTextRuntime, requireImageRuntime } = createRuntimeAvailabilityChecks({
+    hasRuntimeFactory: Boolean(aiRuntimeFactory),
+    hasInjectedTextEngine: Boolean(aiRuntimeFactory === undefined && (dependencies.createPlannerEngine || plannerEngine)),
+    hasInjectedImageEngine: Boolean(aiRuntimeFactory === undefined && (dependencies.createImageGenerator || imageGenerator)),
+  });
   // Keep the lifecycle guard slightly longer than the image API request timeout so
   // the API can finish before persistence and rollback are given a chance to settle.
   const generationTimeoutMs = dependencies.generationTimeoutMs ?? DEFAULT_IMAGE_REQUEST_TIMEOUT_MS + 15_000;
@@ -728,8 +384,6 @@ export function createWorkbenchStore(
   let executionJobGenerationActive = false;
   let directGenerationLockHeld = false;
   let exportRequestId = 0;
-  let copilotRequestId = 0;
-  let activeCopilotController: AbortController | null = null;
   let industryTemplateTransformRequestId = 0;
   let activeIndustryTemplateTransformController: AbortController | null = null;
   const canceledExecutionJobIds = new Set<string>();
@@ -772,24 +426,6 @@ export function createWorkbenchStore(
     return result;
   };
 
-  const locateRun = async (runId: string, readState: () => WorkbenchState): Promise<{
-    project: ProductProject;
-    workspace: ProjectWorkspaceDocument;
-    run: ProductionRun;
-  } | null> => {
-    const active = readState().activeProject;
-    const storedProjects = await dependencies.projectRepository.list();
-    const projects = active
-      ? [active, ...storedProjects.filter((project) => project.id !== active.id)]
-      : storedProjects;
-    for (const project of projects) {
-      const workspace = await workspaceRepository.load(project.id);
-      const run = workspace.runs.find((candidate) => candidate.id === runId);
-      if (run) return { project, workspace, run };
-    }
-    return null;
-  };
-
   const invalidatePlanning = () => {
     planningRequestId += 1;
     activePlanningController?.abort(new DOMException("策划上下文已变更", "AbortError"));
@@ -806,12 +442,6 @@ export function createWorkbenchStore(
 
   const invalidateExport = () => {
     exportRequestId += 1;
-  };
-
-  const invalidateCopilot = () => {
-    copilotRequestId += 1;
-    activeCopilotController?.abort(new DOMException("Copilot 上下文已变更", "AbortError"));
-    activeCopilotController = null;
   };
 
   const invalidateIndustryTemplateTransform = () => {
@@ -1012,12 +642,8 @@ export function createWorkbenchStore(
     textConnectionTestMessage: null,
     imageConnectionTestStatus: "idle",
     imageConnectionTestMessage: null,
-    copilotTarget: null,
-    copilotFeedbackTarget: null,
-    copilotError: null,
     industryTemplateTransforming: false,
     industryTemplateTransformError: null,
-    copilotMessage: null,
 
     async initialize() {
       const contextRequestId = ++projectContextRequestId;
@@ -1027,11 +653,16 @@ export function createWorkbenchStore(
       set({ loading: true, error: null, resourceRestoreError: null });
       try {
         const storageWarning = await dependencies.prepareStorage?.();
-        const [storedProjects, activeProject] = await Promise.all([
+        const [rawProjects, rawActiveProject] = await Promise.all([
           dependencies.projectRepository.list(),
           dependencies.projectRepository.restoreActive(),
         ]);
-        const projects = storedProjects.filter((project) => project.scope === "library");
+        // Legacy records remain readable for backup/history compatibility.
+        const storedProjects = rawProjects;
+        const activeProject = rawActiveProject;
+        // Projects are now platform-owned task records. Keep the two arrays as
+        // compatibility facades for history consumers.
+        const projects = storedProjects;
         let runtimeSettings = { ...defaultRuntimeSettings };
         let settingsRestoreError: string | null = null;
         let jobs: ExecutionJob[] = [];
@@ -1067,10 +698,6 @@ export function createWorkbenchStore(
           textConnectionTestMessage: null,
           imageConnectionTestStatus: "idle",
           imageConnectionTestMessage: null,
-          copilotTarget: null,
-          copilotFeedbackTarget: null,
-          copilotError: null,
-          copilotMessage: null,
           assets: previousProjectId === activeProject?.id ? get().assets : [],
           sessions: previousProjectId === activeProject?.id ? get().sessions : [],
           runs: previousProjectId === activeProject?.id ? get().runs : [],
@@ -1156,13 +783,13 @@ export function createWorkbenchStore(
     },
 
     async startAmazonSession(input) {
-      const sourceMode = input.sourceMode ?? (input.projectId || get().activeProject ? "library" : "manual");
+      const sourceMode: PlanningInputSourceMode = "manual";
       try {
-        let project = input.projectId
-          ? await dependencies.projectRepository.get(input.projectId)
-          : sourceMode === "library"
-            ? get().activeProject
-            : null;
+        const currentProject = get().activeProject;
+        const hasAmazonTask = !input.createNewTask && currentProject?.platformId === "amazon" &&
+          get().sessions.some((session) => session.platformId === "amazon");
+        let project = hasAmazonTask ? currentProject : null;
+        const existingTaskId = project?.id;
         assertImageFiles(input.files);
         let selectedReferenceIds = [...new Set(input.selectedReferenceAssetIds)];
         const selectedSources = (
@@ -1171,7 +798,7 @@ export function createWorkbenchStore(
           Boolean(
             asset &&
             asset.metadata.kind === "reference" &&
-            (!project || asset.metadata.projectId === project.id),
+            Boolean(project && asset.metadata.projectId === project.id),
           ),
         );
         let selectedStyleReferenceIdInput = input.selectedStyleReferenceId;
@@ -1179,13 +806,13 @@ export function createWorkbenchStore(
           ? await dependencies.assetRepository.get(selectedStyleReferenceIdInput)
           : null;
         const validStyleSource = styleSource?.metadata.kind === "style-reference" &&
-          (!project || styleSource.metadata.projectId === project.id)
+          Boolean(project && styleSource.metadata.projectId === project.id)
           ? styleSource
           : null;
         const selectedStylePreset = selectedStyleReferenceIdInput?.startsWith("preset:")
           ? getAmazonStylePreset(selectedStyleReferenceIdInput.slice("preset:".length))
           : null;
-        const existingPresetStyleMetadata = selectedStylePreset && project && project.scope !== "library"
+        const existingPresetStyleMetadata = selectedStylePreset && project
           ? (await dependencies.assetRepository.list(project.id)).find(
               (asset) =>
                 asset.kind === "style-reference" &&
@@ -1213,61 +840,18 @@ export function createWorkbenchStore(
         if (project && get().activeProject?.id !== project.id) {
           await get().selectProject(project.id);
         }
-        let librarySourceProject: ProductProject | null = null;
-        if (sourceMode === "library" && project?.scope === "library") {
-          librarySourceProject = project;
-          const draft = await get().createProject({
-            name: `${project.name} · Amazon任务`,
-            scope: "task-draft",
-            facts: input.facts ?? project.facts,
-          });
-          if (!draft) throw new Error("任务草稿创建失败");
-          project = draft;
-          selectedReferenceIds = [];
-          for (const source of selectedSources) {
-            if (!source || source.metadata.kind !== "reference") continue;
-            const copied = await dependencies.assetRepository.put({
-              projectId: draft.id,
-              blob: source.blob,
-              metadata: {
-                name: source.metadata.name,
-                kind: "reference",
-                role: source.metadata.role,
-                tags: [...source.metadata.tags, `source-project:${librarySourceProject.id}`, `source-asset:${source.metadata.id}`],
-                width: source.metadata.width,
-                height: source.metadata.height,
-              },
-            });
-            selectedReferenceIds.push(copied.metadata.id);
-          }
-          if (validStyleSource) {
-            const copied = await dependencies.assetRepository.put({
-              projectId: draft.id,
-              blob: validStyleSource.blob,
-              metadata: {
-                name: validStyleSource.metadata.name,
-                kind: "style-reference",
-                role: validStyleSource.metadata.role,
-                tags: [...validStyleSource.metadata.tags, `source-project:${librarySourceProject.id}`, `source-asset:${validStyleSource.metadata.id}`],
-                width: validStyleSource.metadata.width,
-                height: validStyleSource.metadata.height,
-                styleReference: validStyleSource.metadata.styleReference,
-              },
-            });
-            selectedStyleReferenceIdInput = copied.metadata.id;
-          }
-          await get().refreshAssets();
-        }
         const selectedMetadata = get().assets
           .filter(
             (asset) =>
               asset.metadata.kind === "reference" &&
+              project !== null &&
+              asset.metadata.projectId === project.id &&
               selectedReferenceIds.includes(asset.metadata.id),
           )
           .map((asset) => asset.metadata);
         const initialFacts = input.facts
-          ? resolveAmazonPlanningFacts(input.facts, input.listingText, "library")
-          : resolveAmazonPlanningFacts(project?.facts, input.listingText, sourceMode);
+          ? resolveAmazonPlanningFacts(input.facts, input.listingText, "manual")
+          : resolveAmazonPlanningFacts(project?.facts, input.listingText, "manual");
         if (
           assessPlanningInput({
             facts: initialFacts,
@@ -1279,14 +863,26 @@ export function createWorkbenchStore(
         }
         if (!project) {
           const facts = input.facts
-            ? resolveAmazonPlanningFacts(input.facts, input.listingText, "library")
+            ? resolveAmazonPlanningFacts(input.facts, input.listingText, "manual")
             : emptyFactsFromAmazonListing(input.listingText);
           project = await get().createProject({
             name: facts.productName || "Amazon 草稿商品",
-            scope: "task-draft",
+            platformId: "amazon",
             facts,
           });
           if (!project) throw new Error("草稿商品创建失败");
+        }
+        if (input.facts && existingTaskId === project.id) {
+          const updated = await dependencies.projectRepository.update(project.id, {
+            facts: cloneProductFacts(input.facts),
+          });
+          if (!updated) throw new Error("平台任务资料保存失败");
+          project = updated;
+          set((state) => ({
+            activeProject: state.activeProject?.id === updated.id ? updated : state.activeProject,
+            projects: state.projects.map((candidate) => candidate.id === updated.id ? updated : candidate),
+            allProjects: state.allProjects.map((candidate) => candidate.id === updated.id ? updated : candidate),
+          }));
         }
 
         const assetIdsBeforeUpload = new Set(get().assets.map((asset) => asset.metadata.id));
@@ -1366,28 +962,18 @@ export function createWorkbenchStore(
           stylePresetId: resolved.stylePresetId,
         };
         const planningFacts = input.facts
-          ? resolveAmazonPlanningFacts(input.facts, input.listingText, "library")
-          : resolveAmazonPlanningFacts(project.facts, input.listingText, sourceMode);
+          ? resolveAmazonPlanningFacts(input.facts, input.listingText, "manual")
+          : resolveAmazonPlanningFacts(project.facts, input.listingText, "manual");
         const assessment = assessPlanningInput({
           facts: planningFacts,
           productImageCount: selectedReferenceAssetIds.length,
         });
-        const sourcePlanningInput = get().sessions.find(
-          (session) => session.projectId === project!.id && session.workflowId === input.workflowId,
-        )?.planningInput;
         const planningInput: PlanningInputSnapshot = {
-          sourceMode,
+          sourceMode: "manual",
           quality: assessment.quality,
           missingFacts: assessment.missingFacts,
           productText: input.listingText,
           selectedReferenceAssetIds,
-          ...(sourceMode === "library"
-            ? {
-                sourceProjectId: sourcePlanningInput?.sourceProjectId ?? librarySourceProject?.id ?? project.id,
-                sourceProjectUpdatedAt:
-                  sourcePlanningInput?.sourceProjectUpdatedAt ?? librarySourceProject?.updatedAt ?? project.updatedAt,
-              }
-            : {}),
         };
         const timestamp = now();
         let draftSession!: PlatformSession;
@@ -1455,12 +1041,13 @@ export function createWorkbenchStore(
     },
 
     async startTaobaoSession(input) {
-      const sourceMode = input.sourceMode ?? (input.projectId || get().activeProject ? "library" : "manual");
-      let activeProject = input.projectId
-        ? await dependencies.projectRepository.get(input.projectId)
-        : sourceMode === "library"
-          ? get().activeProject
-          : null;
+      const sourceMode: PlanningInputSourceMode = "manual";
+      const currentProject = get().activeProject;
+      let activeProject = !input.createNewTask && currentProject?.platformId === "taobao" &&
+        get().sessions.some((session) => session.platformId === "taobao")
+        ? currentProject
+        : null;
+      const existingTaskId = activeProject?.id;
       try {
         let selectedReferenceIds = [...new Set(input.selectedReferenceAssetIds)];
         const selectedSources = (
@@ -1469,41 +1056,12 @@ export function createWorkbenchStore(
           Boolean(
             asset &&
             asset.metadata.kind === "reference" &&
-            (!activeProject || asset.metadata.projectId === activeProject.id),
+            Boolean(activeProject && asset.metadata.projectId === activeProject.id),
           ),
         );
         assertGenerationReferenceBudget(
           selectedSources.map((asset) => ({ name: asset.metadata.name, size: asset.blob.size })),
         );
-        let librarySourceProject: ProductProject | null = null;
-        if (sourceMode === "library" && activeProject?.scope === "library") {
-          librarySourceProject = activeProject;
-          const draft = await get().createProject({
-            name: `${activeProject.name} · 淘宝任务`,
-            scope: "task-draft",
-            facts: input.facts ?? activeProject.facts,
-          });
-          if (!draft) throw new Error("任务草稿创建失败");
-          activeProject = draft;
-          selectedReferenceIds = [];
-          for (const source of selectedSources) {
-            if (!source || source.metadata.kind !== "reference") continue;
-            const copied = await dependencies.assetRepository.put({
-              projectId: draft.id,
-              blob: source.blob,
-              metadata: {
-                name: source.metadata.name,
-                kind: "reference",
-                role: source.metadata.role,
-                tags: [...source.metadata.tags, `source-project:${librarySourceProject.id}`, `source-asset:${source.metadata.id}`],
-                width: source.metadata.width,
-                height: source.metadata.height,
-              },
-            });
-            selectedReferenceIds.push(copied.metadata.id);
-          }
-          await get().refreshAssets();
-        }
         if (!activeProject) {
           const baseFacts = input.facts ? cloneProductFacts(input.facts) : createEmptyProductFacts();
           const seededAnalysis = analyzeTaobaoProduct({
@@ -1514,17 +1072,30 @@ export function createWorkbenchStore(
           const facts = applyTaobaoAnalysisToFacts(baseFacts, seededAnalysis);
           activeProject = await get().createProject({
             name: facts.productName || "淘宝草稿商品",
-            scope: "task-draft",
+            platformId: "taobao",
             facts,
           });
           if (!activeProject) throw new Error("草稿商品创建失败");
         } else if (get().activeProject?.id !== activeProject.id) {
           await get().selectProject(activeProject.id);
         }
+        if (input.facts && existingTaskId === activeProject.id) {
+          const updated = await dependencies.projectRepository.update(activeProject.id, {
+            facts: cloneProductFacts(input.facts),
+          });
+          if (!updated) throw new Error("平台任务资料保存失败");
+          activeProject = updated;
+          set((state) => ({
+            activeProject: state.activeProject?.id === updated.id ? updated : state.activeProject,
+            projects: state.projects.map((candidate) => candidate.id === updated.id ? updated : candidate),
+            allProjects: state.allProjects.map((candidate) => candidate.id === updated.id ? updated : candidate),
+          }));
+        }
 
         const referenceIds = [...new Set(selectedReferenceIds)].filter((id) =>
           get().assets.some(
-            (asset) => asset.metadata.id === id && asset.metadata.kind === "reference",
+            (asset) => asset.metadata.id === id && asset.metadata.kind === "reference" &&
+              asset.metadata.projectId === activeProject!.id,
           ),
         );
         const timestamp = now();
@@ -1536,7 +1107,7 @@ export function createWorkbenchStore(
           const productText = input.productText ?? existing?.sourceInput.taobaoProduct?.productText ?? "";
           const baseFacts = input.facts
             ? cloneProductFacts(input.facts)
-            : sourceMode === "manual" ? createEmptyProductFacts() : activeProject!.facts;
+            : activeProject?.facts ?? createEmptyProductFacts();
           const draftAnalysis = analyzeTaobaoProduct({
             facts: baseFacts,
             productText,
@@ -1547,28 +1118,14 @@ export function createWorkbenchStore(
             facts: effectiveFacts,
             productImageCount: referenceIds.length,
           });
-          const sourcePlanningInput = existing?.planningInput;
           const planningInput = input.planningInput ?? {
-            sourceMode,
+            sourceMode: "manual",
             quality: assessment.quality,
             missingFacts: assessment.missingFacts,
             productText,
             selectedReferenceAssetIds: referenceIds,
-            ...(sourceMode === "library"
-                ? {
-                  sourceProjectId: sourcePlanningInput?.sourceProjectId ?? librarySourceProject?.id ?? activeProject!.id,
-                  sourceProjectUpdatedAt:
-                    sourcePlanningInput?.sourceProjectUpdatedAt ?? librarySourceProject?.updatedAt ?? activeProject!.updatedAt,
-                }
-              : {}),
           };
           const localizedFactsDraft: PlatformFactsDraft = {
-            ...(planningInput.sourceProjectId
-              ? { sourceProjectId: planningInput.sourceProjectId }
-              : {}),
-            ...(planningInput.sourceProjectUpdatedAt
-              ? { sourceProjectUpdatedAt: planningInput.sourceProjectUpdatedAt }
-              : {}),
             sourceFactsSnapshot: cloneProductFacts(effectiveFacts),
             targetLocale: "zh-CN",
             localizedFacts: cloneProductFacts(effectiveFacts),
@@ -1639,13 +1196,13 @@ export function createWorkbenchStore(
         });
         return null;
       }
-      const sourceMode = input.sourceMode ?? (input.projectId || get().activeProject ? "library" : "manual");
+      const sourceMode: PlanningInputSourceMode = "manual";
       try {
-        const sourceProject = input.projectId
-          ? await dependencies.projectRepository.get(input.projectId)
-          : sourceMode === "library"
-            ? get().activeProject
-            : null;
+        const currentProject = get().activeProject;
+        const taskProject = !input.createNewTask && currentProject?.platformId === "taobao" &&
+          get().sessions.some((session) => session.platformId === "taobao")
+          ? currentProject
+          : null;
         assertImageFiles(input.files);
         const selectedSources = (
           await Promise.all(
@@ -1655,7 +1212,7 @@ export function createWorkbenchStore(
           Boolean(
             asset &&
             asset.metadata.kind === "reference" &&
-            (!sourceProject || asset.metadata.projectId === sourceProject.id),
+            Boolean(taskProject && asset.metadata.projectId === taskProject.id),
           ),
         );
         assertGenerationReferenceBudget([
@@ -1664,9 +1221,7 @@ export function createWorkbenchStore(
         ]);
         const previewBaseFacts = input.facts
           ? cloneProductFacts(input.facts)
-          : sourceMode === "library" && sourceProject
-            ? sourceProject.facts
-            : createEmptyProductFacts();
+          : taskProject?.facts ?? createEmptyProductFacts();
         const previewAnalysis = analyzeTaobaoProduct({
           facts: previewBaseFacts,
           productText: input.productText,
@@ -1674,7 +1229,7 @@ export function createWorkbenchStore(
         });
         const previewAssessment = assessPlanningInput({
           facts: applyTaobaoAnalysisToFacts(previewBaseFacts, previewAnalysis),
-          productImageCount: input.selectedReferenceAssetIds.length + input.files.length,
+          productImageCount: selectedSources.length + input.files.length,
         });
         if (previewAssessment.quality === "empty") {
           set({ planningError: "请填写商品资料或添加至少一张商品参考图。" });
@@ -1682,8 +1237,8 @@ export function createWorkbenchStore(
         }
         set({ planningError: null });
         const draft = await get().startTaobaoSession({
-          ...(input.projectId ? { projectId: input.projectId } : {}),
-          sourceMode,
+          sourceMode: "manual",
+          createNewTask: input.createNewTask,
           productText: input.productText,
           ...(input.facts ? { facts: cloneProductFacts(input.facts) } : {}),
           selectedReferenceAssetIds: input.selectedReferenceAssetIds,
@@ -1722,7 +1277,7 @@ export function createWorkbenchStore(
         });
         const analysisBaseFacts = input.facts
           ? cloneProductFacts(input.facts)
-          : sourceMode === "manual" ? createEmptyProductFacts() : project.facts;
+          : project.facts;
         const analysis = analyzeTaobaoProduct({
           facts: analysisBaseFacts,
           productText: input.productText,
@@ -1733,20 +1288,12 @@ export function createWorkbenchStore(
           facts: planningFacts,
           productImageCount: selectedReferenceAssetIds.length,
         });
-        const sourcePlanningInput = draft.planningInput;
         const planningInput: PlanningInputSnapshot = {
-          sourceMode,
+          sourceMode: "manual",
           quality: assessment.quality,
           missingFacts: assessment.missingFacts,
           productText: input.productText,
           selectedReferenceAssetIds,
-          ...(sourceMode === "library"
-            ? {
-                sourceProjectId: sourcePlanningInput?.sourceProjectId ?? project.id,
-                sourceProjectUpdatedAt:
-                  sourcePlanningInput?.sourceProjectUpdatedAt ?? project.updatedAt,
-              }
-            : {}),
         };
         const sourceInput = {
           ...draft.sourceInput,
@@ -1838,252 +1385,6 @@ export function createWorkbenchStore(
       }
     },
 
-    async seedPlatformIntakeFromProject(projectId, platform, _options) {
-      if (platform !== "amazon" && platform !== "taobao") {
-        set({ planningError: "仅支持 Amazon 与淘宝任务载入。" });
-        return "failed";
-      }
-      if (get().planningPlatformId || get().generatingSlot || get().exportingPlatform) {
-        set({ planningError: "当前有进行中的任务，请完成后再载入商品资料。" });
-        return "failed";
-      }
-
-      try {
-        const sourceProject = await dependencies.projectRepository.get(projectId);
-        if (!sourceProject || sourceProject.scope !== "library") {
-          set({ planningError: "找不到要载入的已保存商品。" });
-          return "failed";
-        }
-
-        const amazonWorkflowId =
-          get().amazonPlannerMode === "aplus" ? "amazon-aplus" : "amazon-listing";
-        const workflowId =
-          platform === "taobao" ? "taobao-product" : amazonWorkflowId;
-        const taskProject = await get().createProject({
-          name: `${sourceProject.name} · ${platform === "amazon" ? "Amazon" : "淘宝"}任务`,
-          scope: "task-draft",
-          facts: sourceProject.facts,
-        });
-        if (!taskProject) throw new Error("任务草稿创建失败");
-
-        const sourceAssets = await dependencies.assetRepository.list(sourceProject.id);
-        const copiedReferenceIds: string[] = [];
-        for (const metadata of sourceAssets) {
-          if (metadata.kind !== "reference") continue;
-          const source = await dependencies.assetRepository.get(metadata.id);
-          if (!source) continue;
-          const copied = await dependencies.assetRepository.put({
-            projectId: taskProject.id,
-            blob: source.blob,
-            metadata: {
-              name: metadata.name,
-              kind: "reference",
-              role: metadata.role,
-              tags: [...metadata.tags, `source-project:${sourceProject.id}`, `source-asset:${metadata.id}`],
-              width: metadata.width,
-              height: metadata.height,
-            },
-          });
-          copiedReferenceIds.push(copied.metadata.id);
-        }
-        await get().refreshAssets();
-        const referenceAssetIds = copiedReferenceIds;
-        const productText = platform === "amazon"
-          ? productFactsToAmazonListingText(sourceProject.facts)
-          : productFactsToTaobaoText(sourceProject.facts);
-        const assessment = assessPlanningInput({
-          facts: sourceProject.facts,
-          productImageCount: referenceAssetIds.length,
-        });
-        const planningInput: PlanningInputSnapshot = {
-          sourceMode: "library",
-          quality: assessment.quality,
-          missingFacts: assessment.missingFacts,
-          productText,
-          selectedReferenceAssetIds: referenceAssetIds,
-          sourceProjectId: sourceProject.id,
-          sourceProjectUpdatedAt: sourceProject.updatedAt,
-        };
-
-        const timestamp = now();
-        const nextSession = await enqueueWorkspaceMutation(async () => {
-          const workspace = await workspaceRepository.load(taskProject.id);
-          const workspaceExisting = [...workspace.sessions]
-            .filter((candidate) => candidate.workflowId === workflowId)
-            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-
-          if (platform === "amazon") {
-            const plannerMode = workflowId === "amazon-aplus" ? "aplus" : "listing";
-            const existingOptions =
-              workspaceExisting?.options.platformId === "amazon"
-                ? workspaceExisting.options
-                : null;
-            const resolved = resolveAmazonPlanningSession({
-              marketplaceId: existingOptions?.marketplaceId ?? DEFAULT_AMAZON_MARKETPLACE_ID,
-              plannerMode,
-              listingImageCount:
-                existingOptions?.listingImageCount ?? DEFAULT_LISTING_IMAGE_COUNT,
-              aPlusType: existingOptions?.aPlusType ?? DEFAULT_A_PLUS_CONTENT_TYPE,
-              aPlusModuleSpecs: existingOptions?.aPlusModuleSpecs,
-              sizeTier: existingOptions?.sizeTier ?? DEFAULT_SIZE_TIER,
-              stylePresetId:
-                existingOptions?.stylePresetId ?? DEFAULT_PROMPT_PROFILE_ID,
-            });
-            const options: AmazonSessionOptions = {
-              platformId: "amazon",
-              marketplaceId: resolved.marketplaceId,
-              plannerMode,
-              listingImageCount: resolved.listingImageCount,
-              aPlusType: resolved.aPlusType,
-              aPlusModuleSpecs: resolved.aPlusModuleSpecs.map((spec) => ({ ...spec })),
-              sizeTier: resolved.sizeTier,
-              stylePresetId: resolved.stylePresetId,
-            };
-            const draft = startSession({
-              id: workspaceExisting?.id ?? createStableId("session"),
-              projectId: taskProject.id,
-              platformId: "amazon",
-              workflowId,
-              sourceInput: {
-                listingText: productText,
-              },
-              options,
-              selectedReferenceAssetIds: referenceAssetIds,
-              planningInput,
-              ...(workspaceExisting?.selectedStyleReferenceId
-                ? { selectedStyleReferenceId: workspaceExisting.selectedStyleReferenceId }
-                : {}),
-              ...(workspaceExisting?.styleReferenceNotice
-                ? { styleReferenceNotice: workspaceExisting.styleReferenceNotice }
-                : {}),
-              // Clear plan so intake is the source of truth after a forced reseed.
-              slotVersions: {},
-              createdAt: workspaceExisting?.createdAt,
-              now: timestamp,
-            });
-            const sessions = [
-              ...workspace.sessions.filter((candidate) => candidate.id !== draft.id),
-              draft,
-            ];
-            // Drop stale plan pointers when reseeding over a planned session.
-            const nextWorkspace: ProjectWorkspaceDocument = {
-              ...workspace,
-              sessions,
-              plans: { ...workspace.plans, amazon: undefined },
-              planInputSignatures: {
-                ...workspace.planInputSignatures,
-                amazon: undefined,
-              },
-              selectedSlotKeys: {
-                ...workspace.selectedSlotKeys,
-                amazon: undefined,
-              },
-              slotVersions: { ...workspace.slotVersions, amazon: {} },
-              updatedAt: timestamp,
-            };
-            // Avoid leaving undefined plan keys that normalize may not expect — delete.
-            if (nextWorkspace.plans.amazon === undefined) {
-              delete nextWorkspace.plans.amazon;
-            }
-            if (nextWorkspace.planInputSignatures.amazon === undefined) {
-              delete nextWorkspace.planInputSignatures.amazon;
-            }
-            if (nextWorkspace.selectedSlotKeys.amazon === undefined) {
-              delete nextWorkspace.selectedSlotKeys.amazon;
-            }
-            await workspaceRepository.save(nextWorkspace);
-            return { session: draft, platform: "amazon" as const };
-          }
-
-          const draft = startSession({
-            id: workspaceExisting?.id ?? createStableId("session"),
-            projectId: taskProject.id,
-            platformId: "taobao",
-            workflowId: "taobao-product",
-            sourceInput: {
-              listingText: workspaceExisting?.sourceInput.listingText ?? "",
-              taobaoProduct: {
-                productText,
-                selectedReferenceAssetIds: referenceAssetIds,
-              },
-            },
-            options: {
-              platformId: "taobao",
-              stylePresetId: workspaceExisting?.options?.stylePresetId ?? null,
-            },
-            selectedReferenceAssetIds: referenceAssetIds,
-            planningInput,
-            ...(workspaceExisting?.selectedStyleReferenceId
-              ? { selectedStyleReferenceId: workspaceExisting.selectedStyleReferenceId }
-              : {}),
-            ...(workspaceExisting?.styleReferenceNotice
-              ? { styleReferenceNotice: workspaceExisting.styleReferenceNotice }
-              : {}),
-            slotVersions: {},
-            createdAt: workspaceExisting?.createdAt,
-            now: timestamp,
-          });
-          const sessions = [
-            ...workspace.sessions.filter((candidate) => candidate.id !== draft.id),
-            draft,
-          ];
-          const nextWorkspace: ProjectWorkspaceDocument = {
-            ...workspace,
-            sessions,
-            plans: { ...workspace.plans },
-            planInputSignatures: { ...workspace.planInputSignatures },
-            selectedSlotKeys: { ...workspace.selectedSlotKeys },
-            slotVersions: { ...workspace.slotVersions, taobao: {} },
-            updatedAt: timestamp,
-          };
-          delete nextWorkspace.plans.taobao;
-          delete nextWorkspace.planInputSignatures.taobao;
-          delete nextWorkspace.selectedSlotKeys.taobao;
-          await workspaceRepository.save(nextWorkspace);
-          return { session: draft, platform: "taobao" as const };
-        });
-
-        if (get().activeProject?.id !== taskProject.id) return "skipped";
-
-        set((state) => {
-          const sessions = [
-            ...state.sessions.filter((candidate) => candidate.id !== nextSession.session.id),
-            nextSession.session,
-          ];
-          if (nextSession.platform === "amazon") {
-            const { amazon: _dropPlan, ...restPlans } = state.plans;
-            const { amazon: _dropSig, ...restSigs } = state.planInputSignatures;
-            const { amazon: _dropSlot, ...restSlots } = state.selectedSlotKeys;
-            const { amazon: _dropVersions, ...restVersions } = state.slotVersions;
-            return {
-              sessions,
-              plans: restPlans,
-              planInputSignatures: restSigs,
-              selectedSlotKeys: restSlots,
-              slotVersions: { ...restVersions, amazon: {} },
-              planningError: null,
-            };
-          }
-          const { taobao: _dropPlan, ...restPlans } = state.plans;
-          const { taobao: _dropSig, ...restSigs } = state.planInputSignatures;
-          const { taobao: _dropSlot, ...restSlots } = state.selectedSlotKeys;
-          const { taobao: _dropVersions, ...restVersions } = state.slotVersions;
-          return {
-            sessions,
-            plans: restPlans,
-            planInputSignatures: restSigs,
-            selectedSlotKeys: restSlots,
-            slotVersions: { ...restVersions, taobao: {} },
-            planningError: null,
-          };
-        });
-        return "seeded";
-      } catch (error) {
-        set({ planningError: `载入商品资料失败：${errorMessage(error)}` });
-        return "failed";
-      }
-    },
-
     async syncAmazonSessionFacts(sessionId) {
       const session = get().sessions.find((candidate) => candidate.id === sessionId);
       const activeProject = get().activeProject;
@@ -2161,7 +1462,6 @@ export function createWorkbenchStore(
       invalidatePlanning();
       invalidateGeneration();
       invalidateExport();
-      invalidateCopilot();
       invalidateIndustryTemplateTransform();
       set({
         loading: true,
@@ -2174,16 +1474,10 @@ export function createWorkbenchStore(
         exportingPlatform: null,
         exportError: null,
         exportErrorPlatform: null,
-        copilotTarget: null,
-        copilotFeedbackTarget: null,
-        copilotError: null,
-        copilotMessage: null,
       });
       try {
         const project = await dependencies.projectRepository.create(input);
-        const projects = (await dependencies.projectRepository.list()).filter(
-          (candidate) => candidate.scope === "library",
-        );
+        const projects = await dependencies.projectRepository.list();
         if (!isCurrentContext()) return project;
         await enqueueProjectSelectionWrite(async () => {
           if (isCurrentContext()) {
@@ -2231,10 +1525,6 @@ export function createWorkbenchStore(
       }
       if (get().planningPlatformId) {
         set({ error: "当前正在生成平台策划，请完成或取消后再保存资料。" });
-        return null;
-      }
-      if (get().copilotTarget) {
-        set({ error: "当前 Copilot 请求正在处理，请完成或取消后再保存资料。" });
         return null;
       }
       if (get().exportingPlatform) {
@@ -2296,7 +1586,6 @@ export function createWorkbenchStore(
       if (
         get().planningPlatformId ||
         (get().generatingSlot && !activeRelatedJob) ||
-        get().copilotTarget ||
         get().exportingPlatform ||
         get().industryTemplateTransforming ||
         get().generationRecoveryRequired
@@ -2308,7 +1597,6 @@ export function createWorkbenchStore(
       invalidatePlanning();
       invalidateGeneration();
       invalidateExport();
-      invalidateCopilot();
       invalidateIndustryTemplateTransform();
       projectContextRequestId += 1;
       lifecycleVersion += 1;
@@ -2327,13 +1615,8 @@ export function createWorkbenchStore(
           return true;
         }, { wait: true });
         if (!deletion.acquired) throw new Error("无法获得项目删除执行权");
-        const projects = (await dependencies.projectRepository.list()).filter(
-          (candidate) => candidate.scope === "library",
-        );
+        const projects = await dependencies.projectRepository.list();
         revokeAssets(get().assets, dependencies);
-        const nextProject = projects
-          .filter((candidate) => candidate.id !== id)
-          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
         set({
           loading: false,
           projects,
@@ -2355,9 +1638,6 @@ export function createWorkbenchStore(
           planningError: null,
           resourceRestoreError: null,
         });
-        if (nextProject) {
-          await get().selectProject(nextProject.id);
-        }
         return true;
       } catch (error) {
         set({ loading: false, error: errorMessage(error) });
@@ -2373,7 +1653,6 @@ export function createWorkbenchStore(
       invalidatePlanning();
       invalidateGeneration();
       invalidateExport();
-      invalidateCopilot();
       invalidateIndustryTemplateTransform();
       set({
         loading: true,
@@ -2386,10 +1665,6 @@ export function createWorkbenchStore(
         exportingPlatform: null,
         exportError: null,
         exportErrorPlatform: null,
-        copilotTarget: null,
-        copilotFeedbackTarget: null,
-        copilotError: null,
-        copilotMessage: null,
       });
       let nextAssets: WorkbenchAsset[] | null = null;
       try {
@@ -2442,7 +1717,7 @@ export function createWorkbenchStore(
             loadedAssets.cleanupWarnings.length > 0
               ? `项目已恢复，但临时生成图片仍未清理：${loadedAssets.cleanupWarnings.join("；")}。可再次重试恢复。`
               : null,
-          projects: project.scope !== "library" || state.projects.some((candidate) => candidate.id === project.id)
+          projects: state.projects.some((candidate) => candidate.id === project.id)
             ? state.projects
             : [...state.projects, project],
         }));
@@ -2465,11 +1740,10 @@ export function createWorkbenchStore(
       if (
         get().planningPlatformId ||
         get().generatingSlot ||
-        get().copilotTarget ||
         get().exportingPlatform ||
         get().generationRecoveryRequired
       ) {
-        set({ error: "当前有策划、生成、Copilot、导出或恢复任务，请完成后再修改参考素材。" });
+        set({ error: "当前有策划、生成、导出或恢复任务，请完成后再修改参考素材。" });
         return [];
       }
 
@@ -2553,48 +1827,15 @@ export function createWorkbenchStore(
       }
     },
 
-    async createStyleReference(presetId, draft = {}) {
-      const activeProject = get().activeProject;
-      const preset = getAmazonStylePreset(presetId);
-      if (!activeProject || !preset) {
-        set({ error: !activeProject ? "请先选择商品项目" : "未找到可用的内置风格。" });
-        return null;
-      }
-      try {
-        const board = await createStyleReferenceBoardBitmap(preset, draft);
-        const stored = await dependencies.assetRepository.put({
-          projectId: activeProject.id,
-          blob: board.blob,
-          metadata: {
-            name: `${board.definition.name}风格板`,
-            kind: "style-reference",
-            role: "amazon:style",
-            tags: ["style", "custom", preset.id],
-            width: board.width,
-            height: board.height,
-            styleReference: board.definition,
-          },
-        });
-        const loaded = await loadAssetViews(activeProject.id, dependencies);
-        revokeAssets(get().assets, dependencies);
-        set({ assets: loaded.assets, error: null });
-        return loaded.assets.find((asset) => asset.metadata.id === stored.metadata.id) ?? null;
-      } catch (error) {
-        set({ error: `风格板预览保存失败：${errorMessage(error)}。仍可使用文本 preset。` });
-        return null;
-      }
-    },
-
     async removeAsset(id) {
       const operationLifecycle = lifecycleVersion;
       if (
         get().planningPlatformId ||
         get().generatingSlot ||
-        get().copilotTarget ||
         get().exportingPlatform ||
         get().generationRecoveryRequired
       ) {
-        set({ error: "当前有策划、生成、Copilot、导出或恢复任务，请完成后再修改参考素材。" });
+        set({ error: "当前有策划、生成、导出或恢复任务，请完成后再修改参考素材。" });
         return;
       }
       set({ loading: true, error: null });
@@ -2676,7 +1917,6 @@ export function createWorkbenchStore(
       if (
         get().planningPlatformId ||
         get().generatingSlot ||
-        get().copilotTarget ||
         get().exportingPlatform ||
         get().generationRecoveryRequired
       ) {
@@ -2752,10 +1992,6 @@ export function createWorkbenchStore(
       }
       if (get().generatingSlot?.platformId === platformId) {
         set({ planningError: "当前平台正在生成图片，请完成或取消后再重新策划。" });
-        return null;
-      }
-      if (get().copilotTarget) {
-        set({ planningError: "当前有 Copilot 请求正在处理，请完成或取消后再重新策划。" });
         return null;
       }
       const runtimeValidationError = requireTextRuntime(get().runtimeSettings);
@@ -2871,20 +2107,13 @@ export function createWorkbenchStore(
           ).locale
         : "zh-CN";
       const planningInput: PlanningInputSnapshot = {
-        sourceMode: planningSession?.planningInput?.sourceMode ?? "library",
+        sourceMode: "manual",
         quality: inputAssessment.quality,
         missingFacts: inputAssessment.missingFacts,
         productText: platformId === "amazon"
           ? planningSession?.sourceInput.listingText ?? ""
           : planningSession?.sourceInput.taobaoProduct?.productText ?? "",
         selectedReferenceAssetIds,
-        ...((planningSession?.planningInput?.sourceMode ?? "library") === "library"
-          ? {
-              sourceProjectId: planningSession?.planningInput?.sourceProjectId ?? activeProject.id,
-              sourceProjectUpdatedAt:
-                planningSession?.planningInput?.sourceProjectUpdatedAt ?? activeProject.updatedAt,
-            }
-          : {}),
       };
       const operationLifecycle = lifecycleVersion;
       const requestId = ++planningRequestId;
@@ -2932,12 +2161,6 @@ export function createWorkbenchStore(
         if (!localizedFactsDraft && (!planningSession || planningSession.plan)) {
           const timestamp = now();
           localizedFactsDraft = {
-            ...(planningInput.sourceProjectId
-              ? { sourceProjectId: planningInput.sourceProjectId }
-              : {}),
-            ...(planningInput.sourceProjectUpdatedAt
-              ? { sourceProjectUpdatedAt: planningInput.sourceProjectUpdatedAt }
-              : {}),
             sourceFactsSnapshot: cloneProductFacts(sourcePlanningFacts),
             targetLocale,
             localizedFacts: cloneProductFacts(sourcePlanningFacts),
@@ -2981,16 +2204,10 @@ export function createWorkbenchStore(
               status = "confirmed";
             } catch {
               localizedFacts = cloneProductFacts(sourcePlanningFacts);
-              status = "confirmed";
+              status = "pending";
             }
           }
           localizedFactsDraft = {
-            ...(planningInput.sourceProjectId
-              ? { sourceProjectId: planningInput.sourceProjectId }
-              : {}),
-            ...(planningInput.sourceProjectUpdatedAt
-              ? { sourceProjectUpdatedAt: planningInput.sourceProjectUpdatedAt }
-              : {}),
             sourceFactsSnapshot: cloneProductFacts(sourcePlanningFacts),
             targetLocale,
             localizedFacts,
@@ -3046,10 +2263,28 @@ export function createWorkbenchStore(
           return null;
         }
         const planningFacts = localizedFactsDraft?.localizedFacts ?? sourcePlanningFacts;
+        const signatureOptions = platformId === "amazon" && effectiveAmazonOptions
+          ? optionsForPlan("amazon", {
+              platformId: "amazon",
+              source: "api",
+              slots: [],
+              amazonSession: resolvePlanningRulePack("amazon", effectiveAmazonOptions).amazonSession,
+            }, planningSession?.options)
+          : platformId === "taobao"
+            ? {
+                platformId: "taobao" as const,
+                stylePresetId: taobaoProfileId ?? null,
+              }
+            : planningSession?.options;
         const inputSignature = createPlanningInputSignature(
           planningFacts,
           get().assets.map((asset) => asset.metadata),
           selectedReferenceAssetIds,
+          {
+            workflowId: planningWorkflowId,
+            industryTemplate: planningSession?.industryTemplate,
+            sessionOptions: signatureOptions,
+          },
         );
         const runtime = resolveAiRuntime(get().runtimeSettings);
         const activePlannerEngine = runtime?.planner ??
@@ -3066,21 +2301,40 @@ export function createWorkbenchStore(
         const taskStylePresetId = platformId === "amazon" && effectiveAmazonOptions && "stylePresetId" in effectiveAmazonOptions
           ? effectiveAmazonOptions.stylePresetId
           : taobaoProfileId;
-        const rawPlan = await activePlannerEngine.plan(
-          plannerFacts,
-          baseRulePack,
-          controller.signal,
-          referenceImages,
-          effectiveAmazonOptions ?? (taobaoProfileId ? { stylePresetId: taobaoProfileId } as AmazonPlanningRequestOptions : undefined),
-          inputAssessment,
-          planningSession?.industryTemplate,
-          createPlannerTaskSettings(
-            baseRulePack,
-            effectiveAmazonOptions ?? (taobaoProfileId ? { stylePresetId: taobaoProfileId } : undefined),
-            taskStylePresetId ?? DEFAULT_PROMPT_PROFILE_ID,
-            selectedReferenceAssetIds,
-          ),
+        const effectiveOptions = effectiveAmazonOptions ?? (taobaoProfileId ? { stylePresetId: taobaoProfileId } as AmazonPlanningRequestOptions : undefined);
+        const taskSettings = createPlannerTaskSettings(
+          baseRulePack, effectiveOptions, taskStylePresetId ?? DEFAULT_PROMPT_PROFILE_ID, selectedReferenceAssetIds,
         );
+        const planningRequest: PlatformPlanningRequest = {
+          platformId,
+          projectId,
+          taskId: projectId,
+          operationId: planningOperationId(projectId, requestId),
+          inputSignature,
+          productFacts: plannerFacts,
+          referenceImages,
+          platformRules: baseRulePack,
+          aiInstructions: baseRulePack.planningInstructions,
+          outputConstraints: {
+            format: "json-object",
+            requiredSlotKeys: baseRulePack.slots.map((candidate) => candidate.key),
+            contractVersion: "1.1.0",
+          },
+          ...(effectiveOptions ? { amazonOptions: effectiveOptions } : {}),
+          inputAssessment,
+          industryTemplate: planningSession?.industryTemplate,
+          taskSettings,
+        };
+        assertPlatformPlanningRequest(planningRequest);
+        const rawPlan = activePlannerEngine.planRequest
+          ? await activePlannerEngine.planRequest(planningRequest, controller.signal)
+          : await activePlannerEngine.plan(
+              plannerFacts, baseRulePack, controller.signal, referenceImages, effectiveOptions,
+              inputAssessment, planningSession?.industryTemplate, taskSettings,
+            );
+        if (rawPlan.platformId !== platformId) {
+          throw new Error("策划结果的平台与当前任务不一致。");
+        }
         ensureCurrentPlanning();
         const plan = normalizePlatformPlan({ ...rawPlan, source: "api" }, baseRulePack);
         ensureCurrentPlanning();
@@ -3389,13 +2643,6 @@ export function createWorkbenchStore(
         set({ planningError: "当前槽位正在生成图片，请完成或取消后再保存文案与提示词。" });
         return false;
       }
-      if (
-        get().copilotTarget?.platformId === platformId &&
-        get().copilotTarget?.slotKey === slotKey
-      ) {
-        set({ planningError: "当前槽位的 Copilot 请求正在处理，请完成或取消后再保存文案与提示词。" });
-        return false;
-      }
       const requestId = planningRequestId;
 
       try {
@@ -3592,13 +2839,6 @@ export function createWorkbenchStore(
         });
         return null;
       }
-      if (get().copilotTarget) {
-        set({
-          generationError: "Copilot 请求正在处理，请完成或取消后再生成图片。",
-          generationErrorTarget: get().copilotTarget,
-        });
-        return null;
-      }
       const runtimeValidationError = requireImageRuntime(get().runtimeSettings);
       if (runtimeValidationError) {
         set({
@@ -3736,9 +2976,11 @@ export function createWorkbenchStore(
                 apply: shouldApplyStyleToSlot(slotKey),
               })
             : slot.prompt;
-        const generated = await activeImageGenerator.generate(
-          {
+        const generationRequest: SlotGenerationRequest = {
             projectId,
+            taskId: projectId,
+            operationId: generationOperationId(projectId, requestId),
+            inputSignature: planningInputSignature,
             productName: resolveSessionEffectiveFacts(activeProject, activeSession).productName,
             platformId,
             slotKey,
@@ -3749,9 +2991,22 @@ export function createWorkbenchStore(
             dimensions: generationDimensions,
             sizeTier: platformId === "amazon" ? sizeTier : undefined,
             referenceImages,
-          },
-          controller.signal,
-        );
+            productFacts: resolveSessionEffectiveFacts(activeProject, activeSession),
+            platformRules: rulePackForSlot,
+            referenceImageNames: referenceImages.map((image) => image.name),
+            slotStrategy: slot.strategy,
+            slotEvidence: slot.evidence,
+            aiInstructions: [
+              ...rulePackForSlot.planningInstructions,
+              ...rulePackForSlot.promptGuardrails,
+              ...rulePackForSlot.complianceReminders,
+            ],
+            outputConstraints: { format: "image", slotKey, promptRequired: true },
+        };
+        assertSlotGenerationRequest(generationRequest);
+        const generated = activeImageGenerator.generateRequest
+          ? await activeImageGenerator.generateRequest(generationRequest, controller.signal)
+          : await activeImageGenerator.generate(generationRequest, controller.signal);
         void referencePayloadNotice;
         ensureCurrentGeneration();
 
@@ -4048,6 +3303,13 @@ export function createWorkbenchStore(
         });
         return null;
       }
+      if (!hasCurrentPlanningInputs(get(), platformId)) {
+        set({
+          generationError: STALE_PLAN_MESSAGE,
+          generationErrorTarget: { platformId, slotKey },
+        });
+        return null;
+      }
       if (!editPrompt.trim()) {
         set({
           generationError: "请填写本次局部编辑要求。",
@@ -4071,7 +3333,7 @@ export function createWorkbenchStore(
         });
         return null;
       }
-      if (get().loading || get().generatingSlot || get().planningPlatformId || get().copilotTarget) {
+      if (get().loading || get().generatingSlot || get().planningPlatformId) {
         set({
           generationError: "当前有其他任务正在处理，请完成或取消后再进行局部编辑。",
           generationErrorTarget: get().generatingSlot ?? { platformId, slotKey },
@@ -4178,9 +3440,20 @@ export function createWorkbenchStore(
         if (!activeImageGenerator) throw new Error("图片 API 运行时不可用。");
         const sizeTier = session.options.platformId === "amazon" ? session.options.sizeTier : undefined;
         const dimensions = generationDimensionsForUpload(rule.dimensions, sizeTier ?? "2K");
-        const generated = await activeImageGenerator.generate(
-          {
+        const generationRequest: SlotGenerationRequest = {
             projectId,
+            taskId: projectId,
+            operationId: generationOperationId(projectId, requestId, true),
+            inputSignature: session.planInputSignature ?? createPlanningInputSignature(
+              resolveSessionEffectiveFacts(activeProject, session),
+              get().assets.map((asset) => asset.metadata),
+              session.selectedReferenceAssetIds,
+              {
+                workflowId: session.workflowId,
+                industryTemplate: session.industryTemplate,
+                sessionOptions: session.options,
+              },
+            ),
             productName: resolveSessionEffectiveFacts(activeProject, session).productName,
             platformId,
             slotKey,
@@ -4203,9 +3476,17 @@ export function createWorkbenchStore(
                 blob: prepared.mask.blob,
               },
             },
-          },
-          controller.signal,
-        );
+            productFacts: resolveSessionEffectiveFacts(activeProject, session),
+            platformRules: resolveRulePackForPlan(platformId, session.plan),
+            slotStrategy: slot.strategy,
+            slotEvidence: slot.evidence,
+            aiInstructions: resolveRulePackForPlan(platformId, session.plan).promptGuardrails,
+            outputConstraints: { format: "image", slotKey, promptRequired: true },
+        };
+        assertSlotGenerationRequest(generationRequest);
+        const generated = activeImageGenerator.generateRequest
+          ? await activeImageGenerator.generateRequest(generationRequest, controller.signal)
+          : await activeImageGenerator.generate(generationRequest, controller.signal);
         ensureCurrentEdit();
 
         const nextVersionId = createVersionId();
@@ -4508,7 +3789,7 @@ export function createWorkbenchStore(
     },
 
     async resumeRun(runId) {
-      const located = await locateRun(runId, get);
+      const located = await locateHistoryRun(runId, get, dependencies.projectRepository, workspaceRepository);
       if (!located) {
         set({ error: "要恢复的生产记录不存在。" });
         return false;
@@ -4622,7 +3903,7 @@ export function createWorkbenchStore(
     },
 
     async removeRun(runId) {
-      const located = await locateRun(runId, get);
+      const located = await locateHistoryRun(runId, get, dependencies.projectRepository, workspaceRepository);
       if (!located) {
         set({ error: "要删除的生产记录不存在。" });
         return false;
@@ -4654,7 +3935,7 @@ export function createWorkbenchStore(
     },
 
     async forkRun(runId) {
-      const located = await locateRun(runId, get);
+      const located = await locateHistoryRun(runId, get, dependencies.projectRepository, workspaceRepository);
       if (!located) {
         set({ error: "要复用的生产记录不存在。" });
         return null;
@@ -4669,6 +3950,7 @@ export function createWorkbenchStore(
       const forkRunId = createStableId("run");
       const forkFacts = resolveSessionEffectiveFacts(project, {
         projectId: project.id,
+        platformId: located.run.platformId,
         workflowId: located.run.workflowId,
         sourceInput: located.run.contextSnapshot.sourceInput,
         planningInput: located.run.contextSnapshot.planningInput,
@@ -4678,6 +3960,11 @@ export function createWorkbenchStore(
         forkFacts,
         get().assets.map((asset) => asset.metadata),
         located.run.contextSnapshot.selectedReferenceAssetIds,
+        {
+          workflowId: located.run.workflowId,
+          industryTemplate: located.run.contextSnapshot.industryTemplate,
+          sessionOptions: located.run.contextSnapshot.options,
+        },
       );
       const plan = normalizePlatformPlan(
         JSON.parse(JSON.stringify(located.run.planSnapshot)),
@@ -4740,149 +4027,8 @@ export function createWorkbenchStore(
       return session;
     },
 
-    async prepareRunDepositFacts(runId) {
-      const located = await locateRun(runId, get);
-      if (!located) return null;
-      const candidate = extractSharedFactsFromRun(located.run, located.project.facts);
-      if (located.run.platformId !== "amazon") return candidate;
-      const candidateText = [
-        candidate.productName,
-        candidate.category,
-        candidate.targetAudience,
-        candidate.description,
-        ...candidate.sellingPoints,
-        ...Object.keys(candidate.specifications),
-      ].join(" ");
-      if (/[\u3400-\u9fff]/u.test(candidateText)) return candidate;
-      const textRuntimeError = requireTextRuntime(get().runtimeSettings);
-      if (textRuntimeError) {
-        set({ error: `API 设置不可用：${textRuntimeError}` });
-        return null;
-      }
-      try {
-        const runtime = resolveAiRuntime(get().runtimeSettings);
-        const activeLocalizer = runtime?.productLocalizer ??
-          (dependencies.createProductLocalizer
-            ? dependencies.createProductLocalizer(get().runtimeSettings)
-            : productLocalizer);
-        if (!activeLocalizer) throw new Error("文本 API 运行时不可用。");
-        return await activeLocalizer.localize(
-          candidate,
-          "zh-CN",
-          DEFAULT_LOCALIZATION_RULES,
-          new AbortController().signal,
-        );
-      } catch (error) {
-        set({ error: `历史事实中文化失败：${errorMessage(error)}。可在沉淀弹窗中手动检查。` });
-        return candidate;
-      }
-    },
-
-    async depositRunToLibrary(input) {
-      const located = await locateRun(input.runId, get);
-      if (
-        !located ||
-        located.project.scope !== "task-draft" ||
-        located.run.contextSnapshot.planningInput?.sourceMode === "library"
-      ) {
-        set({ error: "只有手动任务草稿可以保存为商品。" });
-        return null;
-      }
-
-      const previousActiveId = get().activeProject?.id ?? null;
-      const copiedAssetIds: string[] = [];
-      let createdProjectId: string | null = null;
-      try {
-        let target: ProductProject;
-        let mergedFacts: ProductFacts | null = null;
-        if (input.mode === "create") {
-          target = await dependencies.projectRepository.create({
-            name: input.name?.trim() || input.facts.productName.trim() || "未命名商品",
-            scope: "library",
-            facts: input.facts,
-          });
-          createdProjectId = target.id;
-          await dependencies.projectRepository.setActiveId(previousActiveId);
-        } else {
-          if (!input.targetProjectId) throw new Error("请选择要合并的已保存商品");
-          const current = await dependencies.projectRepository.get(input.targetProjectId);
-          if (!current || current.scope !== "library") throw new Error("目标商品不存在");
-          const merged = mergeProductFacts(
-            current.facts,
-            input.facts,
-            new Set(input.overwriteFields ?? []),
-          );
-          mergedFacts = merged.facts;
-          target = current;
-        }
-
-        const existingAssets = await dependencies.assetRepository.list(target.id);
-        for (const sourceId of [...new Set(input.selectedAssetIds)]) {
-          const marker = `deposit-source:${located.run.id}:${sourceId}`;
-          if (existingAssets.some((asset) => asset.tags.includes(marker))) continue;
-          const source = await dependencies.assetRepository.get(sourceId);
-          if (!source || source.metadata.projectId !== located.project.id) continue;
-          if (source.metadata.kind !== "reference" && source.metadata.kind !== "generated") continue;
-          const copied = await dependencies.assetRepository.put({
-            projectId: target.id,
-            blob: source.blob,
-            metadata: {
-              name: source.metadata.name,
-              kind: "reference",
-              role: source.metadata.role,
-              tags: [...source.metadata.tags, "history-deposit", `deposit-run:${located.run.id}`, marker],
-              width: source.metadata.width,
-              height: source.metadata.height,
-            },
-          });
-          copiedAssetIds.push(copied.metadata.id);
-          existingAssets.push(copied.metadata);
-        }
-
-        if (mergedFacts) {
-          const updated = await dependencies.projectRepository.update(target.id, { facts: mergedFacts });
-          if (!updated) throw new Error("目标商品保存失败");
-          target = updated;
-        }
-
-        const timestamp = now();
-        const depositedRun: ProductionRun = {
-          ...located.run,
-          deposit: { targetProjectId: target.id, depositedAt: timestamp },
-        };
-        const nextRuns = located.workspace.runs.map((run) =>
-          run.id === depositedRun.id ? depositedRun : run,
-        );
-        await workspaceRepository.save({
-          ...located.workspace,
-          runs: nextRuns,
-          updatedAt: timestamp,
-        });
-        await dependencies.runRepository?.put(depositedRun);
-        const projects = (await dependencies.projectRepository.list()).filter(
-          (project) => project.scope === "library",
-        );
-        set((state) => ({
-          projects,
-          allProjects: [...state.allProjects.filter((candidate) => candidate.id !== target.id), target],
-          ...(state.activeProject?.id === located.project.id ? { runs: nextRuns } : {}),
-          error: null,
-        }));
-        return target;
-      } catch (error) {
-        await Promise.all(copiedAssetIds.map((id) => dependencies.assetRepository.remove(id)));
-        if (createdProjectId) {
-          await dependencies.assetRepository.clearProject(createdProjectId);
-          await dependencies.projectRepository.remove(createdProjectId);
-          await dependencies.projectRepository.setActiveId(previousActiveId);
-        }
-        set({ error: `沉淀失败：${errorMessage(error)}` });
-        return null;
-      }
-    },
-
     async reuseRunImageAsReference(runId, eventId) {
-      const located = await locateRun(runId, get);
+      const located = await locateHistoryRun(runId, get, dependencies.projectRepository, workspaceRepository);
       const event = located?.run.events.find(
         (candidate) => candidate.id === eventId && Boolean(candidate.assetId),
       );
@@ -4951,7 +4097,7 @@ export function createWorkbenchStore(
         set({ exportError: "已有交付包正在导出，请稍候。", exportErrorPlatform: get().exportingPlatform });
         return null;
       }
-      const located = await locateRun(runId, get);
+      const located = await locateHistoryRun(runId, get, dependencies.projectRepository, workspaceRepository);
       if (!located) {
         set({ exportError: "要导出的生产记录不存在。", exportErrorPlatform: null });
         return null;
@@ -4992,24 +4138,33 @@ export function createWorkbenchStore(
       } catch (error) {
         const message = `导出生产记录失败：${errorMessage(error)}。当前策划与版本未受影响。`;
         const timestamp = now();
-        const nextRuns = await enqueueWorkspaceMutation(async () => {
-          const workspace = await workspaceRepository.load(located.project.id);
-          const runs = workspace.runs.map((run) => run.id === runId
-            ? appendRunEvent(run, {
-                id: createStableId("event"), runId, kind: "export", status: "failed",
-                createdAt: timestamp,
-              })
-            : run);
-          await workspaceRepository.save({ ...workspace, runs, updatedAt: timestamp });
-          return runs;
-        });
+        let nextRuns: ProductionRun[] | undefined;
+        try {
+          nextRuns = await enqueueWorkspaceMutation(async () => {
+            const workspace = await workspaceRepository.load(located.project.id);
+            const runs = workspace.runs.map((run) => run.id === runId
+              ? appendRunEvent(run, {
+                  id: createStableId("event"), runId, kind: "export", status: "failed",
+                  createdAt: timestamp,
+                })
+              : run);
+            await workspaceRepository.save({ ...workspace, runs, updatedAt: timestamp });
+            return runs;
+          });
+        } catch {
+          nextRuns = undefined;
+        }
         set({
-          ...(get().activeProject?.id === located.project.id ? { runs: nextRuns } : {}),
+          ...(nextRuns && get().activeProject?.id === located.project.id ? { runs: nextRuns } : {}),
           exportingPlatform: null,
           exportError: message,
           exportErrorPlatform: platformId,
         });
         return null;
+      } finally {
+        if (get().exportingPlatform === platformId) {
+          set({ exportingPlatform: null });
+        }
       }
     },
 
@@ -5068,6 +4223,10 @@ export function createWorkbenchStore(
         set({ error: "请先选择商品并完成当前平台策划，再创建批量生成任务。" });
         return null;
       }
+      if (!hasCurrentPlanningInputs(get(), platformId)) {
+        set({ error: STALE_PLAN_MESSAGE });
+        return null;
+      }
       const imageRuntimeError = requireImageRuntime(get().runtimeSettings);
       if (imageRuntimeError) {
         set({ error: `API 设置不可用：${imageRuntimeError}` });
@@ -5078,7 +4237,6 @@ export function createWorkbenchStore(
         get().loading ||
         get().planningPlatformId ||
         get().generatingSlot ||
-        get().copilotTarget ||
         get().exportingPlatform
       ) {
         set({ error: "当前有任务正在执行，请完成或取消后再开始批量生成。" });
@@ -5105,10 +4263,9 @@ export function createWorkbenchStore(
         set({ error: "当前工作流缺少可执行的 Session 或 ProductionRun，请重新策划。" });
         return null;
       }
-      const pendingSlots = session.plan.slots.filter((slot) => {
-        const state = session.slotVersions[slot.slotKey];
-        return !state?.activeVersionId || !state.versions.some((version) => version.id === state.activeVersionId);
-      });
+      const pendingSlots = session.plan.slots.filter((slot) =>
+        !currentSlotVersion(slot, session.slotVersions[slot.slotKey], session.planInputSignature)
+      );
       if (pendingSlots.length === 0) {
         set({ error: "当前工作流的全部槽位都已生成，无需创建批量任务。" });
         return null;
@@ -5210,9 +4367,9 @@ export function createWorkbenchStore(
         set({ settingsError: "工作台正在加载或保存项目与素材，请完成后再保存运行设置。" });
         return false;
       }
-      if (get().planningPlatformId || get().generatingSlot || get().copilotTarget) {
+      if (get().planningPlatformId || get().generatingSlot) {
         set({
-          settingsError: "当前有策划、图片生成或 Copilot 任务，请完成或取消后再保存运行设置。",
+          settingsError: "当前有策划或图片生成任务，请完成或取消后再保存运行设置。",
         });
         return false;
       }
@@ -5315,7 +4472,6 @@ export function createWorkbenchStore(
         get().loading ||
         get().planningPlatformId ||
         get().generatingSlot ||
-        get().copilotTarget ||
         get().industryTemplateTransforming
       ) {
         set({
@@ -5376,219 +4532,6 @@ export function createWorkbenchStore(
       activeIndustryTemplateTransformController?.abort(
         new DOMException("用户取消行业模板改造", "AbortError"),
       );
-    },
-
-    async runCopilotCommand(platformId, slotKey, command) {
-      if (get().loading) {
-        set({
-          copilotFeedbackTarget: { platformId, slotKey },
-          copilotError: "工作台正在加载或保存项目与素材，请完成后再使用 Copilot。",
-        });
-        return false;
-      }
-      const activeProject = get().activeProject;
-      const plan = get().plans[platformId];
-      const slot = plan?.slots.find((candidate) => candidate.slotKey === slotKey);
-      if (!activeProject || !plan || !slot) {
-        set({
-          copilotFeedbackTarget: { platformId, slotKey },
-          copilotError: "请先完成平台策划并选择有效槽位。",
-        });
-        return false;
-      }
-      if (!hasCurrentPlanningInputs(get(), platformId)) {
-        set({
-          copilotFeedbackTarget: { platformId, slotKey },
-          copilotError: STALE_PLAN_MESSAGE,
-        });
-        return false;
-      }
-      if (get().copilotTarget) {
-        set({
-          copilotFeedbackTarget: { platformId, slotKey },
-          copilotError: "已有 Copilot 任务正在处理，请先等待或取消。",
-        });
-        return false;
-      }
-      if (get().planningPlatformId || get().generatingSlot || get().generationRecoveryRequired) {
-        set({
-          copilotFeedbackTarget: { platformId, slotKey },
-          copilotError: "当前有策划、生成或恢复任务，请完成后再使用 Copilot。",
-        });
-        return false;
-      }
-      const runtimeValidationError = requireTextRuntime(get().runtimeSettings);
-      if (runtimeValidationError) {
-        set({
-          copilotFeedbackTarget: { platformId, slotKey },
-          copilotError: `API 设置不可用：${runtimeValidationError}`,
-        });
-        return false;
-      }
-
-      const operationLifecycle = lifecycleVersion;
-      const requestId = ++copilotRequestId;
-      const projectId = activeProject.id;
-      const controller = new AbortController();
-      activeCopilotController = controller;
-      let copilotRollbackError: unknown = null;
-      const isCurrentCopilot = () =>
-        !controller.signal.aborted &&
-        isCurrentLifecycle(operationLifecycle) &&
-        requestId === copilotRequestId &&
-        get().activeProject?.id === projectId;
-      const ensureCurrentCopilot = () => {
-        if (controller.signal.aborted) {
-          throw controller.signal.reason ?? new DOMException("Copilot 已取消", "AbortError");
-        }
-        if (!isCurrentCopilot()) {
-          throw new DOMException("Copilot 结果已过期", "AbortError");
-        }
-      };
-      set({
-        copilotTarget: { platformId, slotKey },
-        copilotFeedbackTarget: { platformId, slotKey },
-        copilotError: null,
-        copilotMessage: null,
-      });
-
-      try {
-        const runtime = resolveAiRuntime(get().runtimeSettings);
-        const activeCopilot = runtime?.copilot ??
-          (dependencies.createCopilotEngine
-            ? dependencies.createCopilotEngine(get().runtimeSettings)
-            : copilotEngine);
-        if (!activeCopilot) throw new Error("文本 API 运行时不可用。");
-        const copilotSession = [...get().sessions]
-          .filter((session) => session.platformId === platformId)
-          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-        const result = await activeCopilot.adjust(
-          {
-            project: resolveSessionEffectiveProject(activeProject, copilotSession),
-            rulePack: resolveRulePackForPlan(platformId, get().plans[platformId]),
-            slot,
-          },
-          command,
-          controller.signal,
-        );
-        ensureCurrentCopilot();
-
-        if (!("prompt" in result)) {
-          set({
-            copilotTarget: null,
-            copilotFeedbackTarget: { platformId, slotKey },
-            copilotError: null,
-            copilotMessage: `AI 建议：${result.message}`,
-          });
-          return true;
-        }
-
-        const patch = result;
-
-        const nextPlan = await enqueueWorkspaceMutation(async () => {
-          ensureCurrentCopilot();
-          const workspace = await workspaceRepository.load(projectId);
-          ensureCurrentCopilot();
-          const currentPlan = workspace.plans[platformId] ?? plan;
-          const nextPlan = normalizePlatformPlan(
-            {
-              ...currentPlan,
-              slots: currentPlan.slots.map((candidate) =>
-                candidate.slotKey === slotKey ? { ...candidate, ...patch } : candidate,
-              ),
-            },
-            resolveRulePackForPlan(platformId, get().plans[platformId]),
-          );
-          let nextWorkspace: ProjectWorkspaceDocument = {
-            ...workspace,
-            plans: { ...workspace.plans, [platformId]: nextPlan },
-            updatedAt: now(),
-          };
-          if (platformId === "amazon") {
-            nextWorkspace = withAmazonSnapshot(
-              nextWorkspace,
-              nextPlan,
-              workspace.planInputSignatures.amazon,
-              workspace.selectedSlotKeys.amazon,
-            );
-          }
-          await workspaceRepository.save(nextWorkspace);
-          try {
-            ensureCurrentCopilot();
-          } catch (staleError) {
-            try {
-              await workspaceRepository.save(workspace);
-            } catch (rollbackError) {
-              copilotRollbackError = rollbackError;
-            }
-            throw staleError;
-          }
-          return nextPlan;
-        });
-        ensureCurrentCopilot();
-        set((state) => ({
-          plans: { ...state.plans, [platformId]: nextPlan },
-          ...(platformId === "amazon" && amazonModeForPlan(nextPlan)
-            ? {
-                amazonWorkspaces: amazonWorkspacesWithSnapshot(
-                  state.amazonWorkspaces,
-                  nextPlan,
-                  state.planInputSignatures.amazon,
-                  state.selectedSlotKeys.amazon,
-                ),
-              }
-            : {}),
-          copilotTarget: null,
-          copilotFeedbackTarget: { platformId, slotKey },
-          copilotError: null,
-          copilotMessage: `AI 建议：${
-            "message" in result && result.message.trim()
-              ? result.message
-              : `${slotKey} 已更新并保存。`
-          }`,
-        }));
-        return true;
-      } catch (error) {
-        if (
-          !isCurrentLifecycle(operationLifecycle) ||
-          requestId !== copilotRequestId ||
-          get().activeProject?.id !== projectId
-        ) {
-          return false;
-        }
-        const canceled =
-          controller.signal.aborted ||
-          (error instanceof DOMException && error.name === "AbortError");
-        const failureMessage = copilotRollbackError
-          ? `已取消 Copilot 请求，但保存后的工作区回滚失败：${errorMessage(copilotRollbackError)}。槽位状态可能已经变化，请点击“重试恢复”重新读取槽位。`
-          : canceled
-            ? "已取消 Copilot 请求，当前槽位草稿未受影响。"
-            : `Copilot 请求失败：${errorMessage(error)}。当前槽位草稿未受影响。`;
-        set({
-          copilotTarget: null,
-          copilotFeedbackTarget: { platformId, slotKey },
-          copilotError: failureMessage,
-          copilotMessage: null,
-          ...(copilotRollbackError
-            ? {
-                generationRecoveryRequired: true,
-                resourceRestoreError:
-                  "Copilot 保存后的工作区回滚失败，槽位状态可能已经变化。请点击“重试恢复”。",
-              }
-            : {}),
-        });
-        return false;
-      } finally {
-        if (requestId === copilotRequestId) activeCopilotController = null;
-      }
-    },
-
-    cancelCopilot() {
-      activeCopilotController?.abort(new DOMException("用户取消 Copilot", "AbortError"));
-    },
-
-    clearCopilotFeedback() {
-      set({ copilotFeedbackTarget: null, copilotError: null, copilotMessage: null });
     },
 
     async retryActiveProjectResources() {
@@ -5674,7 +4617,6 @@ export function createWorkbenchStore(
       invalidatePlanning();
       invalidateGeneration();
       invalidateExport();
-      invalidateCopilot();
       invalidateIndustryTemplateTransform();
       const assets = get().assets;
       if (assets.length > 0) {
@@ -5687,8 +4629,6 @@ export function createWorkbenchStore(
         generatingSlot: null,
         generationCanceling: false,
         exportingPlatform: null,
-        copilotTarget: null,
-        copilotFeedbackTarget: null,
         industryTemplateTransforming: false,
       });
     },
@@ -5696,101 +4636,7 @@ export function createWorkbenchStore(
   });
 }
 
-export function createDefaultWorkbenchDependencies(): WorkbenchStoreDependencies {
-  const warnings: string[] = [];
-  let projectRepository: ProjectRepository;
-  let assetRepository: AssetRepository;
-  let workspaceRepository: ProjectWorkspaceRepository;
-  let workspaceV3Repository: ProjectWorkspaceV3Repository;
-  let runRepository: RunRepository;
-  let executionJobRepository: ExecutionJobRepository;
-  let executionJobCoordinator: ExecutionJobCoordinator = createMemoryExecutionJobCoordinator();
-  let settingsRepository: SettingsRepository;
-
-  if (typeof window === "undefined") {
-    projectRepository = createMemoryProjectRepository();
-    assetRepository = createMemoryAssetRepository();
-    workspaceV3Repository = createMemoryWorkspaceV3Repository();
-    runRepository = createMemoryRunRepository();
-    executionJobRepository = createMemoryExecutionJobRepository();
-    workspaceRepository = createV3WorkspacePersistence({
-      v3Repository: workspaceV3Repository,
-      runRepository,
-    });
-    settingsRepository = createMemorySettingsRepository();
-    warnings.push("当前为非浏览器环境，项目与素材仅保存在内存中。");
-  } else {
-    projectRepository = createLocalStorageProjectRepository({ storage: browserStorage });
-
-    try {
-      assetRepository = createIndexedDbAssetRepository({ indexedDB: window.indexedDB });
-    } catch {
-      assetRepository = createMemoryAssetRepository();
-      warnings.push("IndexedDB 不可用，素材仅在当前会话保存在内存中。");
-    }
-
-    workspaceV3Repository = createLocalStorageWorkspaceV3Repository({
-      storage: browserStorage,
-    });
-
-    try {
-      runRepository = createIndexedDbRunRepository({ indexedDB: window.indexedDB });
-    } catch {
-      runRepository = createMemoryRunRepository();
-      warnings.push("IndexedDB 不可用，生产记录仅在当前会话保存在内存中。");
-    }
-    try {
-      executionJobRepository = createIndexedDbExecutionJobRepository({ indexedDB: window.indexedDB });
-    } catch {
-      executionJobRepository = createMemoryExecutionJobRepository();
-      warnings.push("IndexedDB 不可用，本地任务仅在当前会话保存在内存中。");
-    }
-    if (window.navigator.locks) {
-      executionJobCoordinator = createBrowserExecutionJobCoordinator(window.navigator.locks);
-    } else {
-      warnings.push("当前浏览器不支持跨标签页任务锁，请勿在多个标签页同时生成图片。");
-    }
-    workspaceRepository = createV3WorkspacePersistence({
-      v3Repository: workspaceV3Repository,
-      runRepository,
-    });
-
-    settingsRepository = createLocalStorageSettingsRepository(browserStorage);
-  }
-
-  const defaultAiRuntimeFactory = createAiRuntimeFactory();
-  return {
-    projectRepository,
-    assetRepository,
-    workspaceRepository,
-    runRepository,
-    executionJobRepository,
-    executionJobCoordinator,
-    settingsRepository,
-    aiRuntimeFactory: defaultAiRuntimeFactory,
-    testTextConnection(settings) {
-      return defaultAiRuntimeFactory.testTextConnection(settings);
-    },
-    testImageConnection(settings) {
-      return defaultAiRuntimeFactory.testImageConnection(settings);
-    },
-    testConnection: testApiConnection,
-    compressImageFile,
-    createObjectURL(blob) {
-      if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
-        throw new Error("当前环境无法创建素材预览 URL");
-      }
-      return URL.createObjectURL(blob);
-    },
-    revokeObjectURL(url) {
-      if (typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
-        URL.revokeObjectURL(url);
-      }
-    },
-    warning: warnings.length > 0 ? warnings.join(" ") : null,
-    prepareStorage: hydrateBrowserStorage,
-  };
-}
+export const createDefaultWorkbenchDependencies = createDefaultDependencies;
 
 export const workbenchStore = createWorkbenchStore(createDefaultWorkbenchDependencies());
 

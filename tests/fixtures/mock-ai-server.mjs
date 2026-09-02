@@ -140,15 +140,6 @@ function plannerCandidate(payload) {
   };
 }
 
-function copilotResult(body) {
-  const messages = Array.isArray(body?.messages) ? body.messages : [];
-  const system = messages.find((message) => message?.role === "system")?.content ?? "";
-  if (String(system).includes("one string field: message")) {
-    return { message: "Mock Copilot 建议：请基于证据人工复核后再执行。" };
-  }
-  return { visibleCopy: "Mock localized copy", prompt: "Professional product image prompt, accurate facts only." };
-}
-
 function industryResult(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   const user = messages.find((message) => message?.role === "user")?.content;
@@ -187,7 +178,6 @@ function textResponse(body, options = {}) {
   else if (system.includes("Localize the supplied product facts")) {
     result = options.failLocalization ? { invalidLocalization: true } : localizationResult(body);
   }
-  else if (system.includes("Return exactly") && system.includes("visibleCopy")) result = copilotResult(body);
   else result = plannerCandidate(extractPlannerPayload(body));
   return { choices: [{ message: { content: JSON.stringify(result) } }] };
 }

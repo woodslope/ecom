@@ -12,6 +12,7 @@ import {
   unwrapStructuredJson,
 } from "./ai/transport";
 import type { TextServiceProtocol } from "../domain/settings/types";
+import { validateIndustryTemplateSlots } from "../domain/prompt-templates/industry-template-packs";
 
 export interface OpenAIIndustryTemplateTransformerOptions {
   endpoint: string;
@@ -27,6 +28,14 @@ function parseResult(
   request: IndustryTemplateTransformRequest,
 ): IndustryTemplateTransformResult {
   if (!Array.isArray(body.slots)) throw new Error("AI 返回的行业模板格式不正确");
+  const rawKeys = body.slots.flatMap((value) =>
+    typeof value === "object" && value !== null && "slotKey" in value && typeof value.slotKey === "string"
+      ? [value.slotKey]
+      : []
+  );
+  if (rawKeys.length !== body.slots.length || new Set(rawKeys).size !== rawKeys.length) {
+    throw new Error("AI 返回了无效或重复的行业模板槽位");
+  }
   const byKey = new Map(body.slots.flatMap((value) => {
     if (
       typeof value !== "object" ||
@@ -50,6 +59,10 @@ function parseResult(
       negativeGuidance: value.negativeGuidance.trim(),
     };
   });
+  const validationErrors = validateIndustryTemplateSlots(slots, request.rulePack, request.brief);
+  if (validationErrors.length > 0) {
+    throw new Error(`AI 行业模板草稿未通过检查：${validationErrors.join("；")}`);
+  }
   return { slots };
 }
 

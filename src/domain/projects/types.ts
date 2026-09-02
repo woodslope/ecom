@@ -11,15 +11,17 @@ export interface ProductFacts {
   specifications: Record<string, string>;
 }
 
-export type ProductProjectScope = "library" | "task-draft";
 export type ProductFactsLocale = "zh-CN";
 
+/**
+ * Platform-owned task record. The legacy interface name remains for storage
+ * and TypeScript compatibility while records are phased into per-platform ownership.
+ */
 export interface ProductProject {
   id: string;
   name: string;
-  /** Missing on legacy/in-memory records means library. Repositories always normalize it. */
-  scope?: ProductProjectScope;
-  /** Shared product facts are maintained in Simplified Chinese. Legacy records normalize to zh-CN. */
+  /** A task belongs to exactly one platform; old records may omit this field. */
+  platformId?: "amazon" | "taobao";
   factsLocale?: ProductFactsLocale;
   facts: ProductFacts;
   createdAt: string;
@@ -28,7 +30,7 @@ export interface ProductProject {
 
 export interface CreateProductProjectInput {
   name: string;
-  scope?: ProductProjectScope;
+  platformId?: "amazon" | "taobao";
   factsLocale?: ProductFactsLocale;
   facts: ProductFacts;
 }
@@ -37,3 +39,9 @@ export interface UpdateProductProjectInput {
   name?: string;
   facts?: Partial<ProductFacts>;
 }
+
+// UI and application code use task terminology. Persistence keeps the legacy
+// project names and projectId fields so existing browser data remains readable.
+export type PlatformTask = ProductProject;
+export type CreatePlatformTaskInput = CreateProductProjectInput;
+export type UpdatePlatformTaskInput = UpdateProductProjectInput;

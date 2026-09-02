@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import appSource from "../src/App.tsx?raw";
+import platformProductionViewSource from "../src/components/PlatformProductionView.tsx?raw";
+import platformHistoryPaneSource from "../src/components/PlatformHistoryPane.tsx?raw";
 import amazonIntakeSource from "../src/components/AmazonIntake.tsx?raw";
 import platformWorkspaceSource from "../src/components/PlatformWorkspace.tsx?raw";
 import taobaoIntakeSource from "../src/components/TaobaoIntake.tsx?raw";
@@ -45,27 +47,27 @@ function buttonAttributes(markup: string, label: string): string {
 
 describe("platform workspace contract", () => {
   it("routes the Amazon workspace through the active production session", () => {
-    expect(appSource).toContain("productionSession={currentAmazonSession}");
-    expect(appSource).toContain("selectSessionSlot(currentAmazonSession.id, slotKey)");
-    expect(appSource).toContain("generateSessionSlot(currentAmazonSession.id, slotKey)");
+    expect(platformProductionViewSource).toContain("productionSession={session}");
+    expect(platformProductionViewSource).toContain("onSelectSessionSlot(session.id, slotKey)");
+    expect(platformProductionViewSource).toContain("onGenerateSessionSlot(session.id, slotKey)");
   });
 
   it("restores an existing Taobao session without overwriting its selected analysis inputs", () => {
-    expect(appSource).toContain("startTaobaoSession");
-    expect(appSource).toContain("productionSession={currentTaobaoSession}");
-    expect(appSource).not.toContain("setProductPickerPlatform");
-    expect(appSource).toContain("platform-page-layout");
+    expect(platformProductionViewSource).toContain("<TaobaoWorkspace");
+    expect(platformProductionViewSource).toContain("productionSession={session}");
+    expect(platformProductionViewSource).not.toContain("setProductPickerPlatform");
+    expect(platformProductionViewSource).toContain("platform-page-layout");
   });
 
   it("keeps platform history on demand instead of permanently compressing production", () => {
-    expect(appSource).toContain("historyOpen");
-    expect(appSource).toContain('className="platform-history-trigger"');
-    expect(appSource).toContain("历史记录");
-    expect(appSource).toContain('closeLabel="关闭历史记录"');
-    expect(appSource).toContain('aria-label="进行中任务"');
-    expect(appSource).toContain('aria-label="生产记录"');
-    expect(appSource).not.toContain(">生产记录</h3>");
-    expect(appSource).not.toContain('eyebrow={`${getPlatformRulePack(platform).label}工作流`}');
+    expect(platformProductionViewSource).toContain("historyOpen");
+    expect(platformProductionViewSource).toContain('className="platform-history-trigger"');
+    expect(platformProductionViewSource).toContain("历史记录");
+    expect(platformHistoryPaneSource).toContain('closeLabel="关闭历史记录"');
+    expect(platformHistoryPaneSource).toContain('aria-label="进行中任务"');
+    expect(platformHistoryPaneSource).toContain('aria-label="生产记录"');
+    expect(platformProductionViewSource).not.toContain(">生产记录</h3>");
+    expect(platformProductionViewSource).not.toContain('eyebrow={`${getPlatformRulePack(platform).label}工作流`}');
   });
 
   it("uses the same task-settings label before and after planning", () => {
@@ -222,22 +224,26 @@ describe("platform workspace contract", () => {
       [],
       { plannerMode: "listing", listingImageCount: 7, marketplaceId: "us" },
     );
-    const signature = createPlanningInputSignature(project.facts, []);
+    const sessionOptions = {
+      platformId: "amazon" as const,
+      marketplaceId: "us" as const,
+      plannerMode: "listing" as const,
+      listingImageCount: 7,
+      aPlusType: "standard-large" as const,
+      aPlusModuleSpecs: [],
+      sizeTier: "2K" as const,
+    };
+    const signature = createPlanningInputSignature(project.facts, [], [], {
+      workflowId: "amazon-listing",
+      sessionOptions,
+    });
     const session: PlatformSession = {
       id: "session_review",
       projectId: project.id,
       platformId: "amazon",
       workflowId: "amazon-listing",
       sourceInput: { listingText: "" },
-      options: {
-        platformId: "amazon",
-        marketplaceId: "us",
-        plannerMode: "listing",
-        listingImageCount: 7,
-        aPlusType: "standard-large",
-        aPlusModuleSpecs: [],
-        sizeTier: "2K",
-      },
+      options: sessionOptions,
       selectedReferenceAssetIds: [],
       plan,
       planInputSignature: signature,
@@ -369,7 +375,6 @@ describe("platform workspace contract", () => {
     expect(markup).not.toContain("取消生成");
     expect(markup).toContain("Amazon · PT01 正在生成");
     expect(markup).toContain("请先等待或取消");
-    expect(markup).not.toContain('aria-label="AI Copilot"');
   });
 
   it("keeps generation disabled until an inconsistent workspace is restored", async () => {
@@ -480,7 +485,6 @@ describe("platform workspace contract", () => {
     );
 
     expect(markup).toContain("工作台正在加载或保存项目与素材");
-    expect(markup).not.toContain('aria-label="AI Copilot"');
   });
 
   it("does not count a generated image from an older slot draft as completed", async () => {
@@ -555,7 +559,20 @@ describe("platform workspace contract", () => {
       [],
       { plannerMode: "listing", listingImageCount: 7, marketplaceId: "us" },
     );
-    const signature = createPlanningInputSignature(project.facts, []);
+    const sessionOptions = {
+      platformId: "amazon" as const,
+      marketplaceId: "us" as const,
+      plannerMode: "listing" as const,
+      listingImageCount: 7,
+      aPlusType: "standard-large" as const,
+      aPlusModuleSpecs: [],
+      sizeTier: "2K" as const,
+      stylePresetId: "clean-retail",
+    };
+    const signature = createPlanningInputSignature(project.facts, [], [], {
+      workflowId: "amazon-listing",
+      sessionOptions,
+    });
     const mainVersion = {
       id: "version_main",
       slotKey: "MAIN",
@@ -576,15 +593,7 @@ describe("platform workspace contract", () => {
       platformId: "amazon",
       workflowId: "amazon-listing",
       sourceInput: { listingText: "" },
-      options: {
-        platformId: "amazon",
-        marketplaceId: "us",
-        plannerMode: "listing",
-        listingImageCount: 7,
-        aPlusType: "standard-large",
-        aPlusModuleSpecs: [],
-        sizeTier: "2K",
-      },
+      options: sessionOptions,
       selectedReferenceAssetIds: [],
       plan,
       planInputSignature: signature,

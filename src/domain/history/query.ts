@@ -22,7 +22,6 @@ export interface HistoryFilters {
 
 export interface HistoryRunRecord {
   project: ProductProject;
-  sourceProject?: ProductProject;
   run: ProductionRun;
 }
 
@@ -104,10 +103,7 @@ export function createHistoryQueryService(
           if (filters.shape && !hasShape(run, filters.shape)) continue;
           const project = await getCachedProject(run.projectId);
           if (!project) continue;
-          const sourceProjectId = run.contextSnapshot.planningInput?.sourceProjectId;
-          const sourceProject = sourceProjectId
-            ? await getCachedProject(sourceProjectId)
-            : null;
+          if (project.platformId && project.platformId !== run.platformId) continue;
           const search = filters.search?.trim().toLocaleLowerCase();
           if (search) {
             const haystack = [project.name, project.facts.productName, project.facts.sku, run.id]
@@ -115,7 +111,7 @@ export function createHistoryQueryService(
               .toLocaleLowerCase();
             if (!haystack.includes(search)) continue;
           }
-          items.push({ project, run, ...(sourceProject ? { sourceProject } : {}) });
+          items.push({ project, run });
           if (items.length === pageLimit) break;
         }
         hasMore = Boolean(page.nextCursor);

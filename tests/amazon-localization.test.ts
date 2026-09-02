@@ -10,9 +10,7 @@ import {
   type AmazonMarketplaceId,
 } from "../src/domain/platforms/amazon-marketplaces";
 import { mockPlanner } from "./fixtures/mock-planner";
-import { mockCopilot } from "./fixtures/mock-ai";
 import { OpenAIPlanner } from "../src/services/openai-planner";
-import { OpenAICopilot } from "../src/services/openai-copilot";
 
 const facts: PlanningProjectFacts = {
   productName: "Northwind Travel Pillow",
@@ -141,91 +139,6 @@ describe("Amazon marketplace localization", () => {
       expect(plan.slots.find((slot) => slot.slotKey === "MAIN")?.visibleCopy).toBe("");
       expect(plan.slots.find((slot) => slot.slotKey === "PT01")?.visibleCopy).toBe(localizedCopy);
       expect(planner).toBeInstanceOf(OpenAIPlanner);
-    }
-  });
-
-  it("adapts mock Copilot copy to the active marketplace language", async () => {
-    for (const marketplace of AMAZON_MARKETPLACES) {
-      const { rulePack } = resolvePlanningRulePack("amazon", {
-        plannerMode: "listing",
-        marketplaceId: marketplace.id,
-        listingImageCount: 7,
-      });
-      const result = await mockCopilot.adjust(
-        {
-          project,
-          rulePack,
-          slot: {
-            slotKey: "PT01",
-            visibleCopy: "待本地化卖点",
-            strategy: "核心卖点",
-            evidence: ["卖点：washable cover"],
-            prompt: "Create an Amazon benefit image.",
-            negativePrompt: "Do not invent facts.",
-          },
-        },
-        "adapt-platform",
-        new AbortController().signal,
-      );
-
-      expect("visibleCopy" in result).toBe(true);
-      if (!("visibleCopy" in result)) throw new Error("预期 Copilot 返回槽位补丁");
-      expect(result.visibleCopy).toMatch(localizedBenefitSamples[marketplace.id]);
-      expect(result.prompt).toContain(rulePack.locale);
-    }
-  });
-
-  it("instructs and normalizes API Copilot patches for all six marketplace languages", async () => {
-    for (const marketplace of AMAZON_MARKETPLACES) {
-      const { rulePack } = resolvePlanningRulePack("amazon", {
-        plannerMode: "listing",
-        marketplaceId: marketplace.id,
-        listingImageCount: 7,
-      });
-      const visibleCopy = marketplace.sampleCopy.listing[0];
-      let requestBody = "";
-      const copilot = new OpenAICopilot({
-        endpoint: "https://provider.example/v1/chat/completions",
-        apiKey: "test-key",
-        model: "copilot-model",
-        fetch: async (_input, init) => {
-          requestBody = String(init?.body ?? "");
-          return new Response(
-            JSON.stringify({
-              choices: [{
-                message: {
-                  content: JSON.stringify({
-                    visibleCopy,
-                    prompt: `Create a localized benefit image. Visible copy: "${visibleCopy}".`,
-                  }),
-                },
-              }],
-            }),
-            { status: 200, headers: { "Content-Type": "application/json" } },
-          );
-        },
-      });
-
-      const result = await copilot.adjust(
-        {
-          project,
-          rulePack,
-          slot: {
-            slotKey: "PT01",
-            visibleCopy: "Draft benefit",
-            strategy: "核心卖点",
-            evidence: ["卖点：washable cover"],
-            prompt: "Create an Amazon benefit image.",
-            negativePrompt: "Do not invent facts.",
-          },
-        },
-        "adapt-platform",
-        new AbortController().signal,
-      );
-      const body = JSON.parse(requestBody) as { messages: Array<{ content: string }> };
-
-      expect(body.messages[0].content).toContain(marketplace.copyLanguage);
-      expect(result).toMatchObject({ visibleCopy });
     }
   });
 

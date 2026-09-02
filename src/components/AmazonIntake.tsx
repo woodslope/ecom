@@ -8,7 +8,6 @@ import {
   resolveAmazonPlanningFacts,
 } from "../domain/planning/input-assessment";
 import type { ProductFacts, ProductProject } from "../domain/projects/types";
-import type { ProductIntakeSourceMode } from "../domain/projects/product-source-text";
 import type {
   AmazonWorkspaceMode,
   PlatformSession,
@@ -51,10 +50,15 @@ function controlsFromSession(
 
 function initialAmazonFacts(
   project: ProductProject | null,
+  session: PlatformSession | undefined,
   listingText: string,
 ): ProductFacts {
-  const base = project?.facts;
-  return resolveAmazonPlanningFacts(base, listingText, base ? "library" : "manual");
+  const base = project &&
+    session?.platformId === "amazon" &&
+    session.projectId === project.id
+    ? project.facts
+    : undefined;
+  return resolveAmazonPlanningFacts(base, listingText, "manual");
 }
 
 export function AmazonIntake({
@@ -90,9 +94,6 @@ export function AmazonIntake({
   const referenceAssets = assets.filter((asset) => asset.metadata.kind === "reference");
   const referenceAssetIds = referenceAssets.map((asset) => asset.metadata.id);
   const referenceAssetIdsKey = referenceAssetIds.join(",");
-  const [sourceMode, setSourceMode] = useState<ProductIntakeSourceMode>(
-    () => session?.planningInput?.sourceMode ?? "manual",
-  );
   const [listingText, setListingText] = useState(() => {
     if (session?.sourceInput.listingText?.trim()) return session.sourceInput.listingText;
     return "";
@@ -100,6 +101,7 @@ export function AmazonIntake({
   const [facts, setFacts] = useState<ProductFacts>(() =>
     initialAmazonFacts(
       activeProject,
+      session,
       session?.sourceInput.listingText ?? "",
     ),
   );
@@ -128,8 +130,6 @@ export function AmazonIntake({
   useEffect(() => {
     if (submittingDraft.current) return;
     setControls(controlsFromSession(session, plannerMode));
-    const nextMode = session?.planningInput?.sourceMode ?? "manual";
-    setSourceMode(nextMode);
     if (session?.sourceInput.listingText?.trim()) {
       setListingText(session.sourceInput.listingText);
     } else {
@@ -138,6 +138,7 @@ export function AmazonIntake({
     setFacts(
       initialAmazonFacts(
         activeProject,
+        session,
         session?.sourceInput.listingText ?? "",
       ),
     );
@@ -154,7 +155,6 @@ export function AmazonIntake({
     referenceAssetIdsKey,
     plannerMode,
     session?.id,
-    session?.planningInput?.sourceMode,
     session?.sourceInput.listingText,
     session?.selectedReferenceAssetIds,
     session?.industryTemplate,
@@ -175,7 +175,7 @@ export function AmazonIntake({
   }, [dirty, onDirtyChange]);
 
   const assessedFacts = useMemo(
-    () => resolveAmazonPlanningFacts(facts, listingText, "library"),
+    () => resolveAmazonPlanningFacts(facts, listingText, "manual"),
     [facts, listingText],
   );
   const assessment = useMemo(
@@ -236,10 +236,7 @@ export function AmazonIntake({
     submittingDraft.current = true;
     try {
       const result = await onSubmit({
-        ...(activeProject && (sourceMode === "library" || session?.planningInput?.sourceMode === "manual")
-          ? { projectId: activeProject.id }
-          : {}),
-        sourceMode,
+        sourceMode: "manual",
         workflowId: controls.plannerMode === "aplus" ? "amazon-aplus" : "amazon-listing",
         listingText,
         facts,

@@ -16,7 +16,6 @@ export interface ProductionRunFilters {
 
 export interface ProductionRunRecord {
   project: ProductProject;
-  sourceProject?: ProductProject;
   run: ProductionRun;
 }
 
@@ -38,6 +37,7 @@ export function queryProductionRuns(
   const search = filters.search?.trim().toLocaleLowerCase() ?? "";
   return records
     .filter(({ project, run }) => {
+      if (project.platformId && project.platformId !== run.platformId) return false;
       if (filters.projectId && run.projectId !== filters.projectId) return false;
       if (filters.platformId && run.platformId !== filters.platformId) return false;
       if (filters.workflowId && run.workflowId !== filters.workflowId) return false;

@@ -127,7 +127,6 @@ export interface ProductionRun {
   planSnapshot: PlatformPlan;
   planningInputSignatureSnapshot?: string;
   slotVersionsSnapshot?: Record<string, SlotVersionState>;
-  deposit?: { targetProjectId: string; depositedAt: string };
   events: ProductionEvent[];
   createdAt: string;
   updatedAt: string;
@@ -306,7 +305,7 @@ function normalizeTaobaoAnalysis(value: unknown): TaobaoProductAnalysis | null {
       !isRecord(citation) ||
       typeof citation.field !== "string" ||
       typeof citation.value !== "string" ||
-      !["shared-product", "analysis-input", "reference-asset"].includes(String(citation.source))
+      !["platform-task", "analysis-input", "reference-asset"].includes(String(citation.source))
     ) return [];
     return [{
       field: citation.field,
@@ -465,12 +464,6 @@ function normalizeLocalizedFactsDraft(value: unknown): PlatformFactsDraft | null
     localizedFacts,
     targetLocale: value.targetLocale,
     status: value.status as PlatformFactsDraft["status"],
-    ...(typeof value.sourceProjectId === "string"
-      ? { sourceProjectId: value.sourceProjectId }
-      : {}),
-    ...(typeof value.sourceProjectUpdatedAt === "string"
-      ? { sourceProjectUpdatedAt: value.sourceProjectUpdatedAt }
-      : {}),
     ...(typeof value.generatedAt === "string" ? { generatedAt: value.generatedAt } : {}),
     updatedAt: value.updatedAt,
   };
@@ -551,24 +544,18 @@ function normalizeStringArray(value: unknown): string[] {
 function normalizePlanningInput(value: unknown): PlanningInputSnapshot | null {
   if (
     !isRecord(value) ||
-    (value.sourceMode !== "library" && value.sourceMode !== "manual") ||
+    value.sourceMode !== "manual" ||
     !["standard", "image-only", "facts-only", "empty"].includes(String(value.quality)) ||
     typeof value.productText !== "string"
   ) {
     return null;
   }
   return {
-    sourceMode: value.sourceMode,
+    sourceMode: "manual",
     quality: value.quality as PlanningInputSnapshot["quality"],
     missingFacts: normalizeStringArray(value.missingFacts),
     productText: value.productText,
     selectedReferenceAssetIds: normalizeStringArray(value.selectedReferenceAssetIds),
-    ...(typeof value.sourceProjectId === "string"
-      ? { sourceProjectId: value.sourceProjectId }
-      : {}),
-    ...(typeof value.sourceProjectUpdatedAt === "string"
-      ? { sourceProjectUpdatedAt: value.sourceProjectUpdatedAt }
-      : {}),
   };
 }
 
@@ -628,15 +615,6 @@ function normalizePromptTrace(value: unknown): PromptTrace | null {
         ...(typeof entry.profileId === "string" || entry.profileId === null ? { profileId: entry.profileId } : {}),
         ...(typeof entry.industryTemplateId === "string" ? { industryTemplateId: entry.industryTemplateId } : {}),
         ...(typeof entry.industryTemplateVersion === "number" ? { industryTemplateVersion: entry.industryTemplateVersion } : {}),
-        ...(Array.isArray(entry.slotAssetRefs)
-          ? {
-              slotAssetRefs: entry.slotAssetRefs.flatMap((item) =>
-                isRecord(item) && typeof item.slotKey === "string" && typeof item.assetId === "string" && typeof item.version === "number"
-                  ? [{ slotKey: item.slotKey, assetId: item.assetId, version: item.version }]
-                  : [],
-              ),
-            }
-          : {}),
       };
     } else {
       trace.generation = {
@@ -755,9 +733,6 @@ function normalizeRun(value: unknown, projectId: string): ProductionRun | null {
       : {}),
     ...(isRecord(value.slotVersionsSnapshot)
       ? { slotVersionsSnapshot: normalizeSlotVersions(value.slotVersionsSnapshot) }
-      : {}),
-    ...(isRecord(value.deposit) && typeof value.deposit.targetProjectId === "string" && typeof value.deposit.depositedAt === "string"
-      ? { deposit: { targetProjectId: value.deposit.targetProjectId, depositedAt: value.deposit.depositedAt } }
       : {}),
     events,
     createdAt: value.createdAt,

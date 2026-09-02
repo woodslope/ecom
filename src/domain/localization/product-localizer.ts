@@ -3,8 +3,6 @@ import type { ProductFacts } from "../projects/types";
 export type PlatformFactsDraftStatus = "pending" | "generated" | "confirmed";
 
 export interface PlatformFactsDraft {
-  sourceProjectId?: string;
-  sourceProjectUpdatedAt?: string;
   sourceFactsSnapshot: ProductFacts;
   targetLocale: string;
   localizedFacts: ProductFacts;

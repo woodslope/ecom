@@ -17,7 +17,6 @@ import {
   shouldApplyStyleToSlot,
   STYLE_REFERENCE_PROMPT_GUARD,
 } from "../platforms/amazon-style-presets";
-import { browserStorage } from "../../application/browser-storage";
 
 export {
   AMAZON_STYLE_PRESETS,
@@ -159,107 +158,5 @@ export function buildPlanningStrategySnippet(profile: PromptProfile | null): str
 
 /** Get a profile by id, falling back to the default. */
 export function resolvePromptProfile(id: string | null | undefined): PromptProfile {
-  return allProfiles().find((p) => p.id === id) ?? PROMPT_PROFILES[0]!;
-}
-
-// ── Custom profile storage ──────────────────────────────────────────
-
-export const CUSTOM_PROMPT_PROFILES_STORAGE_KEY = "ecom-prompt-profiles-v1";
-
-interface CustomProfileRecord {
-  id: string;
-  label: string;
-  description: string;
-  sourcePresetId: string;
-  planningStrategy: PlanningStrategy;
-}
-
-function loadCustomProfiles(storage: {
-  getItem(key: string): string | null;
-}): CustomProfileRecord[] {
-  try {
-    const raw = storage.getItem(CUSTOM_PROMPT_PROFILES_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (r): r is CustomProfileRecord =>
-        typeof r.id === "string" &&
-        typeof r.label === "string" &&
-        typeof r.sourcePresetId === "string" &&
-        typeof r.planningStrategy === "object",
-    );
-  } catch {
-    return [];
-  }
-}
-
-function saveCustomProfiles(
-  storage: { setItem(key: string, value: string): void },
-  records: CustomProfileRecord[],
-): void {
-  storage.setItem(CUSTOM_PROMPT_PROFILES_STORAGE_KEY, JSON.stringify(records));
-}
-
-/** List all profiles: built-in first, then custom. */
-export function allProfiles(): PromptProfile[] {
-  const builtins = PROMPT_PROFILES as unknown as PromptProfile[];
-  let customs: PromptProfile[] = [];
-  if (typeof window !== "undefined") {
-    customs = loadCustomProfiles(browserStorage).map((r) => {
-      const sourcePreset = getAmazonStylePreset(r.sourcePresetId) ?? AMAZON_STYLE_PRESETS[0]!;
-      return Object.freeze({
-        id: r.id,
-        label: r.label,
-        description: r.description,
-        style: sourcePreset,
-        planningStrategy: r.planningStrategy,
-        source: "custom" as const,
-        sourcePresetId: r.sourcePresetId,
-      });
-    });
-  }
-  return [...builtins, ...customs];
-}
-
-/** Create or update a custom profile. */
-export function saveCustomProfile(
-  storage: { getItem: (k: string) => string | null; setItem: (k: string, v: string) => void },
-  input: {
-    id?: string;
-    label: string;
-    description: string;
-    sourcePresetId: string;
-    planningStrategy: PlanningStrategy;
-  },
-): PromptProfile {
-  const existing = input.id ? loadCustomProfiles(storage).filter((r) => r.id !== input.id) : loadCustomProfiles(storage);
-  const id = input.id ?? `custom-${Date.now().toString(36)}`;
-  const record: CustomProfileRecord = {
-    id,
-    label: input.label,
-    description: input.description,
-    sourcePresetId: input.sourcePresetId,
-    planningStrategy: input.planningStrategy,
-  };
-  saveCustomProfiles(storage, [...existing, record]);
-  const sourcePreset = getAmazonStylePreset(input.sourcePresetId) ?? AMAZON_STYLE_PRESETS[0]!;
-  return Object.freeze({
-    id,
-    label: input.label,
-    description: input.description,
-    style: sourcePreset,
-    planningStrategy: input.planningStrategy,
-    source: "custom" as const,
-    sourcePresetId: input.sourcePresetId,
-  });
-}
-
-/** Delete a custom profile by id. No-op for built-in profiles. */
-export function deleteCustomProfile(
-  storage: { getItem: (k: string) => string | null; setItem: (k: string, v: string) => void },
-  id: string,
-): void {
-  const records = loadCustomProfiles(storage).filter((r) => r.id !== id);
-  saveCustomProfiles(storage, records);
+  return PROMPT_PROFILES.find((profile) => profile.id === id) ?? PROMPT_PROFILES[0]!;
 }

@@ -46,7 +46,7 @@ function emptyState(): ProjectRepositoryState {
 function cloneProject(project: ProductProject): ProductProject {
   return {
     ...project,
-    scope: project.scope,
+    ...(project.platformId ? { platformId: project.platformId } : {}),
     factsLocale: project.factsLocale ?? "zh-CN",
     facts: {
       ...project.facts,
@@ -103,7 +103,9 @@ function normalizeStoredProject(value: unknown): ProductProject | null {
   return {
     id: value.id,
     name: normalizeString(value.name) || productName || "未命名项目",
-    scope: value.scope === "task-draft" ? "task-draft" : "library",
+    ...(value.platformId === "taobao" || value.platformId === "amazon"
+      ? { platformId: value.platformId }
+      : {}),
     factsLocale: "zh-CN",
     facts: {
       productName,
@@ -136,7 +138,7 @@ function createProjectRepository(
       const project: ProductProject = {
         id: createId(),
         name: input.name,
-        scope: input.scope ?? "library",
+        ...(input.platformId ? { platformId: input.platformId } : {}),
         factsLocale: input.factsLocale ?? "zh-CN",
         facts: {
           ...input.facts,

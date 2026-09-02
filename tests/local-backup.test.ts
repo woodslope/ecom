@@ -12,8 +12,6 @@ import {
 import { createExecutionJob } from "../src/domain/jobs/state";
 import { createIndexedDbExecutionJobRepository } from "../src/domain/jobs/repository";
 import { DEFAULT_PROJECT_STORAGE_KEY } from "../src/domain/projects/repository";
-import { CUSTOM_PROMPT_PROFILES_STORAGE_KEY } from "../src/domain/prompt-profiles/prompt-profiles";
-import { SLOT_PROMPT_ASSETS_STORAGE_KEY } from "../src/domain/prompt-profiles/slot-prompt-assets";
 import { INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY } from "../src/domain/prompt-templates/industry-template-packs";
 import { createIndexedDbRunRepository } from "../src/domain/runs/repository";
 import { RUNTIME_SETTINGS_STORAGE_KEY } from "../src/domain/settings/runtime-settings";
@@ -82,14 +80,10 @@ describe("local backup", () => {
       activeProjectId: "project_01",
     });
     const workspaceKey = `${PROJECT_WORKSPACE_STORAGE_PREFIX}project_01`;
-    const promptProfiles = JSON.stringify([{ id: "profile_01", label: "旅行用品" }]);
-    const slotPromptAssets = JSON.stringify({ assets: [], defaults: {} });
     const industryTemplatePacks = JSON.stringify({ packs: [], defaults: {} });
     storage.setItem(DEFAULT_PROJECT_STORAGE_KEY, projectState);
     storage.setItem(workspaceKey, JSON.stringify({ sessions: [{ id: "session_01" }] }));
     storage.setItem(LAST_PLATFORM_STORAGE_KEY, "amazon");
-    storage.setItem(CUSTOM_PROMPT_PROFILES_STORAGE_KEY, promptProfiles);
-    storage.setItem(SLOT_PROMPT_ASSETS_STORAGE_KEY, slotPromptAssets);
     storage.setItem(INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY, industryTemplatePacks);
     storage.setItem(RUNTIME_SETTINGS_STORAGE_KEY, JSON.stringify({ apiKey: "sk-secret" }));
 
@@ -128,8 +122,6 @@ describe("local backup", () => {
       [DEFAULT_PROJECT_STORAGE_KEY]: projectState,
       [workspaceKey]: JSON.stringify({ sessions: [{ id: "session_01" }] }),
       [LAST_PLATFORM_STORAGE_KEY]: "amazon",
-      [CUSTOM_PROMPT_PROFILES_STORAGE_KEY]: promptProfiles,
-      [SLOT_PROMPT_ASSETS_STORAGE_KEY]: slotPromptAssets,
       [INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY]: industryTemplatePacks,
     });
     expect(backup.indexedDb.assets).toHaveLength(1);
@@ -139,8 +131,6 @@ describe("local backup", () => {
     expect(backup.storage).not.toHaveProperty(RUNTIME_SETTINGS_STORAGE_KEY);
 
     storage.setItem(DEFAULT_PROJECT_STORAGE_KEY, JSON.stringify({ version: 2, projects: [] }));
-    storage.setItem(CUSTOM_PROMPT_PROFILES_STORAGE_KEY, "[]");
-    storage.setItem(SLOT_PROMPT_ASSETS_STORAGE_KEY, JSON.stringify({ assets: [{ id: "other" }] }));
     storage.setItem(INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY, JSON.stringify({ packs: [{ id: "other" }] }));
     storage.setItem(RUNTIME_SETTINGS_STORAGE_KEY, JSON.stringify({ apiKey: "sk-current" }));
     await assets.remove("asset_01");
@@ -150,8 +140,6 @@ describe("local backup", () => {
     const summary = await restoreLocalBackup(parseLocalBackup(JSON.stringify(backup)), environment);
     expect(summary).toEqual({ projectCount: 1, assetCount: 1, runCount: 1, jobCount: 1 });
     expect(storage.getItem(DEFAULT_PROJECT_STORAGE_KEY)).toBe(projectState);
-    expect(storage.getItem(CUSTOM_PROMPT_PROFILES_STORAGE_KEY)).toBe(promptProfiles);
-    expect(storage.getItem(SLOT_PROMPT_ASSETS_STORAGE_KEY)).toBe(slotPromptAssets);
     expect(storage.getItem(INDUSTRY_TEMPLATE_PACKS_STORAGE_KEY)).toBe(industryTemplatePacks);
     expect(storage.getItem(RUNTIME_SETTINGS_STORAGE_KEY)).toBe(JSON.stringify({ apiKey: "sk-current" }));
     const restoredAsset = await assets.get("asset_01");

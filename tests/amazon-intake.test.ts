@@ -13,15 +13,15 @@ import type { PlatformSession } from "../src/domain/workspace/project-workspace"
 import { mockPlanner } from "./fixtures/mock-planner";
 import { createWorkbenchStore } from "../src/store/workbench-store";
 
-const sharedFacts: ProductFacts = {
-  productName: "共享商品名称",
+const amazonFacts: ProductFacts = {
+  productName: "Amazon 商品名称",
   category: "旅行用品",
   brand: "Northwind",
   model: "P01",
   sku: "P01-GRAY",
   targetAudience: "长途出行人群",
-  description: "共享资料中的原始描述",
-  sellingPoints: ["共享卖点"],
+  description: "Amazon 任务中的原始描述",
+  sellingPoints: ["Amazon 任务卖点"],
   forbiddenClaims: [],
   specifications: { material: "memory foam" },
 };
@@ -60,47 +60,6 @@ async function confirmAmazonDraft(
 }
 
 describe("Amazon direct intake", () => {
-  it("keeps a custom style asset while saving new task reference files", async () => {
-    const deps = {
-      ...dependencies(),
-      assetRepository: createMemoryAssetRepository(),
-    };
-    const store = createWorkbenchStore(deps);
-    await store.getState().initialize();
-    const project = await store.getState().createProject({ name: "带风格的商品", facts: sharedFacts });
-    const style = await store.getState().createStyleReference("clean-retail", {
-      name: "静谧棚拍",
-    });
-
-    const session = await store.getState().startAmazonSession({
-      projectId: project!.id,
-      workflowId: "amazon-listing",
-      listingText: "Title: Styled Travel Pillow\n- Washable cover",
-      files: [new File(["image"], "front.png", { type: "image/png" })],
-      selectedReferenceAssetIds: [],
-      selectedStyleReferenceId: style!.metadata.id,
-      options: {
-        marketplaceId: "us",
-        plannerMode: "listing",
-        listingImageCount: 7,
-        aPlusType: "standard-large",
-        sizeTier: "2K",
-        stylePresetId: "clean-retail",
-      },
-    });
-
-    expect(session).not.toBeNull();
-    expect(session?.selectedStyleReferenceId).not.toBe(style!.metadata.id);
-    expect(store.getState().activeProject).toMatchObject({ scope: "task-draft" });
-    expect(store.getState().projects).toEqual([project]);
-    expect(session?.selectedReferenceAssetIds).toHaveLength(1);
-    expect(store.getState().assets.filter((asset) => asset.metadata.kind === "reference"))
-      .toHaveLength(1);
-    expect(store.getState().assets.some(
-      (asset) => asset.metadata.id === session?.selectedStyleReferenceId && asset.metadata.kind === "style-reference",
-    )).toBe(true);
-  });
-
   it("starts from only a product image and creates a restorable local draft", async () => {
     const deps = dependencies();
     const store = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
@@ -144,6 +103,36 @@ describe("Amazon direct intake", () => {
     expect(restored.getState().sessions[0]?.selectedReferenceAssetIds).toEqual(["asset_01"]);
   });
 
+  it("persists edited facts back to the current Amazon task only", async () => {
+    const deps = dependencies();
+    const store = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
+    await store.getState().initialize();
+    const first = await store.getState().startAmazonSession({
+      workflowId: "amazon-listing",
+      listingText: "Title: First Task",
+      facts: amazonFacts,
+      files: [],
+      selectedReferenceAssetIds: [],
+      options: { plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
+      autoPlan: false,
+    });
+    const editedFacts = { ...amazonFacts, productName: "Edited Amazon Task" };
+    await store.getState().startAmazonSession({
+      workflowId: "amazon-listing",
+      listingText: "Title: Edited Amazon Task",
+      facts: editedFacts,
+      files: [],
+      selectedReferenceAssetIds: [],
+      options: { plannerMode: "listing", listingImageCount: 7, sizeTier: "2K" },
+      autoPlan: false,
+    });
+
+    expect(first?.projectId).toBe("project_01");
+    expect((await deps.projectRepository.get("project_01"))?.facts.productName).toBe(
+      "Edited Amazon Task",
+    );
+  });
+
   it("plans from direct structured facts without requiring Listing text or an image", async () => {
     const deps = dependencies();
     let plannerProductName = "";
@@ -163,7 +152,7 @@ describe("Amazon direct intake", () => {
       workflowId: "amazon-listing",
       listingText: "",
       facts: {
-        ...sharedFacts,
+        ...amazonFacts,
         productName: "手动填写的保温杯",
         description: "316L 不锈钢内胆，容量 500ml",
         sellingPoints: ["便携防漏", "杯盖可拆洗"],
@@ -175,7 +164,7 @@ describe("Amazon direct intake", () => {
 
     expect(session).not.toBeNull();
     expect(store.getState().activeProject).toMatchObject({
-      scope: "task-draft",
+      platformId: "amazon",
       facts: { productName: "手动填写的保温杯" },
     });
 
@@ -185,9 +174,8 @@ describe("Amazon direct intake", () => {
     expect(store.getState().planningError).toBeNull();
   });
 
-  it("persists Listing input and options in a session without overwriting shared facts", async () => {
+  it("persists first-step Listing input, task facts, and options in one Amazon task", async () => {
     const deps = dependencies();
-    const project = await deps.projectRepository.create({ name: "共享商品", facts: sharedFacts });
     let plannerFacts: { productName?: string; description?: string } | null = null;
     const store = createWorkbenchStore({
       ...deps,
@@ -201,7 +189,6 @@ describe("Amazon direct intake", () => {
     await store.getState().initialize();
 
     const session = await store.getState().startAmazonSession({
-      projectId: project.id,
       workflowId: "amazon-listing",
       listingText: [
         "Title: Session-only Travel Pillow",
@@ -210,6 +197,7 @@ describe("Amazon direct intake", () => {
         "- Session benefit two",
         "Session-only product description.",
       ].join("\n"),
+      facts: amazonFacts,
       files: [],
       selectedReferenceAssetIds: [],
       options: {
@@ -221,11 +209,12 @@ describe("Amazon direct intake", () => {
         stylePresetId: "soft-lifestyle",
       },
     });
+    const projectId = session!.projectId;
 
     const plannedSession = await confirmAmazonDraft(store, session!);
 
     expect(plannedSession).toMatchObject({
-      projectId: project.id,
+      projectId,
       workflowId: "amazon-listing",
       sourceInput: { listingText: expect.stringContaining("Session-only Travel Pillow") },
       options: {
@@ -242,7 +231,13 @@ describe("Amazon direct intake", () => {
       productName: "Session-only Travel Pillow",
       description: "Session-only product description.",
     });
-    expect((await deps.projectRepository.get(project.id))?.facts).toEqual(sharedFacts);
+    expect(await deps.projectRepository.get(projectId)).toMatchObject({
+      platformId: "amazon",
+      facts: {
+        productName: "Session-only Travel Pillow",
+        description: "Session-only product description.",
+      },
+    });
 
     const restored = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
     await restored.getState().initialize();
@@ -260,7 +255,7 @@ describe("Amazon direct intake", () => {
     });
     expect(await restored.getState().syncAmazonSessionFacts(restored.getState().sessions[0].id))
       .toBe(true);
-    expect((await deps.projectRepository.get(project.id))?.facts).toMatchObject({
+    expect((await deps.projectRepository.get(projectId))?.facts).toMatchObject({
       productName: "Session-only Travel Pillow",
       description: "Session-only product description.",
     });
@@ -359,7 +354,7 @@ describe("Amazon direct intake", () => {
     expect(await deps.projectRepository.list()).toEqual([]);
   });
 
-  it("renders a direct Amazon preparation surface with explicit shared-facts sync", () => {
+  it("renders a direct Amazon preparation surface without a shared-data selector", () => {
     const common = {
       assets: [],
       session: undefined,
@@ -376,8 +371,9 @@ describe("Amazon direct intake", () => {
         ...common,
         activeProject: {
           id: "project_01",
-          name: "共享商品",
-          facts: sharedFacts,
+          name: "Amazon 商品",
+          platformId: "amazon",
+          facts: amazonFacts,
           createdAt: "2026-07-20T01:00:00.000Z",
           updatedAt: "2026-07-20T01:00:00.000Z",
         },
@@ -435,19 +431,20 @@ describe("Amazon direct intake", () => {
     );
     expect(directMarkup).not.toContain('class="amazon-session-controls__plan"');
     expect(directMarkup).not.toContain('class="action-bar');
-    expect(directMarkup).not.toContain("打开资料库");
+    expect(directMarkup).not.toContain("跨任务资料入口");
     expect(existingMarkup).not.toContain("同步商品资料");
     expect(existingMarkup).toContain("Session-only Travel Pillow");
     expect(existingMarkup.match(/<section class="product-context-bar/g) ?? []).toHaveLength(0);
   });
 
-  it("waits for an explicit library choice instead of preloading the active project", () => {
+  it("does not preload another platform task when Amazon has no session", () => {
     const markup = renderToStaticMarkup(
       createElement(AmazonIntake, {
         activeProject: {
           id: "project_01",
-          name: "共享商品",
-          facts: sharedFacts,
+          name: "淘宝商品",
+          platformId: "taobao",
+          facts: amazonFacts,
           createdAt: "2026-07-20T01:00:00.000Z",
           updatedAt: "2026-07-20T01:00:00.000Z",
         },
@@ -460,11 +457,11 @@ describe("Amazon direct intake", () => {
       }),
     );
 
-    expect(markup).not.toContain("Title: 共享商品名称");
+    expect(markup).not.toContain("Title: Amazon 商品名称");
     expect(markup).not.toContain("选择已有商品");
     expect(markup).not.toContain("手动填写");
     expect(markup).not.toContain("当前任务");
-    expect(markup).toContain("共享商品名称");
+    expect(markup).not.toContain("Amazon 商品名称");
   });
 
   it("keeps the selected A+ mode when the target workflow has no session yet", () => {
@@ -488,7 +485,6 @@ describe("Amazon direct intake", () => {
 
   it("restores A+ type and a 12-module session after reload", async () => {
     const deps = dependencies();
-    const project = await deps.projectRepository.create({ name: "A+ 商品", facts: sharedFacts });
     const defaults = getAPlusModuleSpecs("premium");
     const moduleSpecs = Array.from({ length: 12 }, (_, index) => ({
       ...defaults[index % defaults.length],
@@ -498,9 +494,9 @@ describe("Amazon direct intake", () => {
     await store.getState().initialize();
 
     const session = await store.getState().startAmazonSession({
-      projectId: project.id,
       workflowId: "amazon-aplus",
       listingText: "Title: Premium A+ Pillow\n- Foldable\n- Washable",
+      facts: amazonFacts,
       files: [],
       selectedReferenceAssetIds: [],
       options: {
@@ -541,20 +537,14 @@ describe("Amazon direct intake", () => {
 
   it("keeps the persisted session input inspectable after planning", async () => {
     const deps = dependencies();
-    const project = await deps.projectRepository.create({ name: "共享商品", facts: sharedFacts });
-    const reference = await deps.assetRepository.put({
-      projectId: project.id,
-      blob: new Blob(["reference"], { type: "image/png" }),
-      metadata: { name: "front-reference.png", kind: "reference" },
-    });
     const store = createWorkbenchStore({ ...deps, plannerEngine: mockPlanner });
     await store.getState().initialize();
     const session = await store.getState().startAmazonSession({
-      projectId: project.id,
       workflowId: "amazon-listing",
       listingText: "Title: Persisted Session Listing\n- Session-only benefit",
-      files: [],
-      selectedReferenceAssetIds: [reference.metadata.id],
+      facts: amazonFacts,
+      files: [new File(["reference"], "front-reference.png", { type: "image/png" })],
+      selectedReferenceAssetIds: [],
       options: {
         marketplaceId: "jp",
         plannerMode: "listing",
@@ -570,7 +560,7 @@ describe("Amazon direct intake", () => {
       createElement(
         AmazonWorkspace,
         {
-          activeProject: project,
+          activeProject: store.getState().activeProject!,
           assets: store.getState().assets,
           session: plannedSession,
           loading: false,
@@ -600,11 +590,11 @@ describe("Amazon direct intake", () => {
     expect(summary).toContain("日本站");
     expect(summary).toContain("4K");
     expect(summary).toContain("front-reference.png");
-    expect(summary).toContain("已保存任务资料");
+    expect(summary).toContain("当前平台任务资料");
     expect(summary).toContain("达标策划");
   });
 
-  it("keeps an unconfirmed legacy localization draft inside the shared production frame", () => {
+  it("keeps an unconfirmed legacy localization draft inside the production frame", () => {
     const pendingSession: PlatformSession = {
       id: "session_pending_localization",
       projectId: "project_01",
@@ -620,9 +610,9 @@ describe("Amazon direct intake", () => {
       },
       selectedReferenceAssetIds: [],
       localizedFactsDraft: {
-        sourceFactsSnapshot: sharedFacts,
+        sourceFactsSnapshot: amazonFacts,
         targetLocale: "en-US",
-        localizedFacts: sharedFacts,
+        localizedFacts: amazonFacts,
         status: "pending",
         updatedAt: "2026-07-20T01:00:00.000Z",
       },
@@ -634,8 +624,9 @@ describe("Amazon direct intake", () => {
       createElement(AmazonWorkspace, {
         activeProject: {
           id: "project_01",
-          name: "共享商品",
-          facts: sharedFacts,
+          name: "Amazon 商品",
+          platformId: "amazon",
+          facts: amazonFacts,
           createdAt: "2026-07-20T01:00:00.000Z",
           updatedAt: "2026-07-20T01:00:00.000Z",
         },
